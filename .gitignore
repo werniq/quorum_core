@@ -1,0 +1,26 @@
+node_modules/
+dist/
+coverage/
+*.db
+*.db-journal
+.env
+.env.*
+!.env.example
+.DS_Store
+tmp/
+tmp-*
+data/
+.idea/
+*.sqlite
+*.sqlite-*
+
+# Hosted SaaS / billing (not part of Community self-hosted tree)
+src/domain/billing/
+src/domain/saas/
+src/main-saas.ts
+src/infrastructure/http/routes/saas.ts
+src/infrastructure/http/saas-session.ts
+src/infrastructure/db/repositories/sqlite-saas-repositories.ts
+src/infrastructure/db/repositories/postgres-saas-repositories.ts
+docker-compose.saas.yml
+tests/saas/

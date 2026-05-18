@@ -1,0 +1,15 @@
+node_modules
+dist
+coverage
+.git
+*.sqlite
+*.sqlite-*
+data
+.env
+.env.*
+!.env.example
+package-lock.json
+drizzle/**/meta
+*.log
+tmp
+.tmp
