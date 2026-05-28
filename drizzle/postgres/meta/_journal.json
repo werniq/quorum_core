@@ -1,0 +1,118 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1752900000000,
+      "tag": "0001_tenants_clients",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1752900001000,
+      "tag": "0002_workflows_contracts",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1752900002000,
+      "tag": "0003_credentials_heartbeats_state",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1752900003000,
+      "tag": "0004_incidents_alerting_outbox",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1752900004000,
+      "tag": "0005_n8n_connectors_polling",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1752900005000,
+      "tag": "0006_watcher_outbox_audit",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1752900006000,
+      "tag": "0007_self_hosted_admin",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1752900007000,
+      "tag": "0008_outcome_connectors_reconciliation",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1752900008000,
+      "tag": "0009_reconciliation_engine_audit",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1752900009000,
+      "tag": "0010_catalog_ux_roles",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1752900010000,
+      "tag": "0011_saas_agency_billing",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1752900011000,
+      "tag": "0012_audit_immutability_ops",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1752900012000,
+      "tag": "0013_n8n_poll_scheduler",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1752900013000,
+      "tag": "0014_reconciliation_waiting_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1752900014000,
+      "tag": "0015_ops_audit_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1752900015000,
+      "tag": "0016_volume_rules_incident_triage",
+      "breakpoints": true
+    }
+  ]
+}
