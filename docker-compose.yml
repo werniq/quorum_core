@@ -1,0 +1,37 @@
+services:
+  quorum:
+    build: .
+    ports:
+      - "${QUORUM_HOST_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3000"
+      DATABASE_URL: file:/data/quorum.sqlite
+      QUORUM_EDITION: self_hosted
+      QUORUM_TELEMETRY_ENABLED: "false"
+      # Required in production: set a strong unique value and persist it with backups.
+      QUORUM_CREDENTIAL_KEK: ${QUORUM_CREDENTIAL_KEK:?set QUORUM_CREDENTIAL_KEK}
+      # Optional first-boot setup token (min 24 chars). Prefer this over log-emitted tokens.
+      QUORUM_SETUP_TOKEN: ${QUORUM_SETUP_TOKEN:-}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://127.0.0.1:3000}
+      WATCHER_INTERVAL_MS: "60000"
+      WATCHER_STALE_MS: "180000"
+    volumes:
+      - quorum-data:/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "Promise.all([fetch('http://127.0.0.1:3000/readyz'),fetch('http://127.0.0.1:3000/health/watcher')]).then(async ([r,w])=>{if(!r.ok)process.exit(1);const j=await w.json();if(w.status===503)process.exit(1);process.exit(0)}).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    restart: unless-stopped
+
+volumes:
+  quorum-data:
