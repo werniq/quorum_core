@@ -1,0 +1,134 @@
+{
+  "startedAt": "2026-07-19T15:26:08.991Z",
+  "image": "n8nio/n8n:1.95.3",
+  "stages": {
+    "alertMock": {
+      "hostUrl": "http://127.0.0.1:50688/alert",
+      "dockerUrl": "http://host.docker.internal:50688/alert"
+    },
+    "protect": {
+      "workflowId": "01KXXFRRCT3QC9VK97J0N3CH0R",
+      "contractId": "01KXXFRRD9AWKW4J5E3EP7Z8M6",
+      "clientId": "01KXXFRRBWTPFQ9DNJ43PBR5PS",
+      "channelId": "01KXXFRRE9A5Q2DNE8JCXNWZ75"
+    },
+    "cadence": {
+      "cadence_type": "interval",
+      "cadence_value": "1",
+      "allowed_lateness_minutes": 0,
+      "interval_mode": "since_last_success",
+      "notification_backoff_minutes": 30,
+      "empty_result_policy": "allowed",
+      "cadenceValueMinutes": 1,
+      "note": "since_last_success + lateness 0 → deadline = lastSuccess + 1 minute (wall-clock silent absence).",
+      "notificationBackoffMinutes": 30,
+      "duplicateAlertCheck": "no second alert within 2 watcher cycles (15s+); renotify backoff is longer"
+    },
+    "n8nWorkflowId": "QWdjElW93IHqzW2V",
+    "healthyHeartbeats": {
+      "count": 3,
+      "lastAt": "2026-07-19T15:26:34.899Z"
+    }
+  },
+  "results": {
+    "n8nAuthoredHmac": true,
+    "catalogHealthyBasic": true,
+    "silentAbsence": {
+      "incidentId": "01KXXFTVNQ2TNN3R72NCCK6ZTD",
+      "openedAt": "2026-07-19T15:27:37.129Z",
+      "silenceStartedAt": "2026-07-19T15:26:36.765Z",
+      "waitMs": 63087
+    },
+    "silentAbsenceAlertDeliveries": 1,
+    "silentAbsenceOutbox": {
+      "pending": 0,
+      "processed": 2,
+      "attempts": 1
+    },
+    "notificationAttemptsAfterWatcherCycles": 1,
+    "noDuplicateAlertWithinTwoWatcherCycles": true,
+    "silentAbsenceResolved": {
+      "incidentId": "01KXXFTVNQ2TNN3R72NCCK6ZTD",
+      "resolvedAt": "2026-07-19T15:28:05.200Z"
+    },
+    "resolutionAlertDeliveries": 1,
+    "resolutionOutbox": {
+      "resolvedRows": [
+        {
+          "id": "01KXXFVQ3TSV8VT859RZ5BWQHM",
+          "event_type": "resolved",
+          "processed_at": "2026-07-19T15:28:07.169Z",
+          "attempt_count": 0,
+          "last_error": null
+        }
+      ],
+      "attempts": 0
+    },
+    "hardFailure": {
+      "incidentId": "01KXXFVWH70AMC28R05000D2J4"
+    },
+    "emptyResultPolicies": {
+      "allowed": {
+        "lastNonemptyUnchanged": true,
+        "openEmptyIncidents": []
+      },
+      "warning": {
+        "lastNonemptyUnchanged": true,
+        "openEmptyIncidents": [
+          {
+            "id": "01KXXFWCBNAGM413CJ30A1HBG9",
+            "status": "open",
+            "severity": "warning"
+          }
+        ]
+      },
+      "failure": {
+        "lastNonemptyUnchanged": true,
+        "openEmptyIncidents": [
+          {
+            "id": "01KXXFWKG6NS1XS7BTQ52H0FWE",
+            "status": "open",
+            "severity": "critical"
+          }
+        ]
+      }
+    },
+    "authIdempotency": {
+      "invalidSignature": 401,
+      "staleTimestamp": 401,
+      "wrongWorkflowCredential": 401,
+      "revokedCredential": 401,
+      "n8nSignedIdempotencyRows": 1,
+      "idempotencyConflictStatus": 409,
+      "lastNonemptyAfterAuth": "2026-07-19T15:28:41.652Z",
+      "note": "Adversarial auth tests are host-forged; identical-body replay signed inside n8n Code"
+    },
+    "invalidKeyConnector": {
+      "health": "auth_failed",
+      "last_error_code": "auth_failed"
+    },
+    "poll": {
+      "connectorId": "01KXXFX08KZB8MZKCSZAWE2JBY",
+      "pollWorkflowId": "01KXXFX106KQZT9DB4T5D27GA9",
+      "checkpoint": {
+        "last_seen_execution_id": "16",
+        "last_finished_at": "2026-07-19T15:28:49.229Z"
+      },
+      "heartbeatsBeforeRestart": 16,
+      "heartbeatsAfterRestart": 16,
+      "noDuplicateCheckpoint": true
+    },
+    "stabilitySnapshot": {
+      "readyz": 200,
+      "openIncidents": 0,
+      "pendingOutbox": 0,
+      "failedAttempts": 0,
+      "heartbeatEvents": 31,
+      "note": "Short session only; owner must run 24-48h soak separately"
+    }
+  },
+  "limitations": [],
+  "ok": true,
+  "finishedAt": "2026-07-19T15:29:15.009Z",
+  "alertDeliveries": 1
+}
