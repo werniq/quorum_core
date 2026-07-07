@@ -1,0 +1,103 @@
+{
+  "name": "Quorum signed heartbeat (example)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "minutes", "minutesInterval": 1 }]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Quorum heartbeat HMAC (must match Quorum heartbeat-hmac.ts).\n// n8n blocks require('crypto') unless you set:\n//   NODE_FUNCTION_ALLOW_BUILTIN=crypto\n// (Docker Compose / n8n process env, then restart n8n.)\n// Also set: QUORUM_WORKFLOW_ID, QUORUM_KEY_ID, QUORUM_HMAC_SECRET, QUORUM_BASE_URL\nconst crypto = require('crypto');\n\nconst workflowId = $env.QUORUM_WORKFLOW_ID || 'REPLACE_QUORUM_WORKFLOW_ID';\nconst keyId = $env.QUORUM_KEY_ID || 'REPLACE_KEY_ID';\nconst secret = $env.QUORUM_HMAC_SECRET || 'REPLACE_HMAC_SECRET';\nconst baseUrl = ($env.QUORUM_BASE_URL || 'http://quorum:3000').replace(/\\/+$/, '');\nconst path = `/api/v1/workflows/${workflowId}/heartbeats`;\n\nconst bodyObj = {\n  schemaVersion: 1,\n  executedAt: new Date().toISOString(),\n  status: 'success',\n  itemsProcessed: 1,\n  externalExecutionRef: `n8n-${Date.now()}`,\n};\nconst bodyRaw = JSON.stringify(bodyObj);\nconst timestampSeconds = String(Math.floor(Date.now() / 1000));\nconst idempotencyKey = `n8n-${timestampSeconds}-${Math.random().toString(16).slice(2)}`;\nconst bodySha256Hex = crypto.createHash('sha256').update(bodyRaw, 'utf8').digest('hex');\nconst signingPayload = ['POST', path, timestampSeconds, idempotencyKey, bodySha256Hex].join('\\n');\nconst signature = crypto.createHmac('sha256', secret).update(signingPayload, 'utf8').digest('hex');\n\nreturn [{\n  json: {\n    url: `${baseUrl}${path}`,\n    bodyRaw,\n    headers: {\n      'content-type': 'application/json',\n      'x-quorum-key-id': keyId,\n      'x-quorum-timestamp': timestampSeconds,\n      'x-quorum-idempotency-key': idempotencyKey,\n      'x-quorum-signature': signature,\n    },\n  },\n}];"
+      },
+      "id": "sign-heartbeat",
+      "name": "Sign Quorum Heartbeat",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [280, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$json.url}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "={{$json.headers['content-type']}}"
+            },
+            {
+              "name": "x-quorum-key-id",
+              "value": "={{$json.headers['x-quorum-key-id']}}"
+            },
+            {
+              "name": "x-quorum-timestamp",
+              "value": "={{$json.headers['x-quorum-timestamp']}}"
+            },
+            {
+              "name": "x-quorum-idempotency-key",
+              "value": "={{$json.headers['x-quorum-idempotency-key']}}"
+            },
+            {
+              "name": "x-quorum-signature",
+              "value": "={{$json.headers['x-quorum-signature']}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{$json.bodyRaw}}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "http-heartbeat",
+      "name": "POST Quorum Heartbeat",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [560, 0]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [{ "node": "Sign Quorum Heartbeat", "type": "main", "index": 0 }]
+      ]
+    },
+    "Sign Quorum Heartbeat": {
+      "main": [
+        [{ "node": "POST Quorum Heartbeat", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "meta": {
+    "quorumSetup": [
+      "1. Create a Quorum push workflow and issue a credential (Key id + Secret).",
+      "2. Allow crypto in the n8n Code node sandbox: set NODE_FUNCTION_ALLOW_BUILTIN=crypto and restart n8n. Without this you get VMError: Cannot find module 'crypto'.",
+      "3. Set n8n environment variables: QUORUM_WORKFLOW_ID, QUORUM_KEY_ID, QUORUM_HMAC_SECRET, QUORUM_BASE_URL.",
+      "4. Import this workflow. Do not paste real secrets into the exported JSON.",
+      "5. Activate the workflow. Schedule runs every 1 minute.",
+      "6. Confirm Quorum catalog shows Healthy with Basic evidence after the first accepted heartbeat."
+    ],
+    "placeholders": {
+      "QUORUM_WORKFLOW_ID": "REPLACE_QUORUM_WORKFLOW_ID",
+      "QUORUM_KEY_ID": "REPLACE_KEY_ID",
+      "QUORUM_HMAC_SECRET": "REPLACE_HMAC_SECRET",
+      "QUORUM_BASE_URL": "http://quorum:3000"
+    }
+  }
+}
