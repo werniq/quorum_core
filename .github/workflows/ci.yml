@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+  schedule:
+    # Nightly heavy E2E (Compose + n8n) when Docker runners are available
+    - cron: "0 4 * * *"
+
+jobs:
+  static-and-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: quorum
+          POSTGRES_PASSWORD: quorum
+          POSTGRES_DB: quorum
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U quorum -d quorum"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      # Test-only values. Never log these.
+      QUORUM_CREDENTIAL_KEK: ci-test-credential-kek-not-for-production
+      DATABASE_URL: postgres://quorum:quorum@localhost:5432/quorum
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run test:integration
+      - run: npm run test:repository
+      - run: npm run test:migrations
+      - run: npm run test:security
+      - run: npm run test:cov
+      - run: npm run build
+
+  compose-and-e2e:
+    runs-on: ubuntu-latest
+    # Heavy Docker checks: default branch, tags, manual, nightly
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' ||
+      startsWith(github.ref, 'refs/tags/') ||
+      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'))
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Clean Compose black-box
+        run: npm run test:compose
+      - name: Restart persistence
+        run: npm run test:restart
+      - name: Real n8n E2E
+        run: npm run test:e2e:n8n
