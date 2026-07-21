@@ -537,4 +537,51 @@ describe("catalog product UX UI acceptance", () => {
     );
     await app.close();
   });
+
+  it("protect wizard reuses an existing registered workflow without duplicating it", async () => {
+    const sqlite = openDb();
+    const clock = new FixedClock(new Date("2026-07-19T10:00:00.000Z"));
+    const { sessionId, csrf, core, tenant } = seedAdmin(sqlite, clock);
+    const existing = core.createWorkflow(tenant.id, {
+      id: createId(),
+      clientId: null,
+      name: "Already registered",
+      externalWorkflowId: "n8n-existing-1",
+      description: null,
+      monitoringMethod: "push",
+      isActive: false,
+      monitoringStartedAt: null,
+    });
+    const app = await bootApp(sqlite, clock);
+
+    const step3 = await app.inject({
+      method: "POST",
+      url: "/protect/process",
+      headers: {
+        cookie: `${SESSION_COOKIE}=${sessionId}`,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      payload: `csrf=${encodeURIComponent(csrf)}&clientId=c-local&templateId=custom&businessPurpose=Leads`,
+    });
+    expect(step3.statusCode).toBe(200);
+    expect(step3.body).toContain('name="existingWorkflowId"');
+    expect(step3.body).toContain(existing.id);
+
+    const selected = await app.inject({
+      method: "POST",
+      url: "/protect/workflow",
+      headers: {
+        cookie: `${SESSION_COOKIE}=${sessionId}`,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      payload: `csrf=${encodeURIComponent(csrf)}&clientId=c-local&templateId=custom&businessPurpose=Leads&existingWorkflowId=${encodeURIComponent(existing.id)}`,
+    });
+    expect(selected.statusCode).toBe(200);
+    expect(selected.body).toContain("Define the contract");
+    expect(selected.body).toContain(`value="${existing.id}"`);
+    expect(selected.body).toContain("Using existing workflow");
+    expect(core.listWorkflows(tenant.id)).toHaveLength(1);
+
+    await app.close();
+  });
 });

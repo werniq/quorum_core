@@ -321,12 +321,19 @@ export function renderProtectClientPage(input: {
   csrf: string;
   step: number;
   clients: Array<{ id: string; name: string }>;
+  workflows?: Array<{
+    id: string;
+    name: string;
+    externalWorkflowId: string;
+    monitoringMethod: string;
+  }>;
   flash?: string | null;
   flashTone?: "error" | "success";
   draft?: Record<string, string>;
 }): string {
   const d = input.draft ?? {};
   const stepId = String(Math.min(Math.max(input.step, 1), 6));
+  const registeredWorkflows = input.workflows ?? [];
   const templates = PROCESS_TEMPLATES.map(
     (t) =>
       `<option value="${escapeHtml(t.id)}"${d.templateId === t.id ? " selected" : ""}>${escapeHtml(t.label)}</option>`,
@@ -344,7 +351,7 @@ export function renderProtectClientPage(input: {
             ${input.clients
               .map(
                 (c) =>
-                  `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`,
+                  `<option value="${escapeHtml(c.id)}"${d.clientId === c.id ? " selected" : ""}>${escapeHtml(c.name)}</option>`,
               )
               .join("")}
           </select>
@@ -370,26 +377,50 @@ export function renderProtectClientPage(input: {
         <div class="row-actions"><button type="submit">Continue</button></div>
       </form>`;
   } else if (input.step === 3) {
+    const existingOptions =
+      registeredWorkflows.length === 0
+        ? ""
+        : registeredWorkflows
+            .map((w) => {
+              const methodLabel =
+                w.monitoringMethod === "poll" ? "Connect n8n" : "Push";
+              return `<option value="${escapeHtml(w.id)}"${d.workflowId === w.id ? " selected" : ""}>${escapeHtml(w.name)} · n8n ${escapeHtml(w.externalWorkflowId)} · Quorum ${escapeHtml(w.id)} (${escapeHtml(methodLabel)})</option>`;
+            })
+            .join("");
     body = `
       <form method="post" action="/protect/workflow" class="card stack">
         <input type="hidden" name="csrf" value="${escapeHtml(input.csrf)}" />
         <input type="hidden" name="clientId" value="${escapeHtml(d.clientId ?? "")}" />
         <input type="hidden" name="templateId" value="${escapeHtml(d.templateId ?? "")}" />
         <input type="hidden" name="businessPurpose" value="${escapeHtml(d.businessPurpose ?? "")}" />
+        <input type="hidden" name="cadenceValue" value="${escapeHtml(d.cadenceValue ?? "15")}" />
         <h2 class="card-title">Select a workflow</h2>
-        <p class="helper">Register an n8n workflow before defining its monitoring contract.</p>
+        <p class="helper">Use a workflow you already registered on the Workflows page, or register a new one here. The Quorum workflow id (for <code>QUORUM_WORKFLOW_ID</code>) is not the n8n workflow id from the n8n URL.</p>
+        ${
+          registeredWorkflows.length > 0
+            ? `<label class="field">Existing registered workflow
+          <select name="existingWorkflowId">
+            <option value="">Register new…</option>
+            ${existingOptions}
+          </select>
+          <p class="helper">Selecting an existing workflow continues with its Quorum id. It does not create a duplicate.</p>
+        </label>`
+            : `<p class="helper">No workflows registered yet. Register one below, or <a href="/workflows">open Workflows</a> first.</p>`
+        }
+        <h3 class="section-title" style="margin-top:0.5rem">Register a new workflow</h3>
+        <p class="helper">Only fill these fields when “Register new…” is selected above (or when you have none yet).</p>
         <label class="field">Workflow name
-          <input name="workflowName" required placeholder="Lead synchronization" value="${escapeHtml(d.workflowName ?? "")}" />
+          <input name="workflowName" placeholder="Lead synchronization" value="${escapeHtml(d.workflowName ?? "")}" />
         </label>
         <label class="field">n8n workflow ID
-          <input name="externalWorkflowId" required placeholder="Enter the ID from your n8n workflow" value="${escapeHtml(d.externalWorkflowId ?? "")}" />
-          <p class="helper">Find it in the n8n workflow URL: <code>http://localhost:5678/workflow/{workflow-id}</code></p>
+          <input name="externalWorkflowId" placeholder="Enter the ID from your n8n workflow" value="${escapeHtml(d.externalWorkflowId ?? "")}" />
+          <p class="helper">From the n8n URL: <code>http://localhost:5678/workflow/{workflow-id}</code>. This is not the Quorum workflow id.</p>
         </label>
         <fieldset class="stack" style="border:0;padding:0;margin:0">
           <legend class="field-label">Monitoring method</legend>
           <div class="radio-card-group" role="radiogroup" aria-label="Monitoring method">
             <label class="radio-card">
-              <input type="radio" name="monitoringMethod" value="push"${d.monitoringMethod !== "poll" ? " checked" : ""} required />
+              <input type="radio" name="monitoringMethod" value="push"${d.monitoringMethod !== "poll" ? " checked" : ""} />
               <span>
                 <span class="radio-card-title">Push heartbeats <span class="badge badge-rec">Recommended</span></span>
                 <p class="radio-card-desc">Best for precise status, item counts, failures, and immediate reporting.</p>
@@ -404,7 +435,7 @@ export function renderProtectClientPage(input: {
             </label>
           </div>
         </fieldset>
-        <div class="row-actions"><button type="submit">Register workflow</button></div>
+        <div class="row-actions"><button type="submit">Continue</button></div>
       </form>`;
   } else if (input.step === 4) {
     body = `

@@ -185,7 +185,30 @@ describe("UI redesign copy and primitives", () => {
     expect(html).toContain("n8n workflow ID");
     expect(html).toContain("Push heartbeats");
     expect(html).toContain("Step 3 of 6");
+    expect(html).toContain("QUORUM_WORKFLOW_ID");
     expect(html).not.toContain("choose_method");
+  });
+
+  it("protect workflow step can select an existing registered workflow", () => {
+    const html = renderProtectClientPage({
+      csrf: "csrf-token",
+      step: 3,
+      clients: [],
+      workflows: [
+        {
+          id: "wf_quorum_1",
+          name: "Lead sync",
+          externalWorkflowId: "n8n-abc",
+          monitoringMethod: "push",
+        },
+      ],
+      draft: { clientId: "c1", businessPurpose: "Leads" },
+    });
+    expect(html).toContain('name="existingWorkflowId"');
+    expect(html).toContain("wf_quorum_1");
+    expect(html).toContain("n8n-abc");
+    expect(html).toContain("does not create a duplicate");
+    expect(html).toContain(">Continue</button>");
   });
 
   it("protect wizard continue buttons advance steps instead of sounding like final saves", () => {

@@ -114,6 +114,19 @@ export function registerProductUiRoutes(
     return true;
   }
 
+  function listProtectWorkflows(tid: string) {
+    return core.listWorkflows(tid).map((w) => ({
+      id: w.id,
+      name: w.name,
+      externalWorkflowId: w.externalWorkflowId,
+      monitoringMethod: w.monitoringMethod,
+    }));
+  }
+
+  function listProtectClients(tid: string) {
+    return core.listClients(tid).map((c) => ({ id: c.id, name: c.name }));
+  }
+
   function failingBanner(tid: string): string | null {
     // Organization-level: any active channel that is failing or degraded.
     const failing = deps.sqlite
@@ -204,7 +217,8 @@ export function registerProductUiRoutes(
         ...pageShell,
         csrf: session.csrfToken,
         step: 1,
-        clients: core.listClients(tid).map((c) => ({ id: c.id, name: c.name })),
+        clients: listProtectClients(tid),
+        workflows: listProtectWorkflows(tid),
       }),
     );
   });
@@ -237,7 +251,8 @@ export function registerProductUiRoutes(
         ...pageShell,
         csrf: session.csrfToken,
         step: 2,
-        clients: core.listClients(tid).map((c) => ({ id: c.id, name: c.name })),
+        clients: listProtectClients(tid),
+        workflows: listProtectWorkflows(tid),
         draft: { clientId },
       }),
     );
@@ -253,6 +268,7 @@ export function registerProductUiRoutes(
       return;
     }
     const body = formBody(request);
+    const tid = deps.tenantId();
     const template = getProcessTemplate(body.templateId ?? "custom");
     const purpose =
       (body.businessPurpose ?? "").trim() ||
@@ -263,7 +279,8 @@ export function registerProductUiRoutes(
         ...pageShell,
         csrf: session.csrfToken,
         step: 3,
-        clients: [],
+        clients: listProtectClients(tid),
+        workflows: listProtectWorkflows(tid),
         draft: {
           clientId: body.clientId ?? "",
           templateId: body.templateId ?? "custom",
@@ -288,10 +305,9 @@ export function registerProductUiRoutes(
     }
     const body = formBody(request);
     const tid = deps.tenantId();
-    const clients = core.listClients(tid).map((c) => ({
-      id: c.id,
-      name: c.name,
-    }));
+    const clients = listProtectClients(tid);
+    const workflows = listProtectWorkflows(tid);
+    const existingWorkflowId = (body.existingWorkflowId ?? "").trim();
     const workflowName = (body.workflowName ?? "").trim();
     const externalWorkflowId = (body.externalWorkflowId ?? "").trim();
     const monitoringMethod = body.monitoringMethod === "poll" ? "poll" : "push";
@@ -303,7 +319,47 @@ export function registerProductUiRoutes(
       workflowName,
       externalWorkflowId,
       monitoringMethod,
+      workflowId: existingWorkflowId,
     };
+
+    if (existingWorkflowId) {
+      const existing = core.getWorkflow(tid, existingWorkflowId);
+      if (!existing) {
+        return reply
+          .code(400)
+          .type("text/html")
+          .send(
+            renderProtectClientPage({
+              ...pageShell,
+              csrf: session.csrfToken,
+              step: 3,
+              clients,
+              workflows,
+              flash: "That registered workflow was not found. Select another or register a new one.",
+              draft,
+            }),
+          );
+      }
+      return reply.type("text/html").send(
+        renderProtectClientPage({
+          ...pageShell,
+          csrf: session.csrfToken,
+          step: 4,
+          clients,
+          workflows,
+          flash: `Using existing workflow “${existing.name}”. Quorum workflow id: ${existing.id}. Define the monitoring contract next.`,
+          flashTone: "success",
+          draft: {
+            ...draft,
+            workflowId: existing.id,
+            workflowName: existing.name,
+            externalWorkflowId: existing.externalWorkflowId,
+            monitoringMethod: existing.monitoringMethod,
+          },
+        }),
+      );
+    }
+
     const validationError = validateWorkflowRegistrationInput({
       name: workflowName,
       externalWorkflowId,
@@ -314,10 +370,11 @@ export function registerProductUiRoutes(
         .type("text/html")
         .send(
           renderProtectClientPage({
-        ...pageShell,
+            ...pageShell,
             csrf: session.csrfToken,
             step: 3,
             clients,
+            workflows,
             flash: validationError,
             draft,
           }),
@@ -341,10 +398,11 @@ export function registerProductUiRoutes(
         .type("text/html")
         .send(
           renderProtectClientPage({
-        ...pageShell,
+            ...pageShell,
             csrf: session.csrfToken,
             step: 3,
             clients,
+            workflows,
             flash: workflowRegistrationErrorMessage(error),
             draft,
           }),
@@ -356,7 +414,8 @@ export function registerProductUiRoutes(
         csrf: session.csrfToken,
         step: 4,
         clients,
-        flash: "Workflow registered. Define the monitoring contract next.",
+        workflows,
+        flash: `Workflow registered. Quorum workflow id: ${workflow.id} (for QUORUM_WORKFLOW_ID). Define the monitoring contract next.`,
         flashTone: "success",
         draft: {
           ...draft,
