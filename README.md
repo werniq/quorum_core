@@ -86,7 +86,7 @@ There is no default password. When auth is on and you omit `QUORUM_SETUP_TOKEN`,
 2. Issue a push credential for that workflow.
 3. Import and wire [examples/n8n/quorum-signed-heartbeat.json](examples/n8n/quorum-signed-heartbeat.json) (Crypto Hash + Crypto HMAC nodes; no `NODE_FUNCTION_ALLOW_BUILTIN`).
 
-Set on n8n (not in the exported JSON): `QUORUM_WORKFLOW_ID`, `QUORUM_KEY_ID`, `QUORUM_HMAC_SECRET`, `QUORUM_BASE_URL`. Details and the optional legacy Code-node path: [examples/n8n/README.md](examples/n8n/README.md).
+Set on n8n (not in the exported JSON): `QUORUM_WORKFLOW_ID`, `QUORUM_KEY_ID`, `QUORUM_HMAC_SECRET`, `QUORUM_BASE_URL`. On n8n 2.x also set `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` (or use Crypto credentials on ≥ 2.7). Supported range and setup: [examples/n8n/README.md](examples/n8n/README.md).
 
 ### Polling
 
