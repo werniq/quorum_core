@@ -205,13 +205,14 @@ select:focus-visible, textarea:focus-visible, summary:focus-visible,
   text-decoration: none;
   font-size: 14px;
   font-weight: 500;
-  transition: background 150ms ease, color 150ms ease;
+  transition: background 150ms ease, color 150ms ease, transform 140ms ease;
 }
 .nav-link:hover {
   background: var(--background-hover);
   color: var(--text-primary);
   text-decoration: none;
 }
+.nav-link:active { transform: translateX(1px); }
 .nav-link[aria-current="page"] {
   background: var(--brand-primary-subtle);
   color: var(--brand-primary);
@@ -315,6 +316,8 @@ select:focus-visible, textarea:focus-visible, summary:focus-visible,
   position: fixed; inset: 0;
   background: rgba(17,24,39,0.4);
   z-index: 25;
+  opacity: 0;
+  transition: opacity 180ms ease;
 }
 
 /* Typography */
@@ -355,6 +358,10 @@ h3.card-title, .card-title {
   box-shadow: var(--shadow-sm);
   padding: var(--space-5);
   margin: 0 0 var(--space-4);
+  transition: border-color 160ms ease, box-shadow 180ms ease, transform 160ms ease;
+}
+.card:hover {
+  border-color: var(--border-strong);
 }
 .card.compact { padding: var(--space-4); }
 .stack { display: grid; gap: var(--space-4); }
@@ -549,9 +556,10 @@ input[aria-invalid="true"], select[aria-invalid="true"] {
   border-radius: var(--radius-md);
   background: var(--background-surface);
   cursor: pointer;
-  transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease, transform 140ms ease;
 }
 .radio-card:hover { border-color: var(--border-strong); background: var(--background-hover); }
+.radio-card:active { transform: translateY(1px); }
 .radio-card:has(input:checked), .radio-card.is-selected {
   border-color: var(--brand-primary);
   background: var(--brand-primary-subtle);
@@ -590,7 +598,13 @@ button, .btn {
   width: auto;
   max-width: none;
   text-decoration: none;
-  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease,
+    transform 140ms ease,
+    opacity 160ms ease;
 }
 button, .btn, .btn-primary {
   background: var(--brand-primary);
@@ -600,6 +614,10 @@ button:hover, .btn:hover, .btn-primary:hover {
   background: var(--brand-primary-hover);
   text-decoration: none;
   color: #fff;
+}
+button:active, .btn:active, .btn-primary:active,
+.btn-secondary:active, button.btn-secondary:active {
+  transform: translateY(1px);
 }
 .btn-secondary, button.btn-secondary {
   background: var(--background-surface);
@@ -624,6 +642,27 @@ button:hover, .btn:hover, .btn-primary:hover {
   color: #fff;
 }
 .btn-danger:hover { background: #991b1b; color: #fff; }
+button.is-busy, .btn.is-busy,
+form.is-submitting button[type="submit"],
+form.is-submitting .btn {
+  opacity: 0.72;
+  pointer-events: none;
+  position: relative;
+}
+button.is-busy::after, .btn.is-busy::after {
+  content: "";
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-left: 0.15rem;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.85;
+  animation: busy-pulse 200ms ease-in-out infinite alternate;
+}
+@keyframes busy-pulse {
+  from { opacity: 0.35; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1); }
+}
 .cta {
   background: var(--brand-primary);
   color: #fff !important;
@@ -631,8 +670,10 @@ button:hover, .btn:hover, .btn-primary:hover {
   border-radius: var(--radius-sm);
   text-decoration: none;
   font-weight: 550;
+  transition: background 160ms ease, transform 140ms ease;
 }
 .cta:hover { background: var(--brand-primary-hover); text-decoration: none; }
+.cta:active { transform: translateY(1px); }
 form[style*="display:inline"] button,
 td form button {
   min-height: 34px;
@@ -655,6 +696,17 @@ td form button {
   font-weight: 550;
   line-height: 1.4;
   white-space: nowrap;
+  transition: background 180ms ease, border-color 180ms ease, color 180ms ease, box-shadow 180ms ease;
+}
+.badge-status-healthy,
+.badge-status-waiting,
+.badge-status-warning,
+.badge-status-overdue,
+.badge-status-incident,
+.badge-status-paused,
+.badge-status-unknown,
+.badge-status-inactive {
+  transition: background 200ms ease, border-color 200ms ease, color 200ms ease, box-shadow 200ms ease;
 }
 .badge.basic, .badge-evidence-basic {
   background: var(--status-info-bg);
@@ -712,13 +764,19 @@ td form button {
   color: var(--text-muted);
   font-size: 13px;
   font-weight: 500;
+  transition: background 180ms ease, color 180ms ease;
 }
 .stepper-item.is-current {
   background: var(--brand-primary-subtle);
   color: var(--brand-primary);
   font-weight: 600;
+  animation: step-current 200ms ease-out both;
 }
 .stepper-item.is-complete { color: var(--status-success); }
+@keyframes step-current {
+  from { opacity: 0.7; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 .stepper-index {
   width: 22px; height: 22px;
   border-radius: 999px;
@@ -753,6 +811,15 @@ td form button {
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
+  transition: border-color 160ms ease, box-shadow 180ms ease, transform 160ms ease;
+}
+.contract-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+.contract-card:active {
+  transform: translateY(0);
 }
 .contract-card-header {
   display: flex;
@@ -833,16 +900,26 @@ th {
   margin-bottom: var(--space-4);
   border: 1px solid var(--border-default);
   background: var(--background-surface);
+  animation: toast-in 200ms ease-out both;
 }
 .flash.is-error, .toast.is-error {
   background: var(--status-danger-bg);
   border-color: #fecaca;
   color: var(--status-danger);
 }
-.flash.is-success {
+.flash.is-success, .toast.is-success {
   background: var(--status-success-bg);
   border-color: #a7f3d0;
   color: var(--status-success);
+  animation: success-in 220ms ease-out both;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes success-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .banner {
   background: var(--status-warning-bg);
@@ -870,6 +947,16 @@ details.evidence summary {
   cursor: pointer;
   color: var(--text-muted);
   font-size: 12px;
+  transition: color 150ms ease;
+}
+details.evidence summary:hover { color: var(--text-secondary); }
+details.evidence[open] summary { margin-bottom: var(--space-2); }
+details.evidence > *:not(summary) {
+  animation: accordion-in 180ms ease-out both;
+}
+@keyframes accordion-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -889,13 +976,77 @@ code {
   0% { background-position: 100% 0; }
   100% { background-position: -100% 0; }
 }
+
+/* Motion polish (120–250ms; see prefers-reduced-motion below) */
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes card-appear {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes wizard-panel {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.app-content.page-enter,
+.auth-card.page-enter {
+  animation: page-enter 200ms ease-out both;
+}
+.wizard-panel {
+  animation: wizard-panel 190ms ease-out both;
+}
+.contract-grid > .contract-card,
+.summary-grid > .card,
+.table-wrap tbody tr {
+  animation: card-appear 180ms ease-out both;
+}
+.contract-grid > .contract-card:nth-child(1),
+.summary-grid > .card:nth-child(1),
+.table-wrap tbody tr:nth-child(1) { animation-delay: 0ms; }
+.contract-grid > .contract-card:nth-child(2),
+.summary-grid > .card:nth-child(2),
+.table-wrap tbody tr:nth-child(2) { animation-delay: 30ms; }
+.contract-grid > .contract-card:nth-child(3),
+.summary-grid > .card:nth-child(3),
+.table-wrap tbody tr:nth-child(3) { animation-delay: 55ms; }
+.contract-grid > .contract-card:nth-child(4),
+.summary-grid > .card:nth-child(4),
+.table-wrap tbody tr:nth-child(4) { animation-delay: 80ms; }
+.contract-grid > .contract-card:nth-child(5),
+.summary-grid > .card:nth-child(5),
+.table-wrap tbody tr:nth-child(5) { animation-delay: 100ms; }
+.contract-grid > .contract-card:nth-child(n+6),
+.summary-grid > .card:nth-child(n+6),
+.table-wrap tbody tr:nth-child(n+6) { animation-delay: 120ms; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
-  .skeleton { animation: none; }
+  .skeleton,
+  .app-content.page-enter,
+  .auth-card.page-enter,
+  .wizard-panel,
+  .contract-grid > .contract-card,
+  .summary-grid > .card,
+  .table-wrap tbody tr,
+  .flash, .toast,
+  .flash.is-success, .toast.is-success,
+  .stepper-item.is-current,
+  details.evidence > *:not(summary),
+  button.is-busy::after, .btn.is-busy::after {
+    animation: none !important;
+  }
+  .card:hover,
+  .contract-card:hover,
+  button:active, .btn:active, .cta:active, .radio-card:active {
+    transform: none !important;
+  }
 }
 
 @media (max-width: 1024px) {
@@ -908,7 +1059,10 @@ code {
     box-shadow: var(--shadow-md);
   }
   .app-shell.nav-open .app-sidebar { transform: translateX(0); }
-  .app-shell.nav-open .sidebar-backdrop { display: block; }
+  .app-shell.nav-open .sidebar-backdrop {
+    display: block;
+    opacity: 1;
+  }
   .menu-toggle { display: inline-flex; }
   .app-topbar, .app-content, .app-footer, .banner { padding-left: var(--space-4); padding-right: var(--space-4); }
 }
@@ -1031,16 +1185,34 @@ const SHELL_SCRIPT = `
   var shell = document.getElementById('app-shell');
   var toggle = document.getElementById('menu-toggle');
   var backdrop = document.getElementById('sidebar-backdrop');
-  if (!shell || !toggle) return;
-  function close() { shell.classList.remove('nav-open'); toggle.setAttribute('aria-expanded', 'false'); }
-  function open() { shell.classList.add('nav-open'); toggle.setAttribute('aria-expanded', 'true'); }
-  toggle.addEventListener('click', function () {
-    if (shell.classList.contains('nav-open')) close(); else open();
-  });
-  if (backdrop) backdrop.addEventListener('click', close);
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') close();
-  });
+  if (shell && toggle) {
+    function close() { shell.classList.remove('nav-open'); toggle.setAttribute('aria-expanded', 'false'); }
+    function open() { shell.classList.add('nav-open'); toggle.setAttribute('aria-expanded', 'true'); }
+    toggle.addEventListener('click', function () {
+      if (shell.classList.contains('nav-open')) close(); else open();
+    });
+    if (backdrop) backdrop.addEventListener('click', close);
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') close();
+    });
+  }
+
+  var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!reduceMotion) {
+    document.addEventListener('submit', function (e) {
+      var form = e.target;
+      if (!form || form.tagName !== 'FORM' || form.getAttribute('data-no-busy') === '1') return;
+      if (form.classList.contains('is-submitting')) return;
+      form.classList.add('is-submitting');
+      var submitter = e.submitter;
+      if (submitter && submitter.tagName === 'BUTTON') {
+        submitter.classList.add('is-busy');
+      } else {
+        var primary = form.querySelector('button[type="submit"], button:not([type]), .btn');
+        if (primary) primary.classList.add('is-busy');
+      }
+    }, true);
+  }
 })();
 `;
 
@@ -1086,12 +1258,13 @@ export function layout(input: {
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
   <div class="auth-shell">
-    <div class="auth-card" id="main">
+    <div class="auth-card page-enter" id="main">
       <a class="brand-mark" href="/login"><span class="brand-glyph" aria-hidden="true">Q</span> Quorum</a>
       ${flashHtml}
       ${input.body}
     </div>
   </div>
+  <script>${SHELL_SCRIPT}</script>
 </body>
 </html>`;
   }
@@ -1125,7 +1298,7 @@ export function layout(input: {
       </header>
       ${demoBanner}
       ${banner}
-      <main id="main" class="app-content${input.contentWide ? " wide" : ""}">
+      <main id="main" class="app-content page-enter${input.contentWide ? " wide" : ""}">
         ${flashHtml}
         ${input.body}
       </main>

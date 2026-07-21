@@ -527,7 +527,7 @@ export function renderOnboardingPage(input: {
       <h1 class="page-title">Set up workflow monitoring</h1>
       <p class="page-subtitle">Connect your first workflow and define what Quorum should expect.</p>
       ${stepper}
-      ${body}
+      <div class="wizard-panel">${body}</div>
     `,
   });
 }

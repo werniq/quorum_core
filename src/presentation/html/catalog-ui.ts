@@ -571,8 +571,10 @@ export function renderProtectClientPage(input: {
       <h1 class="page-title">Protect a client</h1>
       <p class="page-subtitle">Connect a workflow and define what Quorum should expect.</p>
       ${renderStepper({ steps: PROTECT_STEPS, currentId: stepId })}
+      <div class="wizard-panel">
       ${body}
       ${backForms}
+      </div>
     `,
   });
 }

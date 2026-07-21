@@ -43,6 +43,26 @@ describe("UI redesign copy and primitives", () => {
     expect(html).not.toContain("choose_method");
   });
 
+  it("layout includes subtle motion and respects prefers-reduced-motion", () => {
+    const html = layout({
+      title: "Motion",
+      loggedIn: true,
+      current: "catalog",
+      body: "<p>ok</p>",
+      flash: "Saved",
+      flashTone: "success",
+    });
+    expect(html).toContain("page-enter");
+    expect(html).toContain("@keyframes page-enter");
+    expect(html).toContain("@keyframes card-appear");
+    expect(html).toContain("@keyframes toast-in");
+    expect(html).toContain("@keyframes success-in");
+    expect(html).toContain("prefers-reduced-motion");
+    expect(html).toContain("animation: none !important");
+    expect(html).toContain("is-submitting");
+    expect(html).toContain('class="flash is-success"');
+  });
+
   it("separates health and evidence badges with text labels", () => {
     expect(statusBadge("healthy")).toContain("Healthy");
     expect(statusBadge("overdue")).toContain("Overdue");
