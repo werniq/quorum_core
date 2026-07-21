@@ -352,7 +352,7 @@ export function renderProtectClientPage(input: {
         <label class="field">New client name
           <input name="newClientName" placeholder="Acme Agency client" />
         </label>
-        <div class="row-actions"><button type="submit">Save client</button></div>
+        <div class="row-actions"><button type="submit">Continue</button></div>
       </form>`;
   } else if (input.step === 2) {
     body = `
@@ -367,7 +367,7 @@ export function renderProtectClientPage(input: {
         <label class="field">Business purpose
           <input name="businessPurpose" value="${escapeHtml(d.businessPurpose ?? "")}" required />
         </label>
-        <div class="row-actions"><button type="submit">Save process</button></div>
+        <div class="row-actions"><button type="submit">Continue</button></div>
       </form>`;
   } else if (input.step === 3) {
     body = `
@@ -439,7 +439,7 @@ export function renderProtectClientPage(input: {
           <input type="checkbox" name="evidenceAcknowledged" value="1" required />
           <span>I understand basic evidence does not prove destination delivery</span>
         </label>
-        <div class="row-actions"><button type="submit">Save inactive contract</button></div>
+        <div class="row-actions"><button type="submit">Continue</button></div>
       </form>`;
   } else if (input.step === 5) {
     body = `

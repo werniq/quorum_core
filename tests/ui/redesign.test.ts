@@ -188,6 +188,34 @@ describe("UI redesign copy and primitives", () => {
     expect(html).not.toContain("choose_method");
   });
 
+  it("protect wizard continue buttons advance steps instead of sounding like final saves", () => {
+    const step1 = renderProtectClientPage({
+      csrf: "csrf-token",
+      step: 1,
+      clients: [],
+    });
+    expect(step1).toContain(">Continue</button>");
+    expect(step1).not.toContain("Save client");
+
+    const step2 = renderProtectClientPage({
+      csrf: "csrf-token",
+      step: 2,
+      clients: [],
+      draft: { clientId: "c1" },
+    });
+    expect(step2).toContain(">Continue</button>");
+    expect(step2).not.toContain("Save process");
+
+    const step4 = renderProtectClientPage({
+      csrf: "csrf-token",
+      step: 4,
+      clients: [],
+      draft: { clientId: "c1", workflowId: "w1" },
+    });
+    expect(step4).toContain(">Continue</button>");
+    expect(step4).not.toContain("Save inactive contract");
+  });
+
   it("catalog empty state and status badges render", () => {
     const html = renderCatalogPage({
       csrf: "csrf",
