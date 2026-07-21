@@ -116,6 +116,15 @@ const envSchema = z.object({
     .transform((value) => value === "true"),
   /** Bearer token required for /metrics when set. Loopback allowed without token. */
   METRICS_AUTH_TOKEN: z.string().optional().default(""),
+  /**
+   * Require one-time setup token + login for the HTML UI.
+   * Default false so a local/Docker try-out can open the catalog without registration.
+   * Set true before any shared or production deploy.
+   */
+  QUORUM_UI_AUTH_ENABLED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
 });
 
 export type QuorumEnv = z.infer<typeof envSchema>;

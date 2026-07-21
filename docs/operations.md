@@ -38,6 +38,7 @@ Delivery attempts are durable. Non-2xx / timeout / SMTP errors update channel he
 ## Secrets and KEK rotation
 
 - Self-hosted: `QUORUM_CREDENTIAL_KEK` (AES-256-GCM envelope via scrypt-derived key).
+- `QUORUM_UI_AUTH_ENABLED` defaults to `false` for local try-out (no setup token or login). Set `true` before any shared or production deploy, and supply `QUORUM_SETUP_TOKEN` (≥24 chars) for first admin.
 - Supply the KEK through a secret mechanism. Do not keep the only KEK copy on the same volume as the database backup.
 - Optional rotation window: set `QUORUM_CREDENTIAL_KEK` to the new key and `QUORUM_CREDENTIAL_KEK_PREVIOUS` to the old key, re-encrypt stored blobs, then remove the previous key.
 - After restore, a missing or wrong KEK means push credentials and alert configs cannot be decrypted. That loss is unrecoverable for those secrets.

@@ -65,20 +65,30 @@ export async function main(): Promise<void> {
   const outbound = new SqliteOutboundDestinationRepositories(sqlite);
 
   if (!auth.hasAdminUser()) {
-    const envToken = process.env.QUORUM_SETUP_TOKEN;
-    if (envToken && envToken.length >= 24) {
-      auth.registerSetupTokenFromEnv(envToken, clock.now());
+    if (!env.QUORUM_UI_AUTH_ENABLED) {
       console.info(
-        "Setup: using QUORUM_SETUP_TOKEN from environment (value not logged). Container log retention can keep a generated token if one was printed earlier; prefer an operator-supplied env token.",
+        "UI auth is off (QUORUM_UI_AUTH_ENABLED=false). Catalog is open without setup/login. Set QUORUM_UI_AUTH_ENABLED=true before any shared or production deploy.",
       );
     } else {
-      const issued = auth.issueSetupToken(clock.now());
-      if (issued) {
+      const envToken = process.env.QUORUM_SETUP_TOKEN;
+      if (envToken && envToken.length >= 24) {
+        auth.registerSetupTokenFromEnv(envToken, clock.now());
         console.info(
-          `Setup token (copy once; not stored in plaintext; never printed again): ${issued.token}`,
+          "Setup: using QUORUM_SETUP_TOKEN from environment (value not logged). Container log retention can keep a generated token if one was printed earlier; prefer an operator-supplied env token.",
         );
+      } else {
+        const issued = auth.issueSetupToken(clock.now());
+        if (issued) {
+          console.info(
+            `Setup token (copy once; not stored in plaintext; never printed again): ${issued.token}`,
+          );
+        }
       }
     }
+  } else if (!env.QUORUM_UI_AUTH_ENABLED) {
+    console.info(
+      "UI auth is off (QUORUM_UI_AUTH_ENABLED=false). Existing admin login is not required for the HTML UI.",
+    );
   }
 
   const claimOwner = `quorum-${hostname()}-${process.pid}`;

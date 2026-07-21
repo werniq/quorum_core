@@ -62,6 +62,7 @@ async function boot(sqlite: BetterSqliteDatabase.Database, clock: FixedClock) {
     env: loadEnv({
       NODE_ENV: "test",
       QUORUM_CREDENTIAL_KEK: KEK,
+      QUORUM_UI_AUTH_ENABLED: "true",
     }),
     clock,
     sqlite,

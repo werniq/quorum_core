@@ -22,7 +22,10 @@ import {
 } from "../../security/credential-secrets.js";
 import { resolveIdentifierHmacKey } from "../../security/identifier-hmac.js";
 import {
+  clearOpenCsrfCookieHeader,
   clearSessionCookieHeader,
+  OPEN_CSRF_COOKIE,
+  openCsrfCookieHeader,
   parseCookieHeader,
   SESSION_COOKIE,
   sessionCookieHeader,
@@ -201,10 +204,41 @@ export function registerUiRoutes(
     return auth.getSession(sessionId, deps.clock.now());
   }
 
+  function openModeSession(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): Session {
+    const cookies = parseCookieHeader(
+      typeof request.headers.cookie === "string"
+        ? request.headers.cookie
+        : undefined,
+    );
+    let csrf = cookies[OPEN_CSRF_COOKIE];
+    if (!csrf || csrf.length < 16) {
+      csrf = randomBytes(24).toString("hex");
+      reply.header(
+        "set-cookie",
+        openCsrfCookieHeader(csrf, {
+          secure: secureCookie,
+          maxAgeSeconds: SESSION_MAX_AGE_S,
+        }),
+      );
+    }
+    return {
+      adminUserId: "local-open",
+      csrfToken: csrf,
+      role: "admin",
+    };
+  }
+
   function requireSession(
     request: FastifyRequest,
     reply: FastifyReply,
   ): Session | null {
+    if (!deps.env.QUORUM_UI_AUTH_ENABLED) {
+      const existing = readSession(request);
+      return existing ?? openModeSession(request, reply);
+    }
     if (!auth.hasAdminUser()) {
       void reply.redirect("/setup");
       return null;
@@ -255,7 +289,7 @@ export function registerUiRoutes(
   }
 
   app.get("/", async (request, reply) => {
-    if (!auth.hasAdminUser()) {
+    if (deps.env.QUORUM_UI_AUTH_ENABLED && !auth.hasAdminUser()) {
       return reply.redirect("/setup");
     }
     const session = requireSession(request, reply);
@@ -280,6 +314,9 @@ export function registerUiRoutes(
   });
 
   app.get("/setup", async (_request, reply) => {
+    if (!deps.env.QUORUM_UI_AUTH_ENABLED) {
+      return reply.redirect("/");
+    }
     if (auth.hasAdminUser()) {
       return reply.redirect("/login");
     }
@@ -287,6 +324,9 @@ export function registerUiRoutes(
   });
 
   app.post("/setup", async (request, reply) => {
+    if (!deps.env.QUORUM_UI_AUTH_ENABLED) {
+      return reply.redirect("/");
+    }
     if (auth.hasAdminUser()) {
       return reply.redirect("/login");
     }
@@ -317,6 +357,9 @@ export function registerUiRoutes(
   });
 
   app.get("/login", async (_request, reply) => {
+    if (!deps.env.QUORUM_UI_AUTH_ENABLED) {
+      return reply.redirect("/");
+    }
     if (!auth.hasAdminUser()) {
       return reply.redirect("/setup");
     }
@@ -324,6 +367,9 @@ export function registerUiRoutes(
   });
 
   app.post("/login", async (request, reply) => {
+    if (!deps.env.QUORUM_UI_AUTH_ENABLED) {
+      return reply.redirect("/");
+    }
     const body = formBody(request);
     const ip =
       (typeof request.headers["x-forwarded-for"] === "string"
@@ -360,7 +406,13 @@ export function registerUiRoutes(
     if (sessionId) {
       auth.destroySession(sessionId);
     }
-    reply.header("set-cookie", clearSessionCookieHeader(secureCookie));
+    reply.header("set-cookie", [
+      clearSessionCookieHeader(secureCookie),
+      clearOpenCsrfCookieHeader(secureCookie),
+    ]);
+    if (!deps.env.QUORUM_UI_AUTH_ENABLED) {
+      return reply.redirect("/");
+    }
     return reply.redirect("/login");
   });
 

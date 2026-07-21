@@ -108,6 +108,7 @@ function composeDown(project, env = {}) {
           env.QUORUM_CREDENTIAL_KEK ?? "cleanup-placeholder-kek",
         QUORUM_SETUP_TOKEN:
           env.QUORUM_SETUP_TOKEN ?? "cleanup-placeholder-setup-token",
+        QUORUM_UI_AUTH_ENABLED: env.QUORUM_UI_AUTH_ENABLED ?? "true",
         ...env,
       },
     },
@@ -789,6 +790,7 @@ async function main() {
   const composeEnvBase = () => ({
     QUORUM_CREDENTIAL_KEK: kek,
     QUORUM_SETUP_TOKEN: setupToken,
+    QUORUM_UI_AUTH_ENABLED: "true",
     PUBLIC_BASE_URL: `http://127.0.0.1:${hostPort}`,
     QUORUM_HOST_PORT: String(hostPort),
     N8N_HOST_PORT: String(n8nPort),

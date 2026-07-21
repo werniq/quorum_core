@@ -264,4 +264,54 @@ describe("self-hosted privacy and auth", () => {
 
     await app.close();
   });
+
+  it("opens the UI without setup or login when QUORUM_UI_AUTH_ENABLED is false", async () => {
+    const sqlite = openDb();
+    const clock = new FixedClock(new Date("2026-07-19T10:00:00.000Z"));
+    const core = new SqliteCoreRepositories(sqlite);
+    core.ensureSelfHostedTenant();
+
+    const app = await buildApp({
+      env: loadEnv({
+        NODE_ENV: "test",
+        QUORUM_CREDENTIAL_KEK: "quorum-test-credential-kek",
+        QUORUM_UI_AUTH_ENABLED: "false",
+      }),
+      clock,
+      sqlite,
+      enableUi: true,
+      getSchemaReadiness: () => ({
+        status: "ready",
+        appliedMigrations: ["0007_self_hosted_admin"],
+      }),
+    });
+
+    const root = await app.inject({ method: "GET", url: "/" });
+    expect(root.statusCode).toBe(302);
+    expect(root.headers.location).toBe("/onboarding");
+    expect(String(root.headers["set-cookie"] ?? "")).toMatch(/quorum_open_csrf=/);
+
+    const onboarding = await app.inject({
+      method: "GET",
+      url: "/onboarding",
+      headers: {
+        cookie: String(root.headers["set-cookie"] ?? "")
+          .split(",")
+          .map((p) => p.trim().split(";")[0])
+          .join("; "),
+      },
+    });
+    expect(onboarding.statusCode).toBe(200);
+    expect(onboarding.body).toMatch(/onboarding|monitoring method|Choose/i);
+
+    const setup = await app.inject({ method: "GET", url: "/setup" });
+    expect(setup.statusCode).toBe(302);
+    expect(setup.headers.location).toBe("/");
+
+    const login = await app.inject({ method: "GET", url: "/login" });
+    expect(login.statusCode).toBe(302);
+    expect(login.headers.location).toBe("/");
+
+    await app.close();
+  });
 });

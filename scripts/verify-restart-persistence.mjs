@@ -101,6 +101,7 @@ async function main() {
       QUORUM_TELEMETRY_ENABLED: "false",
       QUORUM_CREDENTIAL_KEK: kek,
       QUORUM_SETUP_TOKEN: setupToken,
+      QUORUM_UI_AUTH_ENABLED: "true",
       PUBLIC_BASE_URL: baseUrl,
       WATCHER_INTERVAL_MS: "2000",
       WATCHER_STALE_MS: "30000",

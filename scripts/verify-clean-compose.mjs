@@ -181,6 +181,7 @@ async function main() {
     const envFile = [
       `QUORUM_CREDENTIAL_KEK=${kek}`,
       `QUORUM_SETUP_TOKEN=${setupToken}`,
+      `QUORUM_UI_AUTH_ENABLED=true`,
       `PUBLIC_BASE_URL=${publicBase}`,
       `QUORUM_HOST_PORT=${hostPort}`,
     ].join("\n");
@@ -189,6 +190,7 @@ async function main() {
     const composeEnv = {
       QUORUM_CREDENTIAL_KEK: kek,
       QUORUM_SETUP_TOKEN: setupToken,
+      QUORUM_UI_AUTH_ENABLED: "true",
       PUBLIC_BASE_URL: publicBase,
       QUORUM_HOST_PORT: String(hostPort),
     };

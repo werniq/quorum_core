@@ -11,7 +11,16 @@ describe("loadEnv", () => {
     });
     expect(env.QUORUM_EDITION).toBe("self_hosted");
     expect(env.QUORUM_TELEMETRY_ENABLED).toBe(false);
+    expect(env.QUORUM_UI_AUTH_ENABLED).toBe(false);
     expect(env.PORT).toBe(3000);
+  });
+
+  it("enables UI auth when QUORUM_UI_AUTH_ENABLED=true", () => {
+    const env = loadEnv({
+      NODE_ENV: "test",
+      QUORUM_UI_AUTH_ENABLED: "true",
+    });
+    expect(env.QUORUM_UI_AUTH_ENABLED).toBe(true);
   });
 
   it("rejects telemetry in the self-hosted edition", () => {

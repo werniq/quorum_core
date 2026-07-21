@@ -12,7 +12,9 @@ services:
       QUORUM_TELEMETRY_ENABLED: "false"
       # Required in production: set a strong unique value and persist it with backups.
       QUORUM_CREDENTIAL_KEK: ${QUORUM_CREDENTIAL_KEK:?set QUORUM_CREDENTIAL_KEK}
-      # Optional first-boot setup token (min 24 chars). Prefer this over log-emitted tokens.
+      # Optional: require setup token + login for the HTML UI (default false for local try-out).
+      QUORUM_UI_AUTH_ENABLED: ${QUORUM_UI_AUTH_ENABLED:-false}
+      # Used when QUORUM_UI_AUTH_ENABLED=true (min 24 chars). Prefer this over log-emitted tokens.
       QUORUM_SETUP_TOKEN: ${QUORUM_SETUP_TOKEN:-}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://127.0.0.1:3000}
       WATCHER_INTERVAL_MS: "60000"

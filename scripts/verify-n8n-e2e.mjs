@@ -90,6 +90,7 @@ function composeDown(project, env = {}) {
           env.QUORUM_CREDENTIAL_KEK ?? "cleanup-placeholder-kek",
         QUORUM_SETUP_TOKEN:
           env.QUORUM_SETUP_TOKEN ?? "cleanup-placeholder-setup-token",
+        QUORUM_UI_AUTH_ENABLED: env.QUORUM_UI_AUTH_ENABLED ?? "true",
         ...env,
       },
     },
@@ -185,7 +186,7 @@ async function obtainN8nApiKey(n8nBase) {
 
   if (loginStatus >= 400 || !cookieHeader) {
     limitation(
-      `n8n login failed (${loginStatus}); cannot mint API key automatically. See docs/verification/n8n-e2e-limitations.md`,
+      `n8n login failed (${loginStatus}); cannot mint API key automatically. See docs/known-limitations.md`,
     );
     return null;
   }
@@ -557,6 +558,7 @@ async function main() {
       composeDown(project, {
         QUORUM_CREDENTIAL_KEK: kek,
         QUORUM_SETUP_TOKEN: setupToken,
+        QUORUM_UI_AUTH_ENABLED: "true",
       });
     }
   };
@@ -578,6 +580,7 @@ async function main() {
     const composeEnv = {
       QUORUM_CREDENTIAL_KEK: kek,
       QUORUM_SETUP_TOKEN: setupToken,
+      QUORUM_UI_AUTH_ENABLED: "true",
       PUBLIC_BASE_URL: publicBase,
       QUORUM_HOST_PORT: String(hostPort),
       N8N_HOST_PORT: String(n8nPort),
