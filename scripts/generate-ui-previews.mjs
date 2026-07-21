@@ -14,23 +14,290 @@ import {
 const dir = path.join("docs", "verification", "ui-preview");
 fs.mkdirSync(dir, { recursive: true });
 
+const clients = [
+  { id: "c-nw", name: "Northwind Retail" },
+  { id: "c-acme", name: "Acme Agency" },
+  { id: "c-summit", name: "Summit Finance" },
+  { id: "c-lake", name: "Lakeview Health" },
+];
+
+/** @param {Partial<import("../src/presentation/html/catalog-ui.ts").CatalogRowView> & Pick<import("../src/presentation/html/catalog-ui.ts").CatalogRowView, "contractId" | "businessPurposeName">} row */
+function contract(row) {
+  return {
+    workflowId: row.workflowId ?? row.contractId,
+    clientId: row.clientId ?? "c-acme",
+    clientName:
+      clients.find((c) => c.id === (row.clientId ?? "c-acme"))?.name ??
+      "Acme Agency",
+    health: "healthy",
+    evidenceLevel: "basic",
+    evidenceExplanation: "Basic — destination not independently checked",
+    expectedCadenceOrWindow: "interval:15@UTC",
+    lastAcceptableEvidenceAt: "12 minutes ago",
+    nextDeadlineAt: "in 3 minutes",
+    overdueDurationSeconds: null,
+    alertChannelHealth: "healthy",
+    connectorHealth: null,
+    activeIncident: null,
+    contractKind: "workflow",
+    sourceCount: null,
+    destinationCount: null,
+    missingCount: null,
+    oldestMissingAgeSeconds: null,
+    evidenceStale: false,
+    isActive: true,
+    verifiedDimensions: [],
+    unverifiedDimensions: [],
+    volumeSummary: null,
+    ...row,
+  };
+}
+
+const catalogContracts = [
+  contract({
+    contractId: "w-leads",
+    workflowId: "w-leads",
+    clientId: "c-acme",
+    businessPurposeName: "Lead synchronization",
+    health: "healthy",
+    evidenceLevel: "medium",
+    expectedCadenceOrWindow: "interval:5@UTC",
+    lastAcceptableEvidenceAt: "4 minutes ago",
+    nextDeadlineAt: "in 1 minute",
+    volumeSummary: {
+      label: "Daily reported volume",
+      expectedRange: "200 to 2,000",
+      currentCount: "1,847",
+      windowEndsLabel: "today 23:59 UTC",
+      status: "Within range",
+      unknownCountEvents: 0,
+      evidenceLevel: "medium",
+    },
+  }),
+  contract({
+    contractId: "w-orders",
+    workflowId: "w-orders",
+    clientId: "c-nw",
+    businessPurposeName: "Order fulfillment handoff",
+    health: "healthy",
+    evidenceLevel: "high",
+    expectedCadenceOrWindow: "interval:10@UTC",
+    lastAcceptableEvidenceAt: "8 minutes ago",
+    nextDeadlineAt: "in 2 minutes",
+    volumeSummary: {
+      label: "Hourly reported volume",
+      expectedRange: "50 to 800",
+      currentCount: "412",
+      windowEndsLabel: "top of next hour",
+      status: "Within range",
+      unknownCountEvents: 0,
+      evidenceLevel: "high",
+    },
+  }),
+  contract({
+    contractId: "w-inventory",
+    workflowId: "w-inventory",
+    clientId: "c-nw",
+    businessPurposeName: "Nightly inventory reconcile",
+    health: "healthy",
+    evidenceLevel: "high",
+    expectedCadenceOrWindow: "cron:0 2 * * *@UTC",
+    lastAcceptableEvidenceAt: "6 hours ago",
+    nextDeadlineAt: "in 18 hours",
+    volumeSummary: {
+      label: "Nightly SKU count",
+      expectedRange: "12,000 to 14,000",
+      currentCount: "13,204",
+      windowEndsLabel: "02:00 UTC",
+      status: "Within range",
+      unknownCountEvents: 0,
+      evidenceLevel: "high",
+    },
+  }),
+  contract({
+    contractId: "w-hubspot",
+    workflowId: "w-hubspot",
+    clientId: "c-acme",
+    businessPurposeName: "HubSpot contact sync",
+    health: "warning",
+    evidenceLevel: "basic",
+    expectedCadenceOrWindow: "interval:30@UTC",
+    lastAcceptableEvidenceAt: "28 minutes ago",
+    nextDeadlineAt: "in 2 minutes",
+    connectorHealth: "healthy",
+    volumeSummary: {
+      label: "Daily reported volume",
+      expectedRange: "500 to 5,000",
+      currentCount: "2,103",
+      windowEndsLabel: "today 23:59 UTC",
+      status: "Within range",
+      unknownCountEvents: 2,
+      evidenceLevel: "basic",
+    },
+  }),
+  contract({
+    contractId: "w-invoice",
+    workflowId: "w-invoice",
+    clientId: "c-summit",
+    businessPurposeName: "Invoice export to ERP",
+    health: "overdue",
+    expectedCadenceOrWindow: "interval:60@UTC",
+    lastAcceptableEvidenceAt: "2 hours 14 minutes ago",
+    nextDeadlineAt: "1 hour 14 minutes overdue",
+    overdueDurationSeconds: 4440,
+    activeIncident: {
+      severity: "critical",
+      summary: "Silent absence",
+    },
+    alertChannelHealth: "healthy",
+    volumeSummary: {
+      label: "Daily reported volume",
+      expectedRange: "20 to 400",
+      currentCount: "0",
+      windowEndsLabel: "today 23:59 UTC",
+      status: "Below minimum",
+      unknownCountEvents: 0,
+      evidenceLevel: "basic",
+    },
+  }),
+  contract({
+    contractId: "w-onboard",
+    workflowId: "w-onboard",
+    clientId: "c-lake",
+    businessPurposeName: "Patient onboarding emails",
+    health: "healthy",
+    evidenceLevel: "basic",
+    expectedCadenceOrWindow: "interval:15@UTC",
+    lastAcceptableEvidenceAt: "11 minutes ago",
+    nextDeadlineAt: "in 4 minutes",
+    connectorHealth: "healthy",
+    alertChannelHealth: "healthy",
+    volumeSummary: {
+      label: "Daily reported volume",
+      expectedRange: "30 to 250",
+      currentCount: "96",
+      windowEndsLabel: "today 23:59 UTC",
+      status: "Within range",
+      unknownCountEvents: 0,
+      evidenceLevel: "basic",
+    },
+  }),
+  contract({
+    contractId: "w-payroll",
+    workflowId: "w-payroll",
+    clientId: "c-summit",
+    businessPurposeName: "Weekly payroll feed",
+    health: "healthy",
+    evidenceLevel: "medium",
+    expectedCadenceOrWindow: "cron:0 6 * * 1@Europe/Warsaw",
+    lastAcceptableEvidenceAt: "3 days ago",
+    nextDeadlineAt: "in 4 days",
+    volumeSummary: {
+      label: "Weekly row count",
+      expectedRange: "800 to 1,200",
+      currentCount: "1,044",
+      windowEndsLabel: "Monday 06:00",
+      status: "Within range",
+      unknownCountEvents: 0,
+      evidenceLevel: "medium",
+    },
+  }),
+  contract({
+    contractId: "o-zoom",
+    workflowId: null,
+    clientId: "c-acme",
+    businessPurposeName: "Webinar registrant sync (Preview)",
+    health: "warning",
+    evidenceLevel: "medium",
+    expectedCadenceOrWindow: "event_driven:120@UTC",
+    lastAcceptableEvidenceAt: "47 minutes ago",
+    nextDeadlineAt: "in 73 minutes",
+    contractKind: "outcome",
+    sourceCount: 1840,
+    destinationCount: 1826,
+    missingCount: 14,
+    oldestMissingAgeSeconds: 7200,
+    volumeSummary: null,
+  }),
+  contract({
+    contractId: "w-chargebacks",
+    workflowId: "w-chargebacks",
+    clientId: "c-summit",
+    businessPurposeName: "Stripe chargeback ingest",
+    health: "healthy",
+    evidenceLevel: "basic",
+    expectedCadenceOrWindow: "interval:30@UTC",
+    lastAcceptableEvidenceAt: "19 minutes ago",
+    nextDeadlineAt: "in 11 minutes",
+    alertChannelHealth: "degraded",
+    volumeSummary: {
+      label: "Daily reported volume",
+      expectedRange: "0 to 40",
+      currentCount: "3",
+      windowEndsLabel: "today 23:59 UTC",
+      status: "Within range",
+      unknownCountEvents: 0,
+      evidenceLevel: "basic",
+    },
+  }),
+  contract({
+    contractId: "w-purge",
+    workflowId: "w-purge",
+    clientId: "c-nw",
+    businessPurposeName: "Marketing list purge",
+    health: "inactive",
+    evidenceLevel: "basic",
+    expectedCadenceOrWindow: "cron:0 3 * * 0@UTC",
+    lastAcceptableEvidenceAt: "12 days ago",
+    nextDeadlineAt: null,
+    isActive: false,
+    alertChannelHealth: "none",
+  }),
+];
+
 fs.writeFileSync(
   path.join(dir, "onboarding-method.html"),
   renderOnboardingPage({ csrf: "x", step: "choose_method", method: null }),
 );
 fs.writeFileSync(
   path.join(dir, "workflow-registration.html"),
-  renderWorkflowsPage({ csrf: "x", workflows: [] }),
+  renderWorkflowsPage({
+    csrf: "x",
+    workflows: [
+      {
+        id: "w-leads",
+        name: "Lead sync · production",
+        externalWorkflowId: "n8n-prod-leads-01",
+        monitoringMethod: "push",
+        isActive: true,
+      },
+      {
+        id: "w-orders",
+        name: "Order handoff · production",
+        externalWorkflowId: "n8n-prod-orders-02",
+        monitoringMethod: "push",
+        isActive: true,
+      },
+      {
+        id: "w-onboard",
+        name: "Patient onboarding · poll",
+        externalWorkflowId: "n8n-prod-onboard-07",
+        monitoringMethod: "poll",
+        isActive: true,
+        connectorId: "conn-lake-n8n",
+      },
+    ],
+  }),
 );
 fs.writeFileSync(
   path.join(dir, "protect-contract.html"),
   renderProtectClientPage({
     csrf: "x",
     step: 4,
-    clients: [{ id: "1", name: "Agency Org" }],
+    clients,
     draft: {
-      clientId: "1",
-      workflowId: "w1",
+      clientId: "c-acme",
+      workflowId: "w-leads",
       businessPurpose: "Lead synchronization",
       cadenceValue: "5",
     },
@@ -41,53 +308,19 @@ fs.writeFileSync(
   renderCatalogPage({
     csrf: "x",
     role: "admin",
-    clients: [{ id: "1", name: "Agency Org" }],
+    clients,
     filters: {},
+    banner:
+      "1 contract has degraded alert delivery. Delivery problems do not change whether workflows are overdue.",
     summary: {
-      contractsCurrentlySatisfied: 1,
-      clientProcessesNeedingAttention: 0,
-      outcomesMissingOrDelayed: 0,
-      contractsWithOnlyBasicEvidence: 1,
-      clientsWithFailingAlertDelivery: 0,
+      contractsCurrentlySatisfied: 14,
+      clientProcessesNeedingAttention: 3,
+      outcomesMissingOrDelayed: 1,
+      contractsWithOnlyBasicEvidence: 9,
+      clientsWithFailingAlertDelivery: 1,
       contractsNotYetActivated: 0,
     },
-    contracts: [
-      {
-        contractId: "c1",
-        workflowId: "w1",
-        clientId: "1",
-        clientName: "Agency Org",
-        businessPurposeName: "Lead synchronization",
-        health: "healthy",
-        evidenceLevel: "basic",
-        evidenceExplanation: "Basic — destination not independently checked",
-        expectedCadenceOrWindow: "interval:5@UTC",
-        lastAcceptableEvidenceAt: "2 minutes ago",
-        nextDeadlineAt: "in 3 minutes",
-        overdueDurationSeconds: null,
-        alertChannelHealth: "healthy",
-        connectorHealth: null,
-        activeIncident: null,
-        contractKind: "workflow",
-        sourceCount: null,
-        destinationCount: null,
-        missingCount: null,
-        oldestMissingAgeSeconds: null,
-        evidenceStale: false,
-        isActive: true,
-        verifiedDimensions: [],
-        unverifiedDimensions: [],
-        volumeSummary: {
-          label: "Daily reported volume",
-          expectedRange: "20 to 100",
-          currentCount: "42",
-          windowEndsLabel: "Sunday 23:59",
-          status: "Collecting",
-          unknownCountEvents: 0,
-          evidenceLevel: "basic",
-        },
-      },
-    ],
+    contracts: catalogContracts,
   }),
 );
 fs.writeFileSync(
@@ -96,36 +329,60 @@ fs.writeFileSync(
     role: "admin",
     csrf: "x",
     contract: {
-      name: "Lead sync",
+      name: "Lead sync · production",
       businessPurpose: "Lead synchronization",
-      cadence: "every 5 minutes",
+      cadence: "interval:5@UTC",
       isActive: true,
-      evidenceLevel: "basic",
+      evidenceLevel: "medium",
       health: "healthy",
-      lastEvidence: "2 minutes ago",
-      nextDeadline: "in 3 minutes",
-      verified: ["execution reported"],
-      unverified: ["destination delivery"],
-      raiseHint: "Add destination reconciliation to raise evidence.",
+      lastEvidence: "4 minutes ago",
+      nextDeadline: "in 1 minute",
+      verified: [
+        "execution reported on schedule",
+        "aggregate destination row count within band",
+      ],
+      unverified: [
+        "individual CRM field mapping",
+        "duplicate suppression at destination",
+      ],
+      raiseHint:
+        "Add per-record reconciliation to raise evidence from Medium to High.",
     },
     incidents: [
       {
-        summary: "Volume below minimum",
-        status: "open",
+        summary: "Volume below minimum (resolved)",
+        status: "resolved",
         severity: "warning",
       },
+      {
+        summary: "Silent absence (resolved)",
+        status: "resolved",
+        severity: "critical",
+      },
     ],
-    channels: [{ name: "Ops webhook", health: "healthy" }],
-    recentEvents: [{ at: "2026-07-20T10:00:00Z", label: "success" }],
+    channels: [
+      { name: "Ops Slack webhook", health: "healthy" },
+      { name: "Pager email (SMTP)", health: "healthy" },
+    ],
+    recentEvents: [
+      { at: "2026-07-21T14:02:00Z", label: "success · 312 items" },
+      { at: "2026-07-21T13:57:00Z", label: "success · 298 items" },
+      { at: "2026-07-21T13:52:00Z", label: "success · 305 items" },
+      { at: "2026-07-21T13:47:00Z", label: "success · 287 items" },
+      { at: "2026-07-19T08:14:00Z", label: "incident resolved · silent absence" },
+      { at: "2026-07-19T07:02:00Z", label: "incident opened · silent absence" },
+      { at: "2026-07-12T16:30:00Z", label: "incident resolved · volume below minimum" },
+      { at: "2026-06-28T09:00:00Z", label: "contract activated" },
+    ],
     volume: {
       label: "Daily reported volume",
-      expectedRange: "20 to 100",
-      currentCount: "42",
-      windowEndsLabel: "Sunday 23:59 Europe/Warsaw",
-      status: "Collecting",
+      expectedRange: "200 to 2,000",
+      currentCount: "1,847",
+      windowEndsLabel: "today 23:59 UTC",
+      status: "Within range",
       unknownCountEvents: 0,
-      verified: ["workflow reported executions"],
-      unverified: ["exact destination records"],
+      verified: ["workflow reported execution counts each run"],
+      unverified: ["exact destination record totals"],
     },
   }),
 );
@@ -136,15 +393,46 @@ fs.writeFileSync(
     current: "incidents",
     role: "admin",
     body: `<h1 class="page-title">Incidents</h1>
+      <p class="page-subtitle helper">142 incidents in the last 90 days · 1 open</p>
       <div class="card table-wrap" style="padding:0">
         <table class="responsive-cards">
           <thead><tr><th>Severity</th><th>Status</th><th>Summary</th><th>Opened</th></tr></thead>
           <tbody>
             <tr>
-              <td data-label="Severity" class="sev-warning">warning</td>
+              <td data-label="Severity" class="sev-critical">critical</td>
               <td data-label="Status">open</td>
-              <td data-label="Summary">Volume below minimum for Lead synchronization</td>
-              <td data-label="Opened" class="helper">2026-07-20T09:00:00Z</td>
+              <td data-label="Summary">Silent absence · Invoice export to ERP (Summit Finance)</td>
+              <td data-label="Opened" class="helper">2026-07-21T11:48:00Z</td>
+            </tr>
+            <tr>
+              <td data-label="Severity" class="sev-warning">warning</td>
+              <td data-label="Status">resolved</td>
+              <td data-label="Summary">Volume below minimum · Lead synchronization (Acme Agency)</td>
+              <td data-label="Opened" class="helper">2026-07-12T16:22:00Z</td>
+            </tr>
+            <tr>
+              <td data-label="Severity" class="sev-critical">critical</td>
+              <td data-label="Status">resolved</td>
+              <td data-label="Summary">Silent absence · Lead synchronization (Acme Agency)</td>
+              <td data-label="Opened" class="helper">2026-07-19T07:02:00Z</td>
+            </tr>
+            <tr>
+              <td data-label="Severity" class="sev-warning">warning</td>
+              <td data-label="Status">resolved</td>
+              <td data-label="Summary">Empty result · HubSpot contact sync (Acme Agency)</td>
+              <td data-label="Opened" class="helper">2026-07-08T14:11:00Z</td>
+            </tr>
+            <tr>
+              <td data-label="Severity" class="sev-critical">critical</td>
+              <td data-label="Status">resolved</td>
+              <td data-label="Summary">Hard failure · Order fulfillment handoff (Northwind Retail)</td>
+              <td data-label="Opened" class="helper">2026-06-30T03:18:00Z</td>
+            </tr>
+            <tr>
+              <td data-label="Severity" class="sev-warning">warning</td>
+              <td data-label="Status">resolved</td>
+              <td data-label="Summary">Volume above maximum · Patient onboarding emails (Lakeview Health)</td>
+              <td data-label="Opened" class="helper">2026-06-14T09:44:00Z</td>
             </tr>
           </tbody>
         </table>

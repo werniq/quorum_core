@@ -13,7 +13,6 @@ import {
   plainUnverifiedLabels,
   plainVerifiedLabels,
 } from "../../domain/catalog/evidence-explanation.js";
-import { unverifiedDimensionsForEvidenceLevel } from "../../domain/evidence/unverified-dimensions.js";
 
 export type CatalogRowView = {
   contractId: string;
@@ -70,7 +69,7 @@ function formatRelativeHint(iso: string | null, label: string): string {
   return `${label}: ${iso}`;
 }
 
-function formatExpectation(raw: string): string {
+export function formatExpectation(raw: string): string {
   const interval = raw.match(/^interval:(\d+)(?:@(.+))?$/i);
   if (interval) {
     const minutes = interval[1]!;
@@ -140,7 +139,10 @@ function contractPrimaryAction(row: CatalogRowView): {
   if (!row.isActive) {
     return { href: detail, label: "Review inactive contract" };
   }
-  if (row.alertChannelHealth === "failing" || row.alertChannelHealth === "degraded") {
+  if (
+    row.alertChannelHealth === "failing" ||
+    row.alertChannelHealth === "degraded"
+  ) {
     return { href: "/alerts", label: "Fix alert delivery" };
   }
   if (row.alertChannelHealth === "none") {
@@ -562,6 +564,26 @@ export function renderClientHealthPage(input: {
   });
 }
 
+function detailKv(label: string, value: string): string {
+  return `<div class="detail-kv"><span class="detail-label">${escapeHtml(label)}</span><div class="detail-value">${escapeHtml(value)}</div></div>`;
+}
+
+function detailKvHtml(label: string, valueHtml: string): string {
+  return `<div class="detail-kv"><span class="detail-label">${escapeHtml(label)}</span><div class="detail-value">${valueHtml}</div></div>`;
+}
+
+function detailKvFull(label: string, value: string): string {
+  return `<div class="detail-kv detail-kv-full"><span class="detail-label">${escapeHtml(label)}</span><div class="detail-value">${escapeHtml(value)}</div></div>`;
+}
+
+function detailKvFullHtml(label: string, valueHtml: string): string {
+  return `<div class="detail-kv detail-kv-full"><span class="detail-label">${escapeHtml(label)}</span><div class="detail-value">${valueHtml}</div></div>`;
+}
+
+function detailListItem(contentHtml: string): string {
+  return `<li class="detail-list-item">${contentHtml}</li>`;
+}
+
 export function renderWorkflowContractDetailPage(input: {
   role: "admin" | "operator" | "viewer";
   csrf: string;
@@ -593,6 +615,37 @@ export function renderWorkflowContractDetailPage(input: {
   } | null;
 }): string {
   const c = input.contract;
+  const activationBadge = c.isActive
+    ? `<span class="badge badge-status-healthy">Active</span>`
+    : `<span class="badge badge-status-paused">Inactive</span>`;
+  const timelineItems = input.recentEvents.length
+    ? input.recentEvents
+        .map((e) =>
+          detailListItem(
+            `<time datetime="${escapeHtml(e.at)}">${escapeHtml(e.at)}</time><span>${escapeHtml(e.label)}</span>`,
+          ),
+        )
+        .join("")
+    : `<li class="detail-list-item helper">No meaningful transitions yet.</li>`;
+  const incidentItems = input.incidents.length
+    ? input.incidents
+        .map((i) =>
+          detailListItem(
+            `<span class="sev-${escapeHtml(i.severity)}"><strong>${escapeHtml(i.summary)}</strong></span><span class="helper">${escapeHtml(i.status)}</span>`,
+          ),
+        )
+        .join("")
+    : `<li class="detail-list-item helper">No active incidents.</li>`;
+  const channelItems = input.channels.length
+    ? input.channels
+        .map((ch) =>
+          detailListItem(
+            `<span>${escapeHtml(ch.name)}</span><span class="channel-${escapeHtml(ch.health)}">${escapeHtml(ch.health)}</span>`,
+          ),
+        )
+        .join("")
+    : `<li class="detail-list-item helper">No alert routes.</li>`;
+
   return layout({
     title: c.businessPurpose,
     nav: primaryNav({ loggedIn: true, current: "catalog", role: input.role }),
@@ -600,84 +653,64 @@ export function renderWorkflowContractDetailPage(input: {
     role: input.role,
     pageTitle: c.businessPurpose,
     body: `
+      <div class="contract-detail">
       <h1 class="page-title">${escapeHtml(c.businessPurpose)}</h1>
-      <p class="page-subtitle">${escapeHtml(c.name)} · ${escapeHtml(c.cadence)}</p>
-      <section class="card stack" aria-labelledby="sec-contract">
+      <p class="page-subtitle">${escapeHtml(c.name)} · ${escapeHtml(formatExpectation(c.cadence))}</p>
+      <section class="card detail-section" aria-labelledby="sec-contract">
         <h2 class="section-title" id="sec-contract">Contract</h2>
-        <p>Activation: ${
-          c.isActive
-            ? `<span class="badge badge-status-healthy">Active</span>`
-            : `<span class="badge badge-status-paused">Inactive</span>`
-        }</p>
-        <p>${statusBadge(c.health)} ${evidenceLevelBadge(c.evidenceLevel)}</p>
+        <div class="detail-kv-grid">
+          ${detailKvHtml("Activation", activationBadge)}
+          ${detailKvHtml("Health", `${statusBadge(c.health)} ${evidenceLevelBadge(c.evidenceLevel)}`)}
+        </div>
       </section>
-      <section class="card stack" aria-labelledby="sec-evidence">
+      <section class="card detail-section" aria-labelledby="sec-evidence">
         <h2 class="section-title" id="sec-evidence">Current evidence</h2>
-        <p>Last checked: ${escapeHtml(c.lastEvidence ?? "never")}</p>
-        <p>Next deadline: ${escapeHtml(c.nextDeadline ?? "—")}</p>
-        <p><strong>Verified:</strong> ${escapeHtml(c.verified.join("; ") || "none")}</p>
-        <p><strong>Unverified:</strong> ${escapeHtml(c.unverified.join("; ") || "none")}</p>
-        <p class="helper">${escapeHtml(c.raiseHint)}</p>
+        <div class="detail-kv-grid">
+          ${detailKv("Last checked", c.lastEvidence ?? "never")}
+          ${detailKv("Next deadline", c.nextDeadline ?? "—")}
+          ${detailKvFull("Verified", c.verified.join("; ") || "none")}
+          ${detailKvFull("Unverified", c.unverified.join("; ") || "none")}
+        </div>
+        <p class="helper detail-hint">${escapeHtml(c.raiseHint)}</p>
       </section>
       ${
         input.volume
-          ? `<section class="card stack" aria-labelledby="sec-volume">
+          ? `<section class="card detail-section" aria-labelledby="sec-volume">
         <h2 class="section-title" id="sec-volume">${escapeHtml(input.volume.label)}</h2>
-        <p>Expected: ${escapeHtml(input.volume.expectedRange)}</p>
-        <p>Current: ${escapeHtml(input.volume.currentCount)}</p>
-        <p>Window ends: ${escapeHtml(input.volume.windowEndsLabel)}</p>
-        <p>Status: ${escapeHtml(input.volume.status)}</p>
-        <p>Unknown-count events: ${input.volume.unknownCountEvents}</p>
-        <p>${evidenceLevelBadge("basic")} Volume from heartbeat-reported counts</p>
-        <p><strong>Verified:</strong> ${escapeHtml(input.volume.verified.join("; "))}</p>
-        <p><strong>Not verified:</strong> ${escapeHtml(input.volume.unverified.join("; "))}</p>
+        <div class="detail-kv-grid">
+          ${detailKv("Expected", input.volume.expectedRange)}
+          ${detailKv("Current", input.volume.currentCount)}
+          ${detailKv("Window ends", input.volume.windowEndsLabel)}
+          ${detailKv("Status", input.volume.status)}
+          ${detailKv("Unknown-count events", String(input.volume.unknownCountEvents))}
+          ${detailKvFullHtml(
+            "Evidence",
+            `${evidenceLevelBadge("basic")} <span class="helper">Volume from heartbeat-reported counts</span>`,
+          )}
+          ${detailKvFull("Verified", input.volume.verified.join("; "))}
+          ${detailKvFull("Not verified", input.volume.unverified.join("; "))}
+        </div>
       </section>`
           : ""
       }
-      <section class="card stack" aria-labelledby="sec-timeline">
+      <section class="card detail-section" aria-labelledby="sec-timeline">
         <h2 class="section-title" id="sec-timeline">Timeline</h2>
-        <ul class="stack-sm" style="list-style:none;padding:0;margin:0">${
-          input.recentEvents.length
-            ? input.recentEvents
-                .map(
-                  (e) =>
-                    `<li><time datetime="${escapeHtml(e.at)}">${escapeHtml(e.at)}</time> · ${escapeHtml(e.label)}</li>`,
-                )
-                .join("")
-            : '<li class="helper">No meaningful transitions yet.</li>'
-        }</ul>
+        <ul class="detail-list">${timelineItems}</ul>
       </section>
-      <section class="card stack" aria-labelledby="sec-incident">
+      <section class="card detail-section" aria-labelledby="sec-incident">
         <h2 class="section-title" id="sec-incident">Incidents</h2>
-        ${
-          input.incidents.length
-            ? input.incidents
-                .map(
-                  (i) =>
-                    `<p class="sev-${escapeHtml(i.severity)}"><strong>${escapeHtml(i.summary)}</strong> · ${escapeHtml(i.status)}</p>`,
-                )
-                .join("")
-            : `<p class="helper">No active incidents.</p>`
-        }
+        <ul class="detail-list">${incidentItems}</ul>
       </section>
-      <section class="card stack" aria-labelledby="sec-delivery">
+      <section class="card detail-section" aria-labelledby="sec-delivery">
         <h2 class="section-title" id="sec-delivery">Alert delivery</h2>
-        ${
-          input.channels.length
-            ? input.channels
-                .map(
-                  (ch) =>
-                    `<p>${escapeHtml(ch.name)} · <span class="channel-${escapeHtml(ch.health)}">${escapeHtml(ch.health)}</span></p>`,
-                )
-                .join("")
-            : `<p class="helper">No alert routes.</p>`
-        }
+        <ul class="detail-list">${channelItems}</ul>
       </section>
-      <section class="card stack" aria-labelledby="sec-tech">
+      <section class="card detail-section" aria-labelledby="sec-tech">
         <h2 class="section-title" id="sec-tech">Technical details</h2>
-        <p class="helper">Raw heartbeat events and poll logs are available for debugging; they are not required to understand current health and evidence.</p>
+        <p class="helper" style="margin:0">Raw heartbeat events and poll logs are available for debugging; they are not required to understand current health and evidence.</p>
       </section>
-      <p><a class="btn btn-secondary" href="/catalog">Back to catalog</a></p>
+      <p class="detail-back"><a class="btn btn-secondary" href="/catalog">Back to catalog</a></p>
+      </div>
     `,
   });
 }

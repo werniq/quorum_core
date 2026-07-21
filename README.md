@@ -1,151 +1,162 @@
 # Quorum
 
-Define what each critical workflow should do. Quorum checks whether it ran, whether its reported volume stayed within the expected range, and how strong the evidence actually is.
+Quorum watches n8n workflows against explicit contracts. You define when a workflow should report in, what counts as success or failure, and how strong the evidence needs to be. Quorum opens incidents when reality drifts from that contract and resolves them when reporting recovers.
 
-A workflow can run successfully and still process too little or too much. Quorum checks the reported number as well as the execution status.
+## The silent-failure problem
 
-Open source, zero telemetry, and designed so your workflow data can stay in your infrastructure.
+n8n can show a green execution while the business outcome is wrong: the workflow ran but sent too few rows, too many rows, or nothing at all. Worse, a workflow can stop running entirely and nothing in n8n tells you the business process is down.
 
-Reliability evidence that protects client retainers and supports proactive maintenance reporting.
+Quorum is for teams running scheduled or event-driven n8n workflows who need a separate check on **whether the process is still happening on time** and **whether reported volume looks sane**. It is a self-hosted Contract Catalog with push heartbeats, optional n8n polling, incidents, and alerts.
 
-> What is this business supposed to be doing, is it happening, what evidence proves it, and what requires attention?
+Quorum detects:
 
-We do not need your workflow data. See [docs/privacy.md](docs/privacy.md).
+- **Silent absence** when expected heartbeats or poll imports stop arriving
+- **Hard failures** when a workflow reports failure
+- **Volume drift** when reported item counts fall outside configured bands (Basic evidence only; see limitations)
+- **Stale or missing evidence** relative to the contract deadline
+- **Alert delivery problems** separately from workflow health
 
-**Licence:** [AGPL-3.0](LICENSE). Hosted cloud-specific proprietary services are not part of this AGPL tree unless published separately.
+![Contract Catalog with summary stats, alert banner, and active contracts](docs/screenshots/contract-catalog.png)
 
-### What works today
+## How it works
 
-**Available (self-hosted default process):**
+**Contracts** tie a registered workflow to a cadence, evidence level, volume rules (optional), and alert routes. The Contract Catalog is the main surface: health, evidence strength, next deadline, and alert channel status in one place.
 
-- Contract Catalog at `/catalog` (cadence + volume-band rules on the same contract)
-- Signed n8n push heartbeats
-- n8n public API polling (scheduler runs in `main.ts`)
-- Cadence evaluation, volume-band evaluation, incidents, alert outbox
-- Incident triage fields (assignee, response targets, resolution notes) with audit events
-- Heartbeat and volume evidence with this required limitation: they do not independently prove that the destination record or message arrived
+**Push heartbeats** (recommended) are signed HTTP reports from a step at the end of your n8n workflow. Quorum verifies HMAC, timestamp, and idempotency before recording evidence.
 
-**Preview:**
+**Polling** imports finished executions from n8n on a schedule when you prefer not to add a push step. You add an n8n connector, register the workflow with method **Connect n8n**, and bind the connector in the UI.
 
-- HubSpot webinar registrations → Zoom webinar registrants reconciliation
+**Incidents** open when the watcher finds a breach: silent absence, failure status, volume out of range, and similar contract violations. Each incident has a severity and summary.
 
-**Planned:** Zapier / Make, outcome verification for all workflows
+**Alerts** deliver incident and resolution events through webhook or SMTP channels you configure. Failed deliveries surface in the catalog banner and on contract cards without changing whether a contract is overdue.
 
-Landing draft (not a deployed site): [docs/landing.md](docs/landing.md) · [docs/landing.html](docs/landing.html)  
-Claims: [docs/positioning.md](docs/positioning.md) · Pricing: [docs/pricing-strategy.md](docs/pricing-strategy.md) · Managed pilot: [docs/managed-pilot-offer.md](docs/managed-pilot-offer.md) · Facts: [docs/technical-implementation-and-assumptions.md](docs/technical-implementation-and-assumptions.md) · Release: [docs/release-decision.md](docs/release-decision.md)
+**Recovery** resolves open incidents when valid evidence arrives again (for example after you fix n8n and heartbeats resume).
 
-## No-telemetry promise
+![Contract detail](docs/screenshots/contract-detail.png)
 
-Self-hosted Quorum:
+![Incidents](docs/screenshots/incidents.png)
 
-- never phones home
-- never loads remote fonts, CDNs, analytics, crash reporters, license checks, or hosted feature flags
-- never requires a Quorum cloud account
-- only makes outbound network calls to destinations you configure: n8n API hosts, webhook URLs, and SMTP servers
+![Onboarding: choose monitoring method](docs/screenshots/onboarding-method.png)
 
-Open Network & Privacy (`/network-privacy`) for the configured allowlist and last attempt status.
+## Beta status
 
-## Stack
+Quorum Community is **beta** software for self-hosted design partners. Expect rough edges, incomplete triage UI, and gaps listed below. Hosted multi-tenant SaaS is **not available** from this repository and is not production-ready.
 
-- Node.js LTS + TypeScript (strict)
-- Fastify
-- Drizzle ORM / Drizzle Kit (versioned migrations)
-- SQLite for self-hosted (default); Postgres schema migrations retained for dialect parity
-- Vitest
+**Licence:** [AGPL-3.0](LICENSE)
 
-Architecture: [docs/architecture.md](docs/architecture.md).
-
-## Install (Docker Compose)
+## Quick start (Docker)
 
 ```bash
 cp .env.example .env
-# Set QUORUM_CREDENTIAL_KEK via a secret mechanism (do not store it only next to the DB backup).
-# Prefer QUORUM_SETUP_TOKEN (>= 24 characters).
+```
+
+Edit `.env` and set at least:
+
+- `QUORUM_CREDENTIAL_KEK` - long random secret; back it up separately from the database
+- `QUORUM_SETUP_TOKEN` - at least 24 characters; used once to create the first admin
+
+```bash
 docker compose up --build -d
 ```
 
-Open `http://127.0.0.1:3000/`. First run:
+Open [http://127.0.0.1:3000/](http://127.0.0.1:3000/). If port 3000 is taken, set `QUORUM_HOST_PORT` in `.env`.
 
-1. Create local admin with the setup token (`QUORUM_SETUP_TOKEN` or the one-time token printed once in logs).
-2. Complete onboarding (method → workflows → explicit contracts → evidence review → alert test → activate).
-3. Land on the Contract Catalog (`/catalog`).
+### First-time setup
 
-There is no default production password.
+1. Visit `/setup` and create the local admin with your setup token.
+2. Complete onboarding: monitoring method, register workflow(s), define contract(s), review evidence, configure and test an alert channel, activate.
+3. Open the Contract Catalog at `/catalog`.
 
-Generated setup tokens can appear in container logs. Prefer an operator-supplied `QUORUM_SETUP_TOKEN`. The token is invalidated after the first admin is created.
+There is no default password. If you omit `QUORUM_SETUP_TOKEN`, a one-time token may appear in container logs on first boot. Prefer supplying your own token.
 
-### Health checks
+## Connect n8n
 
-| Endpoint              | Meaning                                                                                            |
-| --------------------- | -------------------------------------------------------------------------------------------------- |
-| `GET /readyz`         | Schema migrated and application ready                                                              |
-| `GET /health/watcher` | Watcher completed a successful tick within `WATCHER_STALE_MS`                                      |
-| `GET /metrics`        | Disabled by default. Enable with `METRICS_ENABLED=true` and `METRICS_AUTH_TOKEN`, or loopback only |
+### Push heartbeats (recommended)
 
-Configure an external uptime check on `/health/watcher`. See [docs/operations.md](docs/operations.md).
+1. Register the workflow in Quorum (onboarding or **Workflows**).
+2. Issue a push credential for that workflow.
+3. Import and wire [examples/n8n/quorum-signed-heartbeat.json](examples/n8n/quorum-signed-heartbeat.json).
 
-Two alert channels are recommended for critical clients. They are not required on every contract.
+On the n8n host, allow `crypto` in Code nodes and restart n8n:
 
-## Local development
+```bash
+NODE_FUNCTION_ALLOW_BUILTIN=crypto
+```
+
+Set on n8n (not in the exported JSON): `QUORUM_WORKFLOW_ID`, `QUORUM_KEY_ID`, `QUORUM_HMAC_SECRET`, `QUORUM_BASE_URL`. Details: [examples/n8n/README.md](examples/n8n/README.md).
+
+### Polling
+
+1. Add an n8n connector under **Connectors** (base URL + API key).
+2. Register the workflow with monitoring method **Connect n8n**.
+3. Bind the connector, define the contract, activate.
+
+Community self-hosted builds allow LAN `http://` n8n URLs via `networkPolicy: self_hosted_local` in the default runtime.
+
+## Alerts
+
+Create at least one webhook or SMTP channel under **Alert channels** and route it to contracts. Use **Send test** on the channel page. Route failures appear in the catalog banner and on cards; they do not mark a contract as satisfied or overdue.
+
+## Security
+
+- No telemetry in self-hosted mode; no remote fonts or analytics in the UI.
+- Session cookies and CSRF on HTML forms.
+- Heartbeat HMAC with per-workflow credentials encrypted under `QUORUM_CREDENTIAL_KEK`.
+- JSON APIs resolve the local tenant server-side; foreign tenant headers are rejected.
+- Run `npm run security:deps` for a dependency audit.
+
+More: [docs/security.md](docs/security.md). Network and privacy copy is also at `/network-privacy` in the UI.
+
+## Backup and upgrades
+
+**Backup:** copy the SQLite file from the Docker volume **and** store `QUORUM_CREDENTIAL_KEK` in a separate secret store. Encrypted push credentials and alert configs cannot be recovered without the KEK.
+
+**Upgrade:** backup database and KEK, deploy the new image, confirm `GET /readyz` returns ready, then watch `GET /health/watcher`. A wrong KEK after restore causes decrypt failures; Quorum does not print the key in logs or responses.
+
+Operations detail: [docs/operations.md](docs/operations.md).
+
+## Health endpoints
+
+| Endpoint              | Meaning                                      |
+| --------------------- | -------------------------------------------- |
+| `GET /healthz`        | Process is up                                |
+| `GET /readyz`         | Migrations applied; workers allowed          |
+| `GET /health/watcher` | Watcher tick fresh within `WATCHER_STALE_MS` |
+
+Point external uptime checks at `/health/watcher`, not `/healthz` alone.
+
+## Development
+
+Requires Node **20+**.
 
 ```bash
 npm ci
 npm run typecheck
 npm test
-npm run release:check
 npm run build
 npm run dev
 ```
 
-## Self-hosted verification
-
-Full gate (format, lint, unit/integration suites, build, clean compose, restart persistence, real n8n e2e):
+Full self-hosted verification gate (unit tests, Docker compose smoke, restart persistence, n8n e2e):
 
 ```bash
 npm run verify:self-hosted
 ```
 
-Individual stages (Node.js `.mjs` scripts; thin `.sh` wrappers for Linux CI):
+Architecture and implementation notes for contributors and coding agents: [docs/specification/README.md](docs/specification/README.md).
 
-| Script                           | Command                |
-| -------------------------------- | ---------------------- |
-| Clean compose smoke              | `npm run test:compose` |
-| Restart + SQLite/KEK persistence | `npm run test:restart` |
-| Real n8n push/poll e2e           | `npm run test:e2e:n8n` |
+## Limitations
 
-Compose uses `${QUORUM_HOST_PORT:-3000}:3000` so verification can pick a free host port. CI can run `verify:self-hosted` on a nightly schedule and/or isolate `test:compose` / `test:e2e:n8n` as Docker jobs. n8n e2e limitations: [docs/verification/n8n-e2e-limitations.md](docs/verification/n8n-e2e-limitations.md).
+Heartbeats and poll imports prove that **a run was reported** with the status and counts you send. They do **not** prove that a CRM row arrived, an email was delivered, or that downstream data is complete. Medium and High evidence add stronger checks where implemented; see the contract detail page.
 
-## Persistence and backup
+Other honest limits:
 
-Keep these separate:
+- HubSpot to Zoom outcome reconciliation is Preview only.
+- Volume rules exist in the data model; the Protect wizard does not configure them yet.
+- Incident triage fields exist in the database; full triage UI is incomplete.
+- Real Slack or SMTP delivery requires your credentials and a manual send test.
+- Hosted multi-tenant SaaS, Stripe checkout, and agency billing are **not** in this Community tree.
 
-- SQLite database file on its data volume
-- `QUORUM_CREDENTIAL_KEK` in a secret store or separate backup medium
+Full list: [docs/verification/known-limitations.md](docs/verification/known-limitations.md).
 
-Restore needs both. Losing the KEK makes encrypted credentials unrecoverable. The KEK must not appear in logs, health responses, or exports.
-
-Full procedures: [docs/operations.md](docs/operations.md). Security: [docs/security.md](docs/security.md).
-
-## Scripts
-
-```bash
-npm run format
-npm run format:check
-npm run lint
-npm run typecheck
-npm test
-npm run test:self-hosted
-npm run test:security
-npm run test:cov
-npm run test:compose
-npm run test:restart
-npm run test:e2e:n8n
-npm run verify:self-hosted
-npm run security:deps
-npm run release:check
-npm run build
-```
-
-## Real n8n validation
-
-See [docs/n8n-validation.md](docs/n8n-validation.md).
+Privacy: [docs/privacy.md](docs/privacy.md).

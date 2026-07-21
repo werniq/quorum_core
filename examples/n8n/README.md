@@ -29,11 +29,11 @@ Quorum’s e2e compose already sets this in `docker-compose.e2e.yml`.
 
 Also set on n8n:
 
-| Variable | Meaning |
-| -------- | ------- |
-| `QUORUM_WORKFLOW_ID` | Quorum workflow id (from Quorum UI) |
-| `QUORUM_KEY_ID` | Push credential key id |
-| `QUORUM_HMAC_SECRET` | Push credential secret (shown once) |
-| `QUORUM_BASE_URL` | Quorum base URL, e.g. `http://host.docker.internal:3000` |
+| Variable             | Meaning                                                  |
+| -------------------- | -------------------------------------------------------- |
+| `QUORUM_WORKFLOW_ID` | Quorum workflow id (from Quorum UI)                      |
+| `QUORUM_KEY_ID`      | Push credential key id                                   |
+| `QUORUM_HMAC_SECRET` | Push credential secret (shown once)                      |
+| `QUORUM_BASE_URL`    | Quorum base URL, e.g. `http://host.docker.internal:3000` |
 
 Do not commit real secrets into the exported JSON.

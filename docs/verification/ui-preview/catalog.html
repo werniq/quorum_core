@@ -335,6 +335,96 @@ h3.card-title, .card-title {
 .card.compact { padding: var(--space-4); }
 .stack { display: grid; gap: var(--space-4); }
 .stack-sm { display: grid; gap: var(--space-2); }
+
+/* Contract detail — tighter vertical rhythm without changing global card styles */
+.contract-detail {
+  display: grid;
+  gap: var(--space-5);
+}
+.contract-detail .page-title {
+  margin-bottom: var(--space-1);
+}
+.contract-detail .page-subtitle {
+  margin-bottom: 0;
+}
+.contract-detail .detail-section {
+  padding: var(--space-4);
+  margin: 0;
+}
+.contract-detail .detail-section .section-title {
+  margin: 0 0 var(--space-2);
+  font-size: 1.05rem;
+}
+.contract-detail .detail-kv-grid {
+  display: grid;
+  gap: var(--space-2) var(--space-5);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.contract-detail .detail-kv {
+  display: grid;
+  gap: 0.125rem;
+  margin: 0;
+  min-width: 0;
+}
+.contract-detail .detail-kv-full {
+  grid-column: 1 / -1;
+}
+.contract-detail .detail-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+.contract-detail .detail-value {
+  font-size: 14px;
+  color: var(--text-primary);
+  line-height: 1.4;
+  margin: 0;
+}
+.contract-detail .detail-value .badge {
+  vertical-align: baseline;
+}
+.contract-detail .detail-hint {
+  margin: var(--space-2) 0 0;
+}
+.contract-detail .detail-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0;
+}
+.contract-detail .detail-list-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+  align-items: baseline;
+  padding: 0.375rem 0;
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.35;
+  border-bottom: 1px solid var(--border-default);
+}
+.contract-detail .detail-list-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.contract-detail .detail-list-item:first-child {
+  padding-top: 0;
+}
+.contract-detail .detail-list time {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.contract-detail .detail-back {
+  margin: 0;
+}
+@media (max-width: 720px) {
+  .contract-detail .detail-kv-grid {
+    grid-template-columns: 1fr;
+  }
+}
 .row-actions {
   display: flex;
   flex-wrap: wrap;
@@ -734,6 +824,7 @@ th {
   max-width: 1120px;
 }
 .banner a { font-weight: 600; }
+.banner-detail { display: inline; margin: 0 0.35rem 0 0.15rem; }
 .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
@@ -850,50 +941,50 @@ code {
         <span class="topbar-spacer"></span>
         <span class="topbar-status" title="Self-hosted edition">Self-hosted</span>
       </header>
-      
+      <div class="banner" role="status">1 contract has degraded alert delivery. Delivery problems do not change whether workflows are overdue.</div>
       <main id="main" class="app-content wide">
         
         
       <h1 class="page-title">Contract Catalog</h1>
       <p class="page-subtitle">What should happen, is it happening, how sure are we, and what should I do?</p>
       <div class="summary-grid" aria-label="Catalog summary">
-        <div class="card compact"><strong>1</strong><div class="helper">Contracts currently satisfied</div></div>
-        <div class="card compact"><strong>0</strong><div class="helper">Processes needing attention</div></div>
-        <div class="card compact"><strong>0</strong><div class="helper">Outcomes missing or delayed</div></div>
-        <div class="card compact"><strong>1</strong><div class="helper">Only basic evidence</div></div>
-        <div class="card compact"><strong>0</strong><div class="helper">Failing alert delivery</div></div>
+        <div class="card compact"><strong>14</strong><div class="helper">Contracts currently satisfied</div></div>
+        <div class="card compact"><strong>3</strong><div class="helper">Processes needing attention</div></div>
+        <div class="card compact"><strong>1</strong><div class="helper">Outcomes missing or delayed</div></div>
+        <div class="card compact"><strong>9</strong><div class="helper">Only basic evidence</div></div>
+        <div class="card compact"><strong>1</strong><div class="helper">Contracts with failing alerts</div></div>
         <div class="card compact"><strong>0</strong><div class="helper">Not yet activated</div></div>
       </div>
       <form class="card filters" method="get" action="/catalog" aria-label="Catalog filters">
         <label class="field">Client
           <select name="clientId">
             <option value="">All</option>
-            <option value="1">Agency Org</option>
+            <option value="c-nw">Northwind Retail</option><option value="c-acme">Acme Agency</option><option value="c-summit">Summit Finance</option><option value="c-lake">Lakeview Health</option>
           </select>
         </label>
         <label class="field">Health
           <select name="health">
             <option value="">All</option>
-            <option value="healthy">healthy</option><option value="warning">warning</option><option value="overdue">overdue</option><option value="unknown">unknown</option><option value="inactive">inactive</option>
+            <option value="healthy">Healthy</option><option value="warning">Waiting</option><option value="overdue">Overdue</option><option value="unknown">Unknown</option><option value="inactive">Paused</option>
           </select>
         </label>
         <label class="field">Evidence
           <select name="evidenceLevel">
             <option value="">All</option>
-            <option value="basic">basic</option><option value="medium">medium</option><option value="high">high</option>
+            <option value="basic">Basic</option><option value="medium">Medium</option><option value="high">High</option>
           </select>
         </label>
         <label class="field">Type
           <select name="contractKind">
             <option value="">All</option>
-            <option value="workflow">heartbeat</option>
-            <option value="outcome">outcome</option>
+            <option value="workflow">Workflow</option>
+            <option value="outcome">Outcome</option>
           </select>
         </label>
         <label class="field">Alert health
           <select name="alertChannelHealth">
             <option value="">All</option>
-            <option value="healthy">healthy</option><option value="degraded">degraded</option><option value="failing">failing</option><option value="unknown">unknown</option><option value="none">none</option>
+            <option value="healthy">Healthy</option><option value="degraded">Degraded</option><option value="failing">Failing</option><option value="unknown">Unknown</option><option value="none">No channel</option>
           </select>
         </label>
         <button type="submit" class="btn-secondary">Apply filters</button>
@@ -901,16 +992,94 @@ code {
       <div class="contract-grid"><article class="contract-card">
     <div class="contract-card-header">
       <div>
-        <h3 class="contract-card-title"><a href="/catalog/contracts/w1">Lead synchronization</a></h3>
-        <div class="helper">Agency Org · Workflow</div>
+        <h3 class="contract-card-title"><a href="/catalog/contracts/w-leads">Lead synchronization</a></h3>
+        <div class="helper">Acme Agency · Workflow</div>
       </div>
       <span class="badge badge-status-healthy"><span class="sr-only">Health: </span>Healthy</span>
     </div>
     <div class="contract-card-meta">
-      <div>Expectation: interval:5@UTC</div>
-      <div>Last success: 2 minutes ago</div>
-      <div>Next expected: in 3 minutes</div>
-      <div>Reported volume: 42 (Collecting)</div>
+      <div>Expectation: Every 5 minutes (UTC)</div>
+      <div>Last success: 4 minutes ago</div>
+      <div>Next expected: in 1 minute</div>
+      <div>Reported volume: 1,847 (Within range)</div>
+    </div>
+    <div class="contract-card-footer">
+      <div style="display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center">
+        <span class="badge badge-evidence-medium" aria-label="Evidence level medium">Medium evidence</span>
+    <details class="evidence">
+      <summary>Medium — aggregate/destination check</summary>
+      <p class="helper">Raise confidence with exact record-level matching on a supported reconciliation contract.</p>
+    </details>
+        <span class="badge badge-status-healthy">Alerts healthy</span>
+        
+      </div>
+      <a class="btn btn-secondary" href="/catalog/contracts/w-leads">View contract</a>
+    </div>
+  </article><article class="contract-card">
+    <div class="contract-card-header">
+      <div>
+        <h3 class="contract-card-title"><a href="/catalog/contracts/w-orders">Order fulfillment handoff</a></h3>
+        <div class="helper">Northwind Retail · Workflow</div>
+      </div>
+      <span class="badge badge-status-healthy"><span class="sr-only">Health: </span>Healthy</span>
+    </div>
+    <div class="contract-card-meta">
+      <div>Expectation: Every 10 minutes (UTC)</div>
+      <div>Last success: 8 minutes ago</div>
+      <div>Next expected: in 2 minutes</div>
+      <div>Reported volume: 412 (Within range)</div>
+    </div>
+    <div class="contract-card-footer">
+      <div style="display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center">
+        <span class="badge badge-evidence-high" aria-label="Evidence level high">High evidence</span>
+    <details class="evidence">
+      <summary>High — individual records reconciled</summary>
+      <p class="helper">Record-level proof is already in place for the latest verified window.</p>
+    </details>
+        <span class="badge badge-status-healthy">Alerts healthy</span>
+        
+      </div>
+      <a class="btn btn-secondary" href="/catalog/contracts/w-orders">View contract</a>
+    </div>
+  </article><article class="contract-card">
+    <div class="contract-card-header">
+      <div>
+        <h3 class="contract-card-title"><a href="/catalog/contracts/w-inventory">Nightly inventory reconcile</a></h3>
+        <div class="helper">Northwind Retail · Workflow</div>
+      </div>
+      <span class="badge badge-status-healthy"><span class="sr-only">Health: </span>Healthy</span>
+    </div>
+    <div class="contract-card-meta">
+      <div>Expectation: Cron 0 2 * * *@UTC</div>
+      <div>Last success: 6 hours ago</div>
+      <div>Next expected: in 18 hours</div>
+      <div>Reported volume: 13,204 (Within range)</div>
+    </div>
+    <div class="contract-card-footer">
+      <div style="display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center">
+        <span class="badge badge-evidence-high" aria-label="Evidence level high">High evidence</span>
+    <details class="evidence">
+      <summary>High — individual records reconciled</summary>
+      <p class="helper">Record-level proof is already in place for the latest verified window.</p>
+    </details>
+        <span class="badge badge-status-healthy">Alerts healthy</span>
+        
+      </div>
+      <a class="btn btn-secondary" href="/catalog/contracts/w-inventory">View contract</a>
+    </div>
+  </article><article class="contract-card">
+    <div class="contract-card-header">
+      <div>
+        <h3 class="contract-card-title"><a href="/catalog/contracts/w-hubspot">HubSpot contact sync</a></h3>
+        <div class="helper">Acme Agency · Workflow</div>
+      </div>
+      <span class="badge badge-status-waiting"><span class="sr-only">Health: </span>Waiting</span>
+    </div>
+    <div class="contract-card-meta">
+      <div>Expectation: Every 30 minutes (UTC)</div>
+      <div>Last success: 28 minutes ago</div>
+      <div>Next expected: in 2 minutes</div>
+      <div>Reported volume: 2,103 (Within range)</div>
     </div>
     <div class="contract-card-footer">
       <div style="display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center">
@@ -919,10 +1088,166 @@ code {
       <summary>Basic — destination not independently checked</summary>
       <p class="helper">Raise confidence by adding a validated source→destination reconciliation path (for example HubSpot webinar → Zoom).</p>
     </details>
-        <span class="badge">Alerts: healthy</span>
+        <span class="badge badge-status-healthy">Alerts healthy</span>
         
       </div>
-      <a class="btn btn-secondary" href="/catalog/contracts/w1">View contract</a>
+      <a class="btn btn-secondary" href="/catalog/contracts/w-hubspot">Investigate</a>
+    </div>
+  </article><article class="contract-card">
+    <div class="contract-card-header">
+      <div>
+        <h3 class="contract-card-title"><a href="/catalog/contracts/w-invoice">Invoice export to ERP</a></h3>
+        <div class="helper">Summit Finance · Workflow</div>
+      </div>
+      <span class="badge badge-status-incident"><span class="sr-only">Health: </span>Incident</span>
+    </div>
+    <div class="contract-card-meta">
+      <div>Expectation: Every 60 minutes (UTC)</div>
+      <div>Last success: 2 hours 14 minutes ago</div>
+      <div>Next expected: 1 hour 14 minutes overdue</div>
+      <div>Reported volume: 0 (Below minimum)</div>
+    </div>
+    <div class="contract-card-footer">
+      <div style="display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center">
+        <span class="badge badge-evidence-basic" aria-label="Evidence level basic">Basic evidence</span>
+    <details class="evidence">
+      <summary>Basic — destination not independently checked</summary>
+      <p class="helper">Raise confidence by adding a validated source→destination reconciliation path (for example HubSpot webinar → Zoom).</p>
+    </details>
+        <span class="badge badge-status-healthy">Alerts healthy</span>
+        <span class="badge badge-status-incident">Silent absence</span>
+      </div>
+      <a class="btn btn-secondary" href="/catalog/contracts/w-invoice">Open incident</a>
+    </div>
+  </article><article class="contract-card">
+    <div class="contract-card-header">
+      <div>
+        <h3 class="contract-card-title"><a href="/catalog/contracts/w-onboard">Patient onboarding emails</a></h3>
+        <div class="helper">Lakeview Health · Workflow</div>
+      </div>
+      <span class="badge badge-status-healthy"><span class="sr-only">Health: </span>Healthy</span>
+    </div>
+    <div class="contract-card-meta">
+      <div>Expectation: Every 15 minutes (UTC)</div>
+      <div>Last success: 11 minutes ago</div>
+      <div>Next expected: in 4 minutes</div>
+      <div>Reported volume: 96 (Within range)</div>
+    </div>
+    <div class="contract-card-footer">
+      <div style="display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center">
+        <span class="badge badge-evidence-basic" aria-label="Evidence level basic">Basic evidence</span>
+    <details class="evidence">
+      <summary>Basic — destination not independently checked</summary>
+      <p class="helper">Raise confidence by adding a validated source→destination reconciliation path (for example HubSpot webinar → Zoom).</p>
+    </details>
+        <span class="badge badge-status-healthy">Alerts healthy</span>
+        
+      </div>
+      <a class="btn btn-secondary" href="/catalog/contracts/w-onboard">View contract</a>
+    </div>
+  </article><article class="contract-card">
+    <div class="contract-card-header">
+      <div>
+        <h3 class="contract-card-title"><a href="/catalog/contracts/w-payroll">Weekly payroll feed</a></h3>
+        <div class="helper">Summit Finance · Workflow</div>
+      </div>
+      <span class="badge badge-status-healthy"><span class="sr-only">Health: </span>Healthy</span>
+    </div>
+    <div class="contract-card-meta">
+      <div>Expectation: Cron 0 6 * * 1@Europe/Warsaw</div>
+      <div>Last success: 3 days ago</div>
+      <div>Next expected: in 4 days</div>
+      <div>Reported volume: 1,044 (Within range)</div>
+    </div>
+    <div class="contract-card-footer">
+      <div style="display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center">
+        <span class="badge badge-evidence-medium" aria-label="Evidence level medium">Medium evidence</span>
+    <details class="evidence">
+      <summary>Medium — aggregate/destination check</summary>
+      <p class="helper">Raise confidence with exact record-level matching on a supported reconciliation contract.</p>
+    </details>
+        <span class="badge badge-status-healthy">Alerts healthy</span>
+        
+      </div>
+      <a class="btn btn-secondary" href="/catalog/contracts/w-payroll">View contract</a>
+    </div>
+  </article><article class="contract-card">
+    <div class="contract-card-header">
+      <div>
+        <h3 class="contract-card-title"><a href="/catalog/outcome/o-zoom">Webinar registrant sync (Preview)</a></h3>
+        <div class="helper">Acme Agency · Outcome</div>
+      </div>
+      <span class="badge badge-status-waiting"><span class="sr-only">Health: </span>Waiting</span>
+    </div>
+    <div class="contract-card-meta">
+      <div>Expectation: Event-driven · quiet window 120@UTC min</div>
+      <div>Last success: 47 minutes ago</div>
+      <div>Next expected: in 73 minutes</div>
+      
+    </div>
+    <div class="contract-card-footer">
+      <div style="display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center">
+        <span class="badge badge-evidence-medium" aria-label="Evidence level medium">Medium evidence</span>
+    <details class="evidence">
+      <summary>Medium — aggregate/destination check</summary>
+      <p class="helper">Raise confidence with exact record-level matching on a supported reconciliation contract.</p>
+    </details>
+        <span class="badge badge-status-healthy">Alerts healthy</span>
+        
+      </div>
+      <a class="btn btn-secondary" href="/catalog/outcome/o-zoom">Investigate</a>
+    </div>
+  </article><article class="contract-card">
+    <div class="contract-card-header">
+      <div>
+        <h3 class="contract-card-title"><a href="/catalog/contracts/w-chargebacks">Stripe chargeback ingest</a></h3>
+        <div class="helper">Summit Finance · Workflow</div>
+      </div>
+      <span class="badge badge-status-healthy"><span class="sr-only">Health: </span>Healthy</span>
+    </div>
+    <div class="contract-card-meta">
+      <div>Expectation: Every 30 minutes (UTC)</div>
+      <div>Last success: 19 minutes ago</div>
+      <div>Next expected: in 11 minutes</div>
+      <div>Reported volume: 3 (Within range)</div>
+    </div>
+    <div class="contract-card-footer">
+      <div style="display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center">
+        <span class="badge badge-evidence-basic" aria-label="Evidence level basic">Basic evidence</span>
+    <details class="evidence">
+      <summary>Basic — destination not independently checked</summary>
+      <p class="helper">Raise confidence by adding a validated source→destination reconciliation path (for example HubSpot webinar → Zoom).</p>
+    </details>
+        <span class="badge badge-status-waiting">Alert delivery degraded</span>
+        
+      </div>
+      <a class="btn btn-secondary" href="/alerts">Fix alert delivery</a>
+    </div>
+  </article><article class="contract-card">
+    <div class="contract-card-header">
+      <div>
+        <h3 class="contract-card-title"><a href="/catalog/contracts/w-purge">Marketing list purge</a></h3>
+        <div class="helper">Northwind Retail · Workflow</div>
+      </div>
+      <span class="badge badge-status-paused"><span class="sr-only">Health: </span>Paused</span>
+    </div>
+    <div class="contract-card-meta">
+      <div>Expectation: Cron 0 3 * * 0@UTC</div>
+      <div>Last success: 12 days ago</div>
+      <div>Next expected: —</div>
+      
+    </div>
+    <div class="contract-card-footer">
+      <div style="display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center">
+        <span class="badge badge-evidence-basic" aria-label="Evidence level basic">Basic evidence</span>
+    <details class="evidence">
+      <summary>Basic — destination not independently checked</summary>
+      <p class="helper">Raise confidence by adding a validated source→destination reconciliation path (for example HubSpot webinar → Zoom).</p>
+    </details>
+        <span class="badge badge-status-paused">No alert channel</span>
+        
+      </div>
+      <a class="btn btn-secondary" href="/catalog/contracts/w-purge">Review inactive contract</a>
     </div>
   </article></div>
       <input type="hidden" value="x" />

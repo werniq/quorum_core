@@ -335,6 +335,96 @@ h3.card-title, .card-title {
 .card.compact { padding: var(--space-4); }
 .stack { display: grid; gap: var(--space-4); }
 .stack-sm { display: grid; gap: var(--space-2); }
+
+/* Contract detail — tighter vertical rhythm without changing global card styles */
+.contract-detail {
+  display: grid;
+  gap: var(--space-5);
+}
+.contract-detail .page-title {
+  margin-bottom: var(--space-1);
+}
+.contract-detail .page-subtitle {
+  margin-bottom: 0;
+}
+.contract-detail .detail-section {
+  padding: var(--space-4);
+  margin: 0;
+}
+.contract-detail .detail-section .section-title {
+  margin: 0 0 var(--space-2);
+  font-size: 1.05rem;
+}
+.contract-detail .detail-kv-grid {
+  display: grid;
+  gap: var(--space-2) var(--space-5);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.contract-detail .detail-kv {
+  display: grid;
+  gap: 0.125rem;
+  margin: 0;
+  min-width: 0;
+}
+.contract-detail .detail-kv-full {
+  grid-column: 1 / -1;
+}
+.contract-detail .detail-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+.contract-detail .detail-value {
+  font-size: 14px;
+  color: var(--text-primary);
+  line-height: 1.4;
+  margin: 0;
+}
+.contract-detail .detail-value .badge {
+  vertical-align: baseline;
+}
+.contract-detail .detail-hint {
+  margin: var(--space-2) 0 0;
+}
+.contract-detail .detail-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0;
+}
+.contract-detail .detail-list-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+  align-items: baseline;
+  padding: 0.375rem 0;
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.35;
+  border-bottom: 1px solid var(--border-default);
+}
+.contract-detail .detail-list-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.contract-detail .detail-list-item:first-child {
+  padding-top: 0;
+}
+.contract-detail .detail-list time {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.contract-detail .detail-back {
+  margin: 0;
+}
+@media (max-width: 720px) {
+  .contract-detail .detail-kv-grid {
+    grid-template-columns: 1fr;
+  }
+}
 .row-actions {
   display: flex;
   flex-wrap: wrap;
@@ -734,6 +824,7 @@ th {
   max-width: 1120px;
 }
 .banner a { font-weight: 600; }
+.banner-detail { display: inline; margin: 0 0.35rem 0 0.15rem; }
 .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
@@ -854,49 +945,57 @@ code {
       <main id="main" class="app-content">
         
         
+      <div class="contract-detail">
       <h1 class="page-title">Lead synchronization</h1>
-      <p class="page-subtitle">Lead sync · every 5 minutes</p>
-      <section class="card stack" aria-labelledby="sec-contract">
+      <p class="page-subtitle">Lead sync · production · Every 5 minutes (UTC)</p>
+      <section class="card detail-section" aria-labelledby="sec-contract">
         <h2 class="section-title" id="sec-contract">Contract</h2>
-        <p>Activation: <span class="badge badge-status-healthy">Active</span></p>
-        <p><span class="badge badge-status-healthy"><span class="sr-only">Health: </span>Healthy</span> <span class="badge badge-evidence-basic" aria-label="Evidence level basic">Basic evidence</span></p>
+        <div class="detail-kv-grid">
+          <div class="detail-kv"><span class="detail-label">Activation</span><div class="detail-value"><span class="badge badge-status-healthy">Active</span></div></div>
+          <div class="detail-kv"><span class="detail-label">Health</span><div class="detail-value"><span class="badge badge-status-healthy"><span class="sr-only">Health: </span>Healthy</span> <span class="badge badge-evidence-medium" aria-label="Evidence level medium">Medium evidence</span></div></div>
+        </div>
       </section>
-      <section class="card stack" aria-labelledby="sec-evidence">
+      <section class="card detail-section" aria-labelledby="sec-evidence">
         <h2 class="section-title" id="sec-evidence">Current evidence</h2>
-        <p>Last checked: 2 minutes ago</p>
-        <p>Next deadline: in 3 minutes</p>
-        <p><strong>Verified:</strong> execution reported</p>
-        <p><strong>Unverified:</strong> destination delivery</p>
-        <p class="helper">Add destination reconciliation to raise evidence.</p>
+        <div class="detail-kv-grid">
+          <div class="detail-kv"><span class="detail-label">Last checked</span><div class="detail-value">4 minutes ago</div></div>
+          <div class="detail-kv"><span class="detail-label">Next deadline</span><div class="detail-value">in 1 minute</div></div>
+          <div class="detail-kv detail-kv-full"><span class="detail-label">Verified</span><div class="detail-value">execution reported on schedule; aggregate destination row count within band</div></div>
+          <div class="detail-kv detail-kv-full"><span class="detail-label">Unverified</span><div class="detail-value">individual CRM field mapping; duplicate suppression at destination</div></div>
+        </div>
+        <p class="helper detail-hint">Add per-record reconciliation to raise evidence from Medium to High.</p>
       </section>
-      <section class="card stack" aria-labelledby="sec-volume">
+      <section class="card detail-section" aria-labelledby="sec-volume">
         <h2 class="section-title" id="sec-volume">Daily reported volume</h2>
-        <p>Expected: 20 to 100</p>
-        <p>Current: 42</p>
-        <p>Window ends: Sunday 23:59 Europe/Warsaw</p>
-        <p>Status: Collecting</p>
-        <p>Unknown-count events: 0</p>
-        <p><span class="badge badge-evidence-basic" aria-label="Evidence level basic">Basic evidence</span> Volume from heartbeat-reported counts</p>
-        <p><strong>Verified:</strong> workflow reported executions</p>
-        <p><strong>Not verified:</strong> exact destination records</p>
+        <div class="detail-kv-grid">
+          <div class="detail-kv"><span class="detail-label">Expected</span><div class="detail-value">200 to 2,000</div></div>
+          <div class="detail-kv"><span class="detail-label">Current</span><div class="detail-value">1,847</div></div>
+          <div class="detail-kv"><span class="detail-label">Window ends</span><div class="detail-value">today 23:59 UTC</div></div>
+          <div class="detail-kv"><span class="detail-label">Status</span><div class="detail-value">Within range</div></div>
+          <div class="detail-kv"><span class="detail-label">Unknown-count events</span><div class="detail-value">0</div></div>
+          <div class="detail-kv detail-kv-full"><span class="detail-label">Evidence</span><div class="detail-value"><span class="badge badge-evidence-basic" aria-label="Evidence level basic">Basic evidence</span> <span class="helper">Volume from heartbeat-reported counts</span></div></div>
+          <div class="detail-kv detail-kv-full"><span class="detail-label">Verified</span><div class="detail-value">workflow reported execution counts each run</div></div>
+          <div class="detail-kv detail-kv-full"><span class="detail-label">Not verified</span><div class="detail-value">exact destination record totals</div></div>
+        </div>
       </section>
-      <section class="card stack" aria-labelledby="sec-timeline">
+      <section class="card detail-section" aria-labelledby="sec-timeline">
         <h2 class="section-title" id="sec-timeline">Timeline</h2>
-        <ul class="stack-sm" style="list-style:none;padding:0;margin:0"><li><time datetime="2026-07-20T10:00:00Z">2026-07-20T10:00:00Z</time> · success</li></ul>
+        <ul class="detail-list"><li class="detail-list-item"><time datetime="2026-07-21T14:02:00Z">2026-07-21T14:02:00Z</time><span>success · 312 items</span></li><li class="detail-list-item"><time datetime="2026-07-21T13:57:00Z">2026-07-21T13:57:00Z</time><span>success · 298 items</span></li><li class="detail-list-item"><time datetime="2026-07-21T13:52:00Z">2026-07-21T13:52:00Z</time><span>success · 305 items</span></li><li class="detail-list-item"><time datetime="2026-07-21T13:47:00Z">2026-07-21T13:47:00Z</time><span>success · 287 items</span></li><li class="detail-list-item"><time datetime="2026-07-19T08:14:00Z">2026-07-19T08:14:00Z</time><span>incident resolved · silent absence</span></li><li class="detail-list-item"><time datetime="2026-07-19T07:02:00Z">2026-07-19T07:02:00Z</time><span>incident opened · silent absence</span></li><li class="detail-list-item"><time datetime="2026-07-12T16:30:00Z">2026-07-12T16:30:00Z</time><span>incident resolved · volume below minimum</span></li><li class="detail-list-item"><time datetime="2026-06-28T09:00:00Z">2026-06-28T09:00:00Z</time><span>contract activated</span></li></ul>
       </section>
-      <section class="card stack" aria-labelledby="sec-incident">
+      <section class="card detail-section" aria-labelledby="sec-incident">
         <h2 class="section-title" id="sec-incident">Incidents</h2>
-        <p class="sev-warning"><strong>Volume below minimum</strong> · open</p>
+        <ul class="detail-list"><li class="detail-list-item"><span class="sev-warning"><strong>Volume below minimum (resolved)</strong></span><span class="helper">resolved</span></li><li class="detail-list-item"><span class="sev-critical"><strong>Silent absence (resolved)</strong></span><span class="helper">resolved</span></li></ul>
       </section>
-      <section class="card stack" aria-labelledby="sec-delivery">
+      <section class="card detail-section" aria-labelledby="sec-delivery">
         <h2 class="section-title" id="sec-delivery">Alert delivery</h2>
-        <p>Ops webhook · <span class="channel-healthy">healthy</span></p>
+        <ul class="detail-list"><li class="detail-list-item"><span>Ops Slack webhook</span><span class="channel-healthy">healthy</span></li><li class="detail-list-item"><span>Pager email (SMTP)</span><span class="channel-healthy">healthy</span></li></ul>
       </section>
-      <section class="card stack" aria-labelledby="sec-tech">
+      <section class="card detail-section" aria-labelledby="sec-tech">
         <h2 class="section-title" id="sec-tech">Technical details</h2>
-        <p class="helper">Raw heartbeat events and poll logs are available for debugging; they are not required to understand current health and evidence.</p>
+        <p class="helper" style="margin:0">Raw heartbeat events and poll logs are available for debugging; they are not required to understand current health and evidence.</p>
       </section>
-      <p><a class="btn btn-secondary" href="/catalog">Back to catalog</a></p>
+      <p class="detail-back"><a class="btn btn-secondary" href="/catalog">Back to catalog</a></p>
+      </div>
     
       </main>
       <footer class="app-footer">

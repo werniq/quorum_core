@@ -24,9 +24,8 @@ export function resolveTrustedTenantId(input: {
     void input.reply.code(403).send({ error: "forbidden" });
     return null;
   }
-  const queryTenant = (
-    input.request.query as { tenantId?: string } | undefined
-  )?.tenantId;
+  const queryTenant = (input.request.query as { tenantId?: string } | undefined)
+    ?.tenantId;
   if (
     typeof queryTenant === "string" &&
     queryTenant.length > 0 &&

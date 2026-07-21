@@ -47,7 +47,10 @@ export function contractDefinitionErrorMessage(error: unknown): string {
       : error && typeof error === "object" && "message" in error
         ? String(error.message)
         : String(error);
-  if (/not visible in tenant/i.test(message) || /Unknown workflow/i.test(message)) {
+  if (
+    /not visible in tenant/i.test(message) ||
+    /Unknown workflow/i.test(message)
+  ) {
     return "Choose a registered workflow before saving the contract.";
   }
   return "Could not save the contract. Check the values and try again.";

@@ -634,7 +634,8 @@ export function registerUiRoutes(
       return reply.type("text/html").send(
         renderOnboardingPage(
           onboardingPageContext(session, "configure_alerts", {
-            flash: "Could not create the alert channel. Check the values and try again.",
+            flash:
+              "Could not create the alert channel. Check the values and try again.",
           }),
         ),
       );
@@ -703,11 +704,13 @@ export function registerUiRoutes(
     const nowIso = deps.clock.now().toISOString();
     const contractId = (body.contractId ?? "").trim();
     const renderActivateError = (flash: string) =>
-      reply.type("text/html").send(
-        renderOnboardingPage(
-          onboardingPageContext(session, "activate", { flash }),
-        ),
-      );
+      reply
+        .type("text/html")
+        .send(
+          renderOnboardingPage(
+            onboardingPageContext(session, "activate", { flash }),
+          ),
+        );
     try {
       assertExplicitContractConfirmation(
         body.explicitlyConfirmed === "1",

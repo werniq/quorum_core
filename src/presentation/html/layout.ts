@@ -359,6 +359,96 @@ h3.card-title, .card-title {
 .card.compact { padding: var(--space-4); }
 .stack { display: grid; gap: var(--space-4); }
 .stack-sm { display: grid; gap: var(--space-2); }
+
+/* Contract detail — tighter vertical rhythm without changing global card styles */
+.contract-detail {
+  display: grid;
+  gap: var(--space-5);
+}
+.contract-detail .page-title {
+  margin-bottom: var(--space-1);
+}
+.contract-detail .page-subtitle {
+  margin-bottom: 0;
+}
+.contract-detail .detail-section {
+  padding: var(--space-4);
+  margin: 0;
+}
+.contract-detail .detail-section .section-title {
+  margin: 0 0 var(--space-2);
+  font-size: 1.05rem;
+}
+.contract-detail .detail-kv-grid {
+  display: grid;
+  gap: var(--space-2) var(--space-5);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.contract-detail .detail-kv {
+  display: grid;
+  gap: 0.125rem;
+  margin: 0;
+  min-width: 0;
+}
+.contract-detail .detail-kv-full {
+  grid-column: 1 / -1;
+}
+.contract-detail .detail-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+.contract-detail .detail-value {
+  font-size: 14px;
+  color: var(--text-primary);
+  line-height: 1.4;
+  margin: 0;
+}
+.contract-detail .detail-value .badge {
+  vertical-align: baseline;
+}
+.contract-detail .detail-hint {
+  margin: var(--space-2) 0 0;
+}
+.contract-detail .detail-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0;
+}
+.contract-detail .detail-list-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+  align-items: baseline;
+  padding: 0.375rem 0;
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.35;
+  border-bottom: 1px solid var(--border-default);
+}
+.contract-detail .detail-list-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.contract-detail .detail-list-item:first-child {
+  padding-top: 0;
+}
+.contract-detail .detail-list time {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.contract-detail .detail-back {
+  margin: 0;
+}
+@media (max-width: 720px) {
+  .contract-detail .detail-kv-grid {
+    grid-template-columns: 1fr;
+  }
+}
 .row-actions {
   display: flex;
   flex-wrap: wrap;

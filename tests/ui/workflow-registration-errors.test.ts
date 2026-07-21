@@ -9,7 +9,6 @@ import {
 import { buildApp } from "../../src/infrastructure/http/app.js";
 import { loadEnv } from "../../src/infrastructure/config/env.js";
 import { FixedClock } from "../../src/domain/clock.js";
-import { createId } from "../../src/domain/ids.js";
 import { SqliteAuthRepositories } from "../../src/infrastructure/db/repositories/sqlite-auth-repositories.js";
 import { SqliteCoreRepositories } from "../../src/infrastructure/db/repositories/sqlite-core-repositories.js";
 import { SESSION_COOKIE } from "../../src/infrastructure/http/cookies.js";
