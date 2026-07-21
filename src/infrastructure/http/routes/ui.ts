@@ -5,7 +5,7 @@ import type { Clock } from "../../../domain/clock.js";
 import { assertExplicitContractConfirmation } from "../../../domain/contracts/explicit-activation.js";
 import { createId } from "../../../domain/ids.js";
 import { queryContractCatalog } from "../../catalog/query-catalog.js";
-import type { QuorumEnv } from "../../config/env.js";
+import { isUiOpenWithoutLogin, type QuorumEnv } from "../../config/env.js";
 import { SqliteAlertingRepositories } from "../../db/repositories/sqlite-alerting-repositories.js";
 import { SqliteAuthRepositories } from "../../db/repositories/sqlite-auth-repositories.js";
 import { SqliteCoreRepositories } from "../../db/repositories/sqlite-core-repositories.js";
@@ -98,6 +98,7 @@ export function registerUiRoutes(
   const opsAudit = new SqliteOpsAuditRepositories(deps.sqlite);
   const n8nConnectors = new SqliteN8nConnectorRepositories(deps.sqlite);
   const secureCookie = deps.env.NODE_ENV === "production";
+  const pageShell = { demoMode: deps.env.QUORUM_DEMO_MODE };
 
   function tenantId(): string {
     return core.ensureSelfHostedTenant().id;
@@ -180,6 +181,7 @@ export function registerUiRoutes(
     } = {},
   ) {
     return {
+      ...pageShell,
       csrf: session.csrfToken,
       step,
       method: extras.method ?? null,
@@ -235,7 +237,7 @@ export function registerUiRoutes(
     request: FastifyRequest,
     reply: FastifyReply,
   ): Session | null {
-    if (!deps.env.QUORUM_UI_AUTH_ENABLED) {
+    if (isUiOpenWithoutLogin(deps.env)) {
       const existing = readSession(request);
       return existing ?? openModeSession(request, reply);
     }
@@ -289,7 +291,7 @@ export function registerUiRoutes(
   }
 
   app.get("/", async (request, reply) => {
-    if (deps.env.QUORUM_UI_AUTH_ENABLED && !auth.hasAdminUser()) {
+    if (!isUiOpenWithoutLogin(deps.env) && !auth.hasAdminUser()) {
       return reply.redirect("/setup");
     }
     const session = requireSession(request, reply);
@@ -314,17 +316,17 @@ export function registerUiRoutes(
   });
 
   app.get("/setup", async (_request, reply) => {
-    if (!deps.env.QUORUM_UI_AUTH_ENABLED) {
+    if (isUiOpenWithoutLogin(deps.env)) {
       return reply.redirect("/");
     }
     if (auth.hasAdminUser()) {
       return reply.redirect("/login");
     }
-    return reply.type("text/html").send(renderSetupPage({}));
+    return reply.type("text/html").send(renderSetupPage({ ...pageShell }));
   });
 
   app.post("/setup", async (request, reply) => {
-    if (!deps.env.QUORUM_UI_AUTH_ENABLED) {
+    if (isUiOpenWithoutLogin(deps.env)) {
       return reply.redirect("/");
     }
     if (auth.hasAdminUser()) {
@@ -340,7 +342,7 @@ export function registerUiRoutes(
     if (!result.ok) {
       return reply
         .type("text/html")
-        .send(renderSetupPage({ flash: result.code }));
+        .send(renderSetupPage({ ...pageShell, flash: result.code }));
     }
     const tid = tenantId();
     opsAudit.recordOpsAudit({
@@ -357,17 +359,17 @@ export function registerUiRoutes(
   });
 
   app.get("/login", async (_request, reply) => {
-    if (!deps.env.QUORUM_UI_AUTH_ENABLED) {
+    if (isUiOpenWithoutLogin(deps.env)) {
       return reply.redirect("/");
     }
     if (!auth.hasAdminUser()) {
       return reply.redirect("/setup");
     }
-    return reply.type("text/html").send(renderLoginPage({}));
+    return reply.type("text/html").send(renderLoginPage({ ...pageShell }));
   });
 
   app.post("/login", async (request, reply) => {
-    if (!deps.env.QUORUM_UI_AUTH_ENABLED) {
+    if (isUiOpenWithoutLogin(deps.env)) {
       return reply.redirect("/");
     }
     const body = formBody(request);
@@ -386,7 +388,7 @@ export function registerUiRoutes(
     if (!result.ok) {
       return reply
         .type("text/html")
-        .send(renderLoginPage({ flash: result.code }));
+        .send(renderLoginPage({ ...pageShell, flash: result.code }));
     }
     setSessionCookie(reply, result.sessionId);
     const tid = tenantId();
@@ -410,7 +412,7 @@ export function registerUiRoutes(
       clearSessionCookieHeader(secureCookie),
       clearOpenCsrfCookieHeader(secureCookie),
     ]);
-    if (!deps.env.QUORUM_UI_AUTH_ENABLED) {
+    if (isUiOpenWithoutLogin(deps.env)) {
       return reply.redirect("/");
     }
     return reply.redirect("/login");
@@ -423,6 +425,7 @@ export function registerUiRoutes(
     }
     return reply.type("text/html").send(
       renderNetworkPrivacyPage({
+        ...pageShell,
         destinations: outbound.list(tenantId()),
       }),
     );
@@ -868,6 +871,7 @@ export function registerUiRoutes(
       .all(tid) as Array<{ id: string; name: string }>;
     return reply.type("text/html").send(
       renderWorkflowsPage({
+        ...pageShell,
         csrf: session.csrfToken,
         connectors,
         flash,
@@ -960,6 +964,7 @@ export function registerUiRoutes(
         .type("text/html")
         .send(
           renderWorkflowsPage({
+        ...pageShell,
             csrf: session.csrfToken,
             connectors,
             flash,
@@ -1036,6 +1041,7 @@ export function registerUiRoutes(
     });
     return reply.type("text/html").send(
       renderCredentialOncePage({
+        ...pageShell,
         workflowId,
         keyId,
         secret,
@@ -1094,6 +1100,7 @@ export function registerUiRoutes(
         });
         return reply.type("text/html").send(
           renderCredentialOncePage({
+        ...pageShell,
             workflowId,
             keyId,
             secret,
@@ -1227,6 +1234,7 @@ export function registerUiRoutes(
     }>;
     return reply.type("text/html").send(
       renderAlertsPage({
+        ...pageShell,
         csrf: session.csrfToken,
         channels,
       }),
@@ -1595,6 +1603,7 @@ export function registerUiRoutes(
     ).length;
     return reply.type("text/html").send(
       renderOutcomeEvidencePage({
+        ...pageShell,
         csrf: session.csrfToken,
         contractId: id,
         businessPurpose: contract.businessPurpose,

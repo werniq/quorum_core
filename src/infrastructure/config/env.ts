@@ -118,16 +118,25 @@ const envSchema = z.object({
   METRICS_AUTH_TOKEN: z.string().optional().default(""),
   /**
    * Require one-time setup token + login for the HTML UI.
-   * Default false so a local/Docker try-out can open the catalog without registration.
-   * Set true before any shared or production deploy.
+   * Default true. Set false only for trusted local try-outs, or use QUORUM_DEMO_MODE.
    */
   QUORUM_UI_AUTH_ENABLED: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((value) => value === "true"),
+  /**
+   * Insecure local demo: opens the UI without login and requires a localhost bind.
+   * Do not combine with HOST=0.0.0.0 or any non-loopback address.
+   */
+  QUORUM_DEMO_MODE: z
     .enum(["true", "false"])
     .default("false")
     .transform((value) => value === "true"),
 });
 
 export type QuorumEnv = z.infer<typeof envSchema>;
+
+const DEMO_MODE_ALLOWED_HOSTS = new Set(["127.0.0.1", "localhost", "::1"]);
 
 export class EnvValidationError extends Error {
   readonly issues: string[];
@@ -137,6 +146,13 @@ export class EnvValidationError extends Error {
     this.name = "EnvValidationError";
     this.issues = issues;
   }
+}
+
+/** Open UI without setup/login when demo mode is on or UI auth is explicitly disabled. */
+export function isUiOpenWithoutLogin(
+  env: Pick<QuorumEnv, "QUORUM_DEMO_MODE" | "QUORUM_UI_AUTH_ENABLED">,
+): boolean {
+  return env.QUORUM_DEMO_MODE === true || env.QUORUM_UI_AUTH_ENABLED === false;
 }
 
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): QuorumEnv {
@@ -153,6 +169,12 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): QuorumEnv {
   if (env.QUORUM_EDITION === "self_hosted" && env.QUORUM_TELEMETRY_ENABLED) {
     throw new EnvValidationError([
       "QUORUM_TELEMETRY_ENABLED: self-hosted edition forbids telemetry",
+    ]);
+  }
+
+  if (env.QUORUM_DEMO_MODE && !DEMO_MODE_ALLOWED_HOSTS.has(env.HOST)) {
+    throw new EnvValidationError([
+      `HOST: QUORUM_DEMO_MODE requires HOST to be 127.0.0.1, localhost, or ::1 (got ${env.HOST})`,
     ]);
   }
 

@@ -28,7 +28,7 @@ Pinned image: `n8nio/n8n:1.95.3`. The shorter suite may fall back to `n8nio/n8n:
 
 | Area | Short `test:e2e:n8n` | Real `test:e2e:n8n:real` |
 | ---- | -------------------- | ------------------------ |
-| Happy-path HMAC | n8n Code node signs; REST execute often 404/401 → production webhook trigger. **No host-signed happy-path fallback** | Same; requires n8n-authored signing |
+| Happy-path HMAC | Recommended: Crypto Hash + HMAC nodes ([examples/n8n/quorum-signed-heartbeat.json](../examples/n8n/quorum-signed-heartbeat.json)). E2e harness may still sign via Code node + `NODE_FUNCTION_ALLOW_BUILTIN=crypto` (legacy). **No host-signed happy-path fallback** | Same; requires n8n-authored signing |
 | Silent absence | Full quiet-window wait (≥1 minute) is **not** in the default budget | Wall-clock wait; detection latency ~62 s for 1-minute cadence (2026-07-21) |
 | Empty-result failure | Protect UI hardcodes `emptyResultPolicy: "allowed"`; asserts allowed | Mutates SQL for warning/failure policies |
 | Poll bind / restart | Limited bind coverage | UI bind (`POST /workflows/:id/connector`), checkpoint, Quorum restart |

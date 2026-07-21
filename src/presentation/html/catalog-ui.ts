@@ -199,6 +199,7 @@ function renderContractCard(row: CatalogRowView): string {
 }
 
 export function renderCatalogPage(input: {
+  demoMode?: boolean;
   csrf: string;
   role: "admin" | "operator" | "viewer";
   contracts: CatalogRowView[];
@@ -225,6 +226,7 @@ export function renderCatalogPage(input: {
   const filterVal = (key: string) => escapeHtml(input.filters[key] ?? "");
 
   return layout({
+    demoMode: input.demoMode === true,
     title: "Contract Catalog",
     nav: primaryNav({ loggedIn: true, current: "catalog", role: input.role }),
     current: "catalog",
@@ -315,6 +317,7 @@ const PROTECT_STEPS = [
 ];
 
 export function renderProtectClientPage(input: {
+  demoMode?: boolean;
   csrf: string;
   step: number;
   clients: Array<{ id: string; name: string }>;
@@ -477,6 +480,7 @@ export function renderProtectClientPage(input: {
   }
 
   return layout({
+    demoMode: input.demoMode === true,
     title: "Protect a client",
     nav: primaryNav({ loggedIn: true, current: "catalog", role: "admin" }),
     current: "catalog",
@@ -493,6 +497,7 @@ export function renderProtectClientPage(input: {
 }
 
 export function renderClientsPage(input: {
+  demoMode?: boolean;
   role: "admin" | "operator" | "viewer";
   clients: Array<{
     id: string;
@@ -511,6 +516,7 @@ export function renderClientsPage(input: {
     )
     .join("");
   return layout({
+    demoMode: input.demoMode === true,
     title: "Clients",
     nav: primaryNav({ loggedIn: true, current: "clients", role: input.role }),
     current: "clients",
@@ -537,6 +543,8 @@ export function renderClientsPage(input: {
 }
 
 export function renderClientHealthPage(input: {
+  demoMode?: boolean;
+ 
   role: "admin" | "operator" | "viewer";
   clientName: string;
   status: string;
@@ -549,6 +557,7 @@ export function renderClientHealthPage(input: {
       ? `<div class="empty-state"><h2>No contracts for this client yet</h2><p>Protect a process to start monitoring.</p></div>`
       : `<div class="contract-grid">${input.contracts.map(renderContractCard).join("")}</div>`;
   return layout({
+    demoMode: input.demoMode === true,
     title: `${input.clientName} health`,
     nav: primaryNav({ loggedIn: true, current: "clients", role: input.role }),
     current: "clients",
@@ -585,6 +594,7 @@ function detailListItem(contentHtml: string): string {
 }
 
 export function renderWorkflowContractDetailPage(input: {
+  demoMode?: boolean;
   role: "admin" | "operator" | "viewer";
   csrf: string;
   contract: {
@@ -647,6 +657,7 @@ export function renderWorkflowContractDetailPage(input: {
     : `<li class="detail-list-item helper">No alert routes.</li>`;
 
   return layout({
+    demoMode: input.demoMode === true,
     title: c.businessPurpose,
     nav: primaryNav({ loggedIn: true, current: "catalog", role: input.role }),
     current: "catalog",
@@ -716,12 +727,15 @@ export function renderWorkflowContractDetailPage(input: {
 }
 
 export function renderSimpleNavPage(input: {
+  demoMode?: boolean;
+ 
   title: string;
   current: string;
   role: "admin" | "operator" | "viewer";
   body: string;
 }): string {
   return layout({
+    demoMode: input.demoMode === true,
     title: input.title,
     nav: primaryNav({
       loggedIn: true,

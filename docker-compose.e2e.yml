@@ -15,7 +15,8 @@ services:
       N8N_USER_MANAGEMENT_DISABLED: "false"
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:-test-encryption-key-32chars!!}
       N8N_SECURE_COOKIE: "false"
-      # Allow Code node require('crypto') for Quorum HMAC signing.
+      # Allow Code node require('crypto') for legacy / e2e HMAC signing harnesses.
+      # Recommended operator path uses Crypto nodes (no allow-list): examples/n8n/quorum-signed-heartbeat.json
       NODE_FUNCTION_ALLOW_BUILTIN: crypto
       GENERIC_TIMEZONE: UTC
     volumes:

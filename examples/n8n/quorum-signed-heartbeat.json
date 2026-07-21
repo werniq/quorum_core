@@ -1,5 +1,5 @@
 {
-  "name": "Quorum signed heartbeat (example)",
+  "name": "Quorum signed heartbeat (Crypto nodes)",
   "nodes": [
     {
       "parameters": {
@@ -15,13 +15,54 @@
     },
     {
       "parameters": {
-        "jsCode": "// Quorum heartbeat HMAC (must match Quorum heartbeat-hmac.ts).\n// n8n blocks require('crypto') unless you set:\n//   NODE_FUNCTION_ALLOW_BUILTIN=crypto\n// (Docker Compose / n8n process env, then restart n8n.)\n// Also set: QUORUM_WORKFLOW_ID, QUORUM_KEY_ID, QUORUM_HMAC_SECRET, QUORUM_BASE_URL\nconst crypto = require('crypto');\n\nconst workflowId = $env.QUORUM_WORKFLOW_ID || 'REPLACE_QUORUM_WORKFLOW_ID';\nconst keyId = $env.QUORUM_KEY_ID || 'REPLACE_KEY_ID';\nconst secret = $env.QUORUM_HMAC_SECRET || 'REPLACE_HMAC_SECRET';\nconst baseUrl = ($env.QUORUM_BASE_URL || 'http://quorum:3000').replace(/\\/+$/, '');\nconst path = `/api/v1/workflows/${workflowId}/heartbeats`;\n\nconst bodyObj = {\n  schemaVersion: 1,\n  executedAt: new Date().toISOString(),\n  status: 'success',\n  itemsProcessed: 1,\n  externalExecutionRef: `n8n-${Date.now()}`,\n};\nconst bodyRaw = JSON.stringify(bodyObj);\nconst timestampSeconds = String(Math.floor(Date.now() / 1000));\nconst idempotencyKey = `n8n-${timestampSeconds}-${Math.random().toString(16).slice(2)}`;\nconst bodySha256Hex = crypto.createHash('sha256').update(bodyRaw, 'utf8').digest('hex');\nconst signingPayload = ['POST', path, timestampSeconds, idempotencyKey, bodySha256Hex].join('\\n');\nconst signature = crypto.createHmac('sha256', secret).update(signingPayload, 'utf8').digest('hex');\n\nreturn [{\n  json: {\n    url: `${baseUrl}${path}`,\n    bodyRaw,\n    headers: {\n      'content-type': 'application/json',\n      'x-quorum-key-id': keyId,\n      'x-quorum-timestamp': timestampSeconds,\n      'x-quorum-idempotency-key': idempotencyKey,\n      'x-quorum-signature': signature,\n    },\n  },\n}];"
+        "jsCode": "// Build Quorum heartbeat body + signing inputs (no Node crypto).\n// Env: QUORUM_WORKFLOW_ID, QUORUM_KEY_ID, QUORUM_BASE_URL\n// HMAC secret is used only in the Crypto HMAC node via $env.QUORUM_HMAC_SECRET.\nconst workflowId = $env.QUORUM_WORKFLOW_ID || 'REPLACE_QUORUM_WORKFLOW_ID';\nconst keyId = $env.QUORUM_KEY_ID || 'REPLACE_KEY_ID';\nconst baseUrl = ($env.QUORUM_BASE_URL || 'http://quorum:3000').replace(/\\/+$/, '');\nconst path = `/api/v1/workflows/${workflowId}/heartbeats`;\n\nconst bodyObj = {\n  schemaVersion: 1,\n  executedAt: new Date().toISOString(),\n  status: 'success',\n  itemsProcessed: 1,\n  externalExecutionRef: `n8n-${Date.now()}`,\n};\nconst bodyRaw = JSON.stringify(bodyObj);\nconst timestampSeconds = String(Math.floor(Date.now() / 1000));\nconst idempotencyKey = `n8n-${timestampSeconds}-${Math.random().toString(16).slice(2)}`;\n\nreturn [{\n  json: {\n    url: `${baseUrl}${path}`,\n    path,\n    bodyRaw,\n    keyId,\n    timestampSeconds,\n    idempotencyKey,\n  },\n}];"
       },
-      "id": "sign-heartbeat",
-      "name": "Sign Quorum Heartbeat",
+      "id": "prepare-heartbeat",
+      "name": "Prepare Heartbeat",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [280, 0]
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "action": "hash",
+        "type": "SHA256",
+        "binaryData": false,
+        "value": "={{ $json.bodyRaw }}",
+        "dataPropertyName": "bodySha256Hex",
+        "encoding": "hex"
+      },
+      "id": "hash-body",
+      "name": "Hash Body SHA256",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Canonical signing payload (must match Quorum heartbeat-hmac.ts):\n// [\"POST\", path, timestampSeconds, idempotencyKey, bodySha256Hex].join(\"\\n\")\nconst signingPayload = [\n  'POST',\n  $json.path,\n  $json.timestampSeconds,\n  $json.idempotencyKey,\n  $json.bodySha256Hex,\n].join('\\n');\n\nreturn [{\n  json: {\n    ...$json,\n    signingPayload,\n  },\n}];"
+      },
+      "id": "compose-signing-payload",
+      "name": "Compose Signing Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "binaryData": false,
+        "value": "={{ $json.signingPayload }}",
+        "dataPropertyName": "signature",
+        "secret": "={{ $env.QUORUM_HMAC_SECRET }}",
+        "encoding": "hex"
+      },
+      "id": "hmac-signature",
+      "name": "HMAC SHA256 Signature",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [880, 0]
     },
     {
       "parameters": {
@@ -32,23 +73,23 @@
           "parameters": [
             {
               "name": "content-type",
-              "value": "={{$json.headers['content-type']}}"
+              "value": "application/json"
             },
             {
               "name": "x-quorum-key-id",
-              "value": "={{$json.headers['x-quorum-key-id']}}"
+              "value": "={{$json.keyId}}"
             },
             {
               "name": "x-quorum-timestamp",
-              "value": "={{$json.headers['x-quorum-timestamp']}}"
+              "value": "={{$json.timestampSeconds}}"
             },
             {
               "name": "x-quorum-idempotency-key",
-              "value": "={{$json.headers['x-quorum-idempotency-key']}}"
+              "value": "={{$json.idempotencyKey}}"
             },
             {
               "name": "x-quorum-signature",
-              "value": "={{$json.headers['x-quorum-signature']}}"
+              "value": "={{$json.signature}}"
             }
           ]
         },
@@ -68,35 +109,42 @@
       "name": "POST Quorum Heartbeat",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [560, 0]
+      "position": [1100, 0]
     }
   ],
   "connections": {
     "Schedule Trigger": {
-      "main": [
-        [{ "node": "Sign Quorum Heartbeat", "type": "main", "index": 0 }]
-      ]
+      "main": [[{ "node": "Prepare Heartbeat", "type": "main", "index": 0 }]]
     },
-    "Sign Quorum Heartbeat": {
-      "main": [
-        [{ "node": "POST Quorum Heartbeat", "type": "main", "index": 0 }]
-      ]
+    "Prepare Heartbeat": {
+      "main": [[{ "node": "Hash Body SHA256", "type": "main", "index": 0 }]]
+    },
+    "Hash Body SHA256": {
+      "main": [[{ "node": "Compose Signing Payload", "type": "main", "index": 0 }]]
+    },
+    "Compose Signing Payload": {
+      "main": [[{ "node": "HMAC SHA256 Signature", "type": "main", "index": 0 }]]
+    },
+    "HMAC SHA256 Signature": {
+      "main": [[{ "node": "POST Quorum Heartbeat", "type": "main", "index": 0 }]]
     }
   },
   "settings": { "executionOrder": "v1" },
   "meta": {
     "quorumSetup": [
       "1. Create a Quorum push workflow and issue a credential (Key id + Secret).",
-      "2. Allow crypto in the n8n Code node sandbox: set NODE_FUNCTION_ALLOW_BUILTIN=crypto and restart n8n. Without this you get VMError: Cannot find module 'crypto'.",
-      "3. Set n8n environment variables: QUORUM_WORKFLOW_ID, QUORUM_KEY_ID, QUORUM_HMAC_SECRET, QUORUM_BASE_URL.",
-      "4. Import this workflow. Do not paste real secrets into the exported JSON.",
+      "2. Set n8n environment variables: QUORUM_WORKFLOW_ID, QUORUM_KEY_ID, QUORUM_HMAC_SECRET, QUORUM_BASE_URL.",
+      "3. Import this workflow. No NODE_FUNCTION_ALLOW_BUILTIN needed (Crypto nodes, not require('crypto')).",
+      "4. On n8n@1.95.3 the Crypto HMAC secret is a node parameter (use expression ={{ $env.QUORUM_HMAC_SECRET }}). Dedicated Crypto credentials for HMAC are not available on this pin.",
       "5. Activate the workflow. Schedule runs every 1 minute.",
       "6. Confirm Quorum catalog shows Healthy with Basic evidence after the first accepted heartbeat."
     ],
+    "n8nPin": "1.95.3",
+    "cryptoNode": "n8n-nodes-base.crypto typeVersion 1 (verified against n8n@1.95.3 Crypto.node.ts)",
     "placeholders": {
       "QUORUM_WORKFLOW_ID": "REPLACE_QUORUM_WORKFLOW_ID",
       "QUORUM_KEY_ID": "REPLACE_KEY_ID",
-      "QUORUM_HMAC_SECRET": "REPLACE_HMAC_SECRET",
+      "QUORUM_HMAC_SECRET": "use $env.QUORUM_HMAC_SECRET expression on Crypto HMAC node",
       "QUORUM_BASE_URL": "http://quorum:3000"
     }
   }

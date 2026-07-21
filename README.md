@@ -60,7 +60,7 @@ Edit `.env` and set at least:
 
 - `QUORUM_CREDENTIAL_KEK` - long random secret; back it up separately from the database
 
-By default `QUORUM_UI_AUTH_ENABLED=false`, so you can open the UI without a setup token or login. For any shared or production host, set `QUORUM_UI_AUTH_ENABLED=true` and provide `QUORUM_SETUP_TOKEN` (at least 24 characters).
+By default `QUORUM_UI_AUTH_ENABLED=true` (setup token + login). For a local open UI without login, set `QUORUM_UI_AUTH_ENABLED=false`, or use `QUORUM_DEMO_MODE=true` with `HOST` bound to localhost only (`127.0.0.1` / `localhost` / `::1`).
 
 ```bash
 docker compose up --build -d
@@ -70,13 +70,9 @@ Open [http://127.0.0.1:3000/](http://127.0.0.1:3000/). If port 3000 is taken, se
 
 ### First-time setup
 
-**Auth off (default):** open `/` or `/catalog` and walk through onboarding (monitoring method → workflows → contracts → alerts → activate).
+**Auth on (default):** provide `QUORUM_SETUP_TOKEN` (at least 24 characters), visit `/setup`, create the local admin, then complete onboarding.
 
-**Auth on** (`QUORUM_UI_AUTH_ENABLED=true`):
-
-1. Visit `/setup` and create the local admin with your setup token.
-2. Complete onboarding as above.
-3. Open the Contract Catalog at `/catalog`.
+**Open UI:** `QUORUM_UI_AUTH_ENABLED=false`, or `QUORUM_DEMO_MODE=true` on a localhost bind — open `/` or `/catalog` and walk through onboarding without login.
 
 There is no default password. When auth is on and you omit `QUORUM_SETUP_TOKEN`, a one-time token may appear in container logs on first boot. Prefer supplying your own token.
 
@@ -86,15 +82,9 @@ There is no default password. When auth is on and you omit `QUORUM_SETUP_TOKEN`,
 
 1. Register the workflow in Quorum (onboarding or **Workflows**).
 2. Issue a push credential for that workflow.
-3. Import and wire [examples/n8n/quorum-signed-heartbeat.json](examples/n8n/quorum-signed-heartbeat.json).
+3. Import and wire [examples/n8n/quorum-signed-heartbeat.json](examples/n8n/quorum-signed-heartbeat.json) (Crypto Hash + Crypto HMAC nodes; no `NODE_FUNCTION_ALLOW_BUILTIN`).
 
-On the n8n host, allow `crypto` in Code nodes and restart n8n:
-
-```bash
-NODE_FUNCTION_ALLOW_BUILTIN=crypto
-```
-
-Set on n8n (not in the exported JSON): `QUORUM_WORKFLOW_ID`, `QUORUM_KEY_ID`, `QUORUM_HMAC_SECRET`, `QUORUM_BASE_URL`. Details: [examples/n8n/README.md](examples/n8n/README.md).
+Set on n8n (not in the exported JSON): `QUORUM_WORKFLOW_ID`, `QUORUM_KEY_ID`, `QUORUM_HMAC_SECRET`, `QUORUM_BASE_URL`. Details and the optional legacy Code-node path: [examples/n8n/README.md](examples/n8n/README.md).
 
 ### Polling
 

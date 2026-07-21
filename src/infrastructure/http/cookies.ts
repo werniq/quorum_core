@@ -20,7 +20,7 @@ export function parseCookieHeader(
 }
 
 export const SESSION_COOKIE = "quorum_session";
-/** CSRF cookie used when QUORUM_UI_AUTH_ENABLED=false (no login session). */
+/** CSRF cookie used when the UI is open without login (demo mode or QUORUM_UI_AUTH_ENABLED=false). */
 export const OPEN_CSRF_COOKIE = "quorum_open_csrf";
 
 export function sessionCookieHeader(

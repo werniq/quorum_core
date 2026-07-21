@@ -97,6 +97,7 @@ export function registerProductUiRoutes(
     tenantId: () => string;
   },
 ): void {
+  const pageShell = { demoMode: deps.env.QUORUM_DEMO_MODE };
   const core = new SqliteCoreRepositories(deps.sqlite);
   const alerting = new SqliteAlertingRepositories(deps.sqlite);
   const outbound = new SqliteOutboundDestinationRepositories(deps.sqlite);
@@ -178,6 +179,7 @@ export function registerProductUiRoutes(
     const filtered = applyCatalogFilters(all, filters).map((r) => r);
     return reply.type("text/html").send(
       renderCatalogPage({
+        ...pageShell,
         csrf: session.csrfToken,
         role: session.role,
         contracts: filtered,
@@ -199,6 +201,7 @@ export function registerProductUiRoutes(
     const tid = deps.tenantId();
     return reply.type("text/html").send(
       renderProtectClientPage({
+        ...pageShell,
         csrf: session.csrfToken,
         step: 1,
         clients: core.listClients(tid).map((c) => ({ id: c.id, name: c.name })),
@@ -231,6 +234,7 @@ export function registerProductUiRoutes(
     }
     return reply.type("text/html").send(
       renderProtectClientPage({
+        ...pageShell,
         csrf: session.csrfToken,
         step: 2,
         clients: core.listClients(tid).map((c) => ({ id: c.id, name: c.name })),
@@ -256,6 +260,7 @@ export function registerProductUiRoutes(
       "Critical business process";
     return reply.type("text/html").send(
       renderProtectClientPage({
+        ...pageShell,
         csrf: session.csrfToken,
         step: 3,
         clients: [],
@@ -309,6 +314,7 @@ export function registerProductUiRoutes(
         .type("text/html")
         .send(
           renderProtectClientPage({
+        ...pageShell,
             csrf: session.csrfToken,
             step: 3,
             clients,
@@ -335,6 +341,7 @@ export function registerProductUiRoutes(
         .type("text/html")
         .send(
           renderProtectClientPage({
+        ...pageShell,
             csrf: session.csrfToken,
             step: 3,
             clients,
@@ -345,6 +352,7 @@ export function registerProductUiRoutes(
     }
     return reply.type("text/html").send(
       renderProtectClientPage({
+        ...pageShell,
         csrf: session.csrfToken,
         step: 4,
         clients,
@@ -376,6 +384,7 @@ export function registerProductUiRoutes(
     } catch {
       return reply.type("text/html").send(
         renderProtectClientPage({
+        ...pageShell,
           csrf: session.csrfToken,
           step: 4,
           clients: [],
@@ -388,6 +397,7 @@ export function registerProductUiRoutes(
     if (body.evidenceAcknowledged !== "1") {
       return reply.type("text/html").send(
         renderProtectClientPage({
+        ...pageShell,
           csrf: session.csrfToken,
           step: 4,
           clients: [],
@@ -434,6 +444,7 @@ export function registerProductUiRoutes(
     });
     return reply.type("text/html").send(
       renderProtectClientPage({
+        ...pageShell,
         csrf: session.csrfToken,
         step: 5,
         clients: [],
@@ -524,6 +535,7 @@ export function registerProductUiRoutes(
     });
     return reply.type("text/html").send(
       renderProtectClientPage({
+        ...pageShell,
         csrf: session.csrfToken,
         step: 6,
         clients: [],
@@ -555,6 +567,7 @@ export function registerProductUiRoutes(
     } catch {
       return reply.type("text/html").send(
         renderProtectClientPage({
+        ...pageShell,
           csrf: session.csrfToken,
           step: 6,
           clients: [],
@@ -637,6 +650,7 @@ export function registerProductUiRoutes(
     if (!validation.ok) {
       return reply.type("text/html").send(
         renderProtectClientPage({
+        ...pageShell,
           csrf: session.csrfToken,
           step: 6,
           clients: [],
@@ -738,7 +752,7 @@ export function registerProductUiRoutes(
     });
     return reply
       .type("text/html")
-      .send(renderClientsPage({ role: session.role, clients }));
+      .send(renderClientsPage({ ...pageShell, role: session.role, clients }));
   });
 
   app.get("/clients/:clientId", async (request, reply) => {
@@ -769,6 +783,7 @@ export function registerProductUiRoutes(
     const coverage = summarizeClientCoverage(contracts, status);
     return reply.type("text/html").send(
       renderClientHealthPage({
+        ...pageShell,
         role: session.role,
         clientName: client.name,
         status: coverage.status,
@@ -813,6 +828,7 @@ export function registerProductUiRoutes(
             .join("")}</tbody></table></div>`;
     return reply.type("text/html").send(
       renderSimpleNavPage({
+        ...pageShell,
         title: "Incidents",
         current: "incidents",
         role: session.role,
@@ -828,6 +844,7 @@ export function registerProductUiRoutes(
     }
     return reply.type("text/html").send(
       renderSimpleNavPage({
+        ...pageShell,
         title: "Reports",
         current: "reports",
         role: session.role,
@@ -907,6 +924,7 @@ export function registerProductUiRoutes(
               .join("")}</tbody></table></div>`;
     return reply.type("text/html").send(
       renderSimpleNavPage({
+        ...pageShell,
         title: "Connectors",
         current: "connectors",
         role: session.role,
@@ -922,6 +940,7 @@ export function registerProductUiRoutes(
     }
     return reply.type("text/html").send(
       renderSimpleNavPage({
+        ...pageShell,
         title: "Settings",
         current: "settings",
         role: session.role,
@@ -992,6 +1011,7 @@ export function registerProductUiRoutes(
 
     return reply.type("text/html").send(
       renderWorkflowContractDetailPage({
+        ...pageShell,
         role: session.role,
         csrf: session.csrfToken,
         contract: {
@@ -1067,6 +1087,7 @@ export function registerProductUiRoutes(
             .join("")}</ol>`;
     return reply.type("text/html").send(
       renderSimpleNavPage({
+        ...pageShell,
         title: channel.name,
         current: "alerts",
         role: session.role,
@@ -1103,6 +1124,7 @@ export function registerProductUiRoutes(
     }
     return reply.type("text/html").send(
       renderSimpleNavPage({
+        ...pageShell,
         title: "Send test",
         current: "alerts",
         role: session.role,

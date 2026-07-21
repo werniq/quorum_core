@@ -314,4 +314,47 @@ describe("self-hosted privacy and auth", () => {
 
     await app.close();
   });
+
+  it("opens the UI in demo mode on localhost and shows the insecure banner", async () => {
+    const sqlite = openDb();
+    const clock = new FixedClock(new Date("2026-07-19T10:00:00.000Z"));
+    const core = new SqliteCoreRepositories(sqlite);
+    core.ensureSelfHostedTenant();
+
+    const app = await buildApp({
+      env: loadEnv({
+        NODE_ENV: "test",
+        HOST: "127.0.0.1",
+        QUORUM_CREDENTIAL_KEK: "quorum-test-credential-kek",
+        QUORUM_DEMO_MODE: "true",
+      }),
+      clock,
+      sqlite,
+      enableUi: true,
+      getSchemaReadiness: () => ({
+        status: "ready",
+        appliedMigrations: ["0007_self_hosted_admin"],
+      }),
+    });
+
+    const root = await app.inject({ method: "GET", url: "/" });
+    expect(root.statusCode).toBe(302);
+    expect(root.headers.location).toBe("/onboarding");
+
+    const cookie = String(root.headers["set-cookie"] ?? "")
+      .split(",")
+      .map((p) => p.trim().split(";")[0])
+      .join("; ");
+
+    const onboarding = await app.inject({
+      method: "GET",
+      url: "/onboarding",
+      headers: { cookie },
+    });
+    expect(onboarding.statusCode).toBe(200);
+    expect(onboarding.body).toContain('role="alert"');
+    expect(onboarding.body).toMatch(/Insecure demo mode/i);
+
+    await app.close();
+  });
 });

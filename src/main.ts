@@ -65,7 +65,11 @@ export async function main(): Promise<void> {
   const outbound = new SqliteOutboundDestinationRepositories(sqlite);
 
   if (!auth.hasAdminUser()) {
-    if (!env.QUORUM_UI_AUTH_ENABLED) {
+    if (env.QUORUM_DEMO_MODE) {
+      console.info(
+        "Insecure demo mode (QUORUM_DEMO_MODE=true): UI is open without setup/login. HOST is restricted to localhost. Do not use outside local demos.",
+      );
+    } else if (!env.QUORUM_UI_AUTH_ENABLED) {
       console.info(
         "UI auth is off (QUORUM_UI_AUTH_ENABLED=false). Catalog is open without setup/login. Set QUORUM_UI_AUTH_ENABLED=true before any shared or production deploy.",
       );
@@ -85,6 +89,10 @@ export async function main(): Promise<void> {
         }
       }
     }
+  } else if (env.QUORUM_DEMO_MODE) {
+    console.info(
+      "Insecure demo mode (QUORUM_DEMO_MODE=true): existing admin login is not required for the HTML UI.",
+    );
   } else if (!env.QUORUM_UI_AUTH_ENABLED) {
     console.info(
       "UI auth is off (QUORUM_UI_AUTH_ENABLED=false). Existing admin login is not required for the HTML UI.",

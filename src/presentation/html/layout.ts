@@ -849,6 +849,12 @@ th {
 }
 .banner a { font-weight: 600; }
 .banner-detail { display: inline; margin: 0 0.35rem 0 0.15rem; }
+.banner-demo {
+  background: var(--status-danger-bg);
+  border: 1px solid #fecaca;
+  color: var(--status-danger);
+  font-weight: 600;
+}
 .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
@@ -1039,6 +1045,8 @@ export function layout(input: {
   flash?: string | null;
   flashTone?: "error" | "success";
   banner?: string | null;
+  /** When true, show insecure demo-mode alert on authenticated shell pages. */
+  demoMode?: boolean;
   current?: string;
   role?: "admin" | "operator" | "viewer";
   loggedIn?: boolean;
@@ -1082,6 +1090,9 @@ export function layout(input: {
 </html>`;
   }
 
+  const demoBanner = input.demoMode
+    ? `<div class="banner banner-demo" role="alert">Insecure demo mode — UI authentication is off. Bound to localhost only.</div>`
+    : "";
   const banner = input.banner
     ? `<div class="banner" role="status">${input.banner}</div>`
     : "";
@@ -1106,6 +1117,7 @@ export function layout(input: {
         <span class="topbar-spacer"></span>
         <span class="topbar-status" title="Self-hosted edition">Self-hosted</span>
       </header>
+      ${demoBanner}
       ${banner}
       <main id="main" class="app-content${input.contentWide ? " wide" : ""}">
         ${flashHtml}

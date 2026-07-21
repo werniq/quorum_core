@@ -34,8 +34,12 @@ function nav(
   return primaryNav({ loggedIn, role, current });
 }
 
-export function renderSetupPage(input: { flash?: string | null }): string {
+export function renderSetupPage(input: {
+  demoMode?: boolean;
+  flash?: string | null;
+}): string {
   return layout({
+    demoMode: input.demoMode === true,
     title: "Setup",
     loggedIn: false,
     flash: input.flash ?? null,
@@ -62,8 +66,12 @@ export function renderSetupPage(input: { flash?: string | null }): string {
   });
 }
 
-export function renderLoginPage(input: { flash?: string | null }): string {
+export function renderLoginPage(input: {
+  demoMode?: boolean;
+  flash?: string | null;
+}): string {
   return layout({
+    demoMode: input.demoMode === true,
     title: "Login",
     loggedIn: false,
     flash: input.flash ?? null,
@@ -88,6 +96,7 @@ export function renderLoginPage(input: { flash?: string | null }): string {
 export { renderCatalogPage } from "./catalog-ui.js";
 
 export function renderOnboardingPage(input: {
+  demoMode?: boolean;
   csrf: string;
   step: OnboardingStep;
   method: string | null;
@@ -478,6 +487,7 @@ export function renderOnboardingPage(input: {
   }
 
   return layout({
+    demoMode: input.demoMode === true,
     title: "Onboarding",
     nav: nav(true, "admin", "settings"),
     current: "settings",
@@ -494,6 +504,7 @@ export function renderOnboardingPage(input: {
 }
 
 export function renderNetworkPrivacyPage(input: {
+  demoMode?: boolean;
   destinations: Array<{
     kind: string;
     label: string;
@@ -522,6 +533,7 @@ export function renderNetworkPrivacyPage(input: {
           .join("");
 
   return layout({
+    demoMode: input.demoMode === true,
     title: "Network and Privacy",
     nav: nav(true, "admin", "settings"),
     current: "settings",
@@ -540,12 +552,15 @@ export function renderNetworkPrivacyPage(input: {
 }
 
 export function renderCredentialOncePage(input: {
+  demoMode?: boolean;
+ 
   workflowId: string;
   keyId: string;
   secret: string;
   ingestPath: string;
 }): string {
   return layout({
+    demoMode: input.demoMode === true,
     title: "Credential",
     nav: nav(true, "admin", "workflows"),
     current: "workflows",
@@ -565,6 +580,7 @@ export function renderCredentialOncePage(input: {
 }
 
 export function renderWorkflowsPage(input: {
+  demoMode?: boolean;
   csrf: string;
   connectors?: Array<{ id: string; name: string }>;
   workflows: Array<{
@@ -642,6 +658,7 @@ export function renderWorkflowsPage(input: {
       </div>`;
 
   return layout({
+    demoMode: input.demoMode === true,
     title: "Workflows",
     nav: nav(true, "admin", "workflows"),
     current: "workflows",
@@ -692,6 +709,7 @@ export function renderWorkflowsPage(input: {
 }
 
 export function renderAlertsPage(input: {
+  demoMode?: boolean;
   csrf: string;
   channels: Array<{
     id: string;
@@ -717,6 +735,7 @@ export function renderAlertsPage(input: {
     .join("");
 
   return layout({
+    demoMode: input.demoMode === true,
     title: "Alert channels",
     nav: nav(true, "admin", "alerts"),
     current: "alerts",
@@ -754,6 +773,7 @@ export function renderAlertsPage(input: {
 }
 
 export function renderOutcomeEvidencePage(input: {
+  demoMode?: boolean;
   csrf: string;
   contractId: string;
   businessPurpose: string;
@@ -796,6 +816,7 @@ export function renderOutcomeEvidencePage(input: {
     .join("");
 
   return layout({
+    demoMode: input.demoMode === true,
     title: "Outcome evidence",
     nav: nav(true, "admin", "catalog"),
     current: "catalog",
