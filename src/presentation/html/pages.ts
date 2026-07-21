@@ -34,18 +34,34 @@ function nav(
   return primaryNav({ loggedIn, role, current });
 }
 
+export function setupErrorMessage(code: string): string {
+  switch (code) {
+    case "weak_password":
+      return "Password is too weak. Use at least 12 characters and avoid common defaults (for example password, changeme, quorum123).";
+    case "invalid_setup_token":
+      return "Setup token is invalid, expired, or already used.";
+    case "invalid_username":
+      return "Username must be 3–64 characters: letters, numbers, and . _ - only.";
+    case "admin_exists":
+      return "An administrator already exists. Sign in instead.";
+    default:
+      return code;
+  }
+}
+
 export function renderSetupPage(input: {
   demoMode?: boolean;
   flash?: string | null;
 }): string {
+  const flash = input.flash ? setupErrorMessage(input.flash) : null;
   return layout({
     demoMode: input.demoMode === true,
     title: "Setup",
     loggedIn: false,
-    flash: input.flash ?? null,
+    flash,
     body: `
       <h1>Create local admin</h1>
-      <p class="lede">No default production password. Use the one-time setup token from the server log or <code>QUORUM_SETUP_TOKEN</code>.</p>
+      <p class="lede">No default production password. Use the one-time setup token from the server log or <code>QUORUM_SETUP_TOKEN</code> (≥24 characters). The admin password is separate: ≥12 characters and not a known default.</p>
       <form method="post" action="/setup" class="stack">
         <label class="field">
           <span class="field-label">Setup token</span>
@@ -53,12 +69,12 @@ export function renderSetupPage(input: {
         </label>
         <label class="field">
           <span class="field-label">Username</span>
-          <input name="username" required autocomplete="username" placeholder="admin" />
+          <input name="username" required autocomplete="username" placeholder="admin" minlength="3" maxlength="64" pattern="[a-zA-Z0-9._-]{3,64}" />
         </label>
         <label class="field">
           <span class="field-label">Password</span>
-          <input name="password" type="password" required autocomplete="new-password" placeholder="At least 12 characters" />
-          <p class="helper">Minimum 12 characters. Store it somewhere safe.</p>
+          <input name="password" type="password" required autocomplete="new-password" minlength="12" placeholder="At least 12 characters" />
+          <p class="helper">Minimum 12 characters; avoid common defaults such as password or changeme. Store it somewhere safe.</p>
         </label>
         <button type="submit">Create administrator</button>
       </form>

@@ -4,6 +4,8 @@ Define what each critical workflow should do. Quorum checks whether it ran, whet
 
 Quorum watches n8n workflows against explicit contracts. You define when a workflow should report in, what counts as success or failure, and how strong the evidence needs to be. Quorum opens incidents when reality drifts from that contract and resolves them when reporting recovers.
 
+**Quick links:** [How it works](#how-it-works) · [Quick start](#quick-start-docker) · [Connect n8n](#connect-n8n) · [Alerts](#alerts) · [Security](#security) · [Backup](#backup-and-upgrades) · [Health](#health-endpoints) · [Development](#development) · [Limitations](#limitations) · [n8n heartbeat example](examples/n8n/) · [Architecture](docs/architecture.md)
+
 ## The silent-failure problem
 
 n8n can show a green execution while the business outcome is wrong: the workflow ran but sent too few rows, too many rows, or nothing at all. Worse, a workflow can stop running entirely and nothing in n8n tells you the business process is down.
@@ -60,7 +62,8 @@ cp .env.example .env
 
 Edit `.env` and set at least:
 
-- `QUORUM_CREDENTIAL_KEK` - long random secret; back it up separately from the database
+- `QUORUM_CREDENTIAL_KEK` — long random secret (min 16 characters); back it up separately from the database
+- `QUORUM_SETUP_TOKEN` — one-time bootstrap token (min 24 characters) when UI auth is on
 
 By default `QUORUM_UI_AUTH_ENABLED=true` (setup token + login). For a local open UI without login, set `QUORUM_UI_AUTH_ENABLED=false`, or use `QUORUM_DEMO_MODE=true` with `HOST` bound to localhost only (`127.0.0.1` / `localhost` / `::1`).
 
@@ -72,7 +75,9 @@ Open [http://127.0.0.1:3000/](http://127.0.0.1:3000/). If port 3000 is taken, se
 
 ### First-time setup
 
-**Auth on (default):** provide `QUORUM_SETUP_TOKEN` (at least 24 characters), visit `/setup`, create the local admin, then complete onboarding.
+**Auth on (default):** set `QUORUM_SETUP_TOKEN` (≥24 characters), visit `/setup`, create the local admin, then complete onboarding.
+
+The admin **password** is not the setup token. It must be ≥12 characters and must not be an exact match (case-insensitive) of a known default such as `password`, `changeme`, or `quorum123`. There is no charset or entropy score requirement beyond that. A rejected password shows as `weak_password` (with a clearer message on the setup form).
 
 **Open UI:** `QUORUM_UI_AUTH_ENABLED=false`, or `QUORUM_DEMO_MODE=true` on a localhost bind — open `/` or `/catalog` and walk through onboarding without login.
 

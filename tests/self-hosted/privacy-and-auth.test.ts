@@ -164,13 +164,21 @@ describe("self-hosted privacy and auth", () => {
     const auth = new SqliteAuthRepositories(sqlite);
     auth.registerSetupTokenFromEnv("setup-token-auth-suite-xx", clock.now());
 
-    const weak = auth.createAdminWithSetupToken({
+    const weakShort = auth.createAdminWithSetupToken({
       setupToken: "setup-token-auth-suite-xx",
       username: "admin",
       password: "password",
       now: clock.now(),
     });
-    expect(weak).toEqual({ ok: false, code: "weak_password" });
+    expect(weakShort).toEqual({ ok: false, code: "weak_password" });
+
+    const weakBlocked = auth.createAdminWithSetupToken({
+      setupToken: "setup-token-auth-suite-xx",
+      username: "admin",
+      password: "password1234",
+      now: clock.now(),
+    });
+    expect(weakBlocked).toEqual({ ok: false, code: "weak_password" });
 
     const ok = auth.createAdminWithSetupToken({
       setupToken: "setup-token-auth-suite-xx",

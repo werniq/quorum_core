@@ -16,6 +16,7 @@ services:
       # (demo mode rejects HOST=0.0.0.0; use localhost-only binds for demos).
       QUORUM_UI_AUTH_ENABLED: ${QUORUM_UI_AUTH_ENABLED:-true}
       # Used when UI auth is enabled (min 24 chars). Prefer this over log-emitted tokens.
+      # This is not the admin password; /setup still requires a password ≥12 chars.
       QUORUM_SETUP_TOKEN: ${QUORUM_SETUP_TOKEN:-}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://127.0.0.1:3000}
       WATCHER_INTERVAL_MS: "60000"
