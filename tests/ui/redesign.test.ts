@@ -239,6 +239,29 @@ describe("UI redesign copy and primitives", () => {
     expect(step4).not.toContain("Save inactive contract");
   });
 
+  it("protect and onboarding wizards expose Back controls after the first step", () => {
+    const protect = renderProtectClientPage({
+      csrf: "csrf-token",
+      step: 3,
+      clients: [],
+      draft: { clientId: "c1", businessPurpose: "Leads" },
+    });
+    expect(protect).toContain('action="/protect/back"');
+    expect(protect).toContain('form="protect-back-2"');
+    expect(protect).toContain(">Back</button>");
+    expect(protect).toContain('name="to" value="2"');
+
+    const onboarding = renderOnboardingPage({
+      csrf: "csrf-token",
+      step: "define_contracts",
+      method: "push",
+      workflows: [],
+    });
+    expect(onboarding).toContain('action="/onboarding/advance"');
+    expect(onboarding).toContain('name="to" value="select_workflows"');
+    expect(onboarding).toContain(">Back</button>");
+  });
+
   it("catalog empty state and status badges render", () => {
     const html = renderCatalogPage({
       csrf: "csrf",

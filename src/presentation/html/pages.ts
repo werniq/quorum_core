@@ -26,6 +26,14 @@ const ONBOARDING_FLOW: Array<{ id: OnboardingStep; label: string }> = [
   { id: "activate", label: onboardingStepLabel("activate") },
 ];
 
+function onboardingBackButton(csrf: string, to: OnboardingStep): string {
+  return `<form method="post" action="/onboarding/advance" class="wizard-back-bar">
+    <input type="hidden" name="csrf" value="${escapeHtml(csrf)}" />
+    <input type="hidden" name="to" value="${escapeHtml(to)}" />
+    <button type="submit" class="btn-secondary">Back</button>
+  </form>`;
+}
+
 function nav(
   loggedIn: boolean,
   role: "admin" | "operator" | "viewer" = "admin",
@@ -207,6 +215,7 @@ export function renderOnboardingPage(input: {
             </table>
           </div>`;
     body = `
+      ${onboardingBackButton(input.csrf, "choose_method")}
       <h2 class="section-title">Registered workflows</h2>
       <p class="helper">You register one workflow at a time. Add as many as you need, then continue to define a contract.</p>
       ${workflowRows}
@@ -296,6 +305,7 @@ export function renderOnboardingPage(input: {
             </table>
           </div>`;
     body = `
+      ${onboardingBackButton(input.csrf, "select_workflows")}
       <h2 class="section-title">Saved contracts</h2>
       <p class="helper">Contracts stay inactive until you activate monitoring later. Add as many as you need, then continue.</p>
       ${contractRows}
@@ -354,6 +364,7 @@ export function renderOnboardingPage(input: {
       </form>`;
   } else if (input.step === "review_evidence") {
     body = `
+      ${onboardingBackButton(input.csrf, "define_contracts")}
       <div class="card stack">
         <h2 class="card-title">Review evidence strength</h2>
         <p>${evidenceBadge("basic")}</p>
@@ -396,6 +407,7 @@ export function renderOnboardingPage(input: {
             </table>
           </div>`;
     body = `
+      ${onboardingBackButton(input.csrf, "review_evidence")}
       <h2 class="section-title">Alert channels</h2>
       <p class="helper">Quorum needs a tested route so incidents reach your team.</p>
       ${channelRows}
@@ -465,6 +477,7 @@ export function renderOnboardingPage(input: {
             </table>
           </div>`;
     body = `
+      ${onboardingBackButton(input.csrf, "configure_alerts")}
       <h2 class="section-title">Contracts</h2>
       <p class="helper">Activation starts cadence evaluation for the selected contract.</p>
       ${contractRows}

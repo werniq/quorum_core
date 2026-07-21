@@ -316,6 +316,44 @@ const PROTECT_STEPS = [
   { id: "6", label: "Activate" },
 ];
 
+const PROTECT_DRAFT_KEYS = [
+  "clientId",
+  "templateId",
+  "businessPurpose",
+  "cadenceValue",
+  "workflowId",
+  "workflowName",
+  "externalWorkflowId",
+  "monitoringMethod",
+  "existingWorkflowId",
+  "contractId",
+  "channelId",
+] as const;
+
+/** Back control associated via the HTML form= attribute (avoids nested forms). */
+function protectBackControls(
+  csrf: string,
+  toStep: number,
+  draft: Record<string, string>,
+): { formHtml: string; buttonHtml: string } {
+  const formId = `protect-back-${toStep}`;
+  const fields = PROTECT_DRAFT_KEYS.map((key) => {
+    const value = draft[key] ?? "";
+    if (!value) {
+      return "";
+    }
+    return `<input type="hidden" name="${escapeHtml(key)}" value="${escapeHtml(value)}" />`;
+  }).join("");
+  return {
+    formHtml: `<form id="${escapeHtml(formId)}" method="post" action="/protect/back" hidden>
+      <input type="hidden" name="csrf" value="${escapeHtml(csrf)}" />
+      <input type="hidden" name="to" value="${toStep}" />
+      ${fields}
+    </form>`,
+    buttonHtml: `<button type="submit" form="${escapeHtml(formId)}" class="btn-secondary">Back</button>`,
+  };
+}
+
 export function renderProtectClientPage(input: {
   demoMode?: boolean;
   csrf: string;
@@ -340,6 +378,7 @@ export function renderProtectClientPage(input: {
   ).join("");
 
   let body = "";
+  let backForms = "";
   if (input.step <= 1) {
     body = `
       <form method="post" action="/protect/client" class="card stack">
@@ -362,6 +401,8 @@ export function renderProtectClientPage(input: {
         <div class="row-actions"><button type="submit">Continue</button></div>
       </form>`;
   } else if (input.step === 2) {
+    const back = protectBackControls(input.csrf, 1, d);
+    backForms = back.formHtml;
     body = `
       <form method="post" action="/protect/process" class="card stack">
         <input type="hidden" name="csrf" value="${escapeHtml(input.csrf)}" />
@@ -374,9 +415,11 @@ export function renderProtectClientPage(input: {
         <label class="field">Business purpose
           <input name="businessPurpose" value="${escapeHtml(d.businessPurpose ?? "")}" required />
         </label>
-        <div class="row-actions"><button type="submit">Continue</button></div>
+        <div class="row-actions">${back.buttonHtml}<button type="submit">Continue</button></div>
       </form>`;
   } else if (input.step === 3) {
+    const back = protectBackControls(input.csrf, 2, d);
+    backForms = back.formHtml;
     const existingOptions =
       registeredWorkflows.length === 0
         ? ""
@@ -435,9 +478,11 @@ export function renderProtectClientPage(input: {
             </label>
           </div>
         </fieldset>
-        <div class="row-actions"><button type="submit">Continue</button></div>
+        <div class="row-actions">${back.buttonHtml}<button type="submit">Continue</button></div>
       </form>`;
   } else if (input.step === 4) {
+    const back = protectBackControls(input.csrf, 3, d);
+    backForms = back.formHtml;
     body = `
       <form method="post" action="/protect/contract" class="card stack">
         <input type="hidden" name="csrf" value="${escapeHtml(input.csrf)}" />
@@ -470,9 +515,11 @@ export function renderProtectClientPage(input: {
           <input type="checkbox" name="evidenceAcknowledged" value="1" required />
           <span>I understand basic evidence does not prove destination delivery</span>
         </label>
-        <div class="row-actions"><button type="submit">Continue</button></div>
+        <div class="row-actions">${back.buttonHtml}<button type="submit">Continue</button></div>
       </form>`;
   } else if (input.step === 5) {
+    const back = protectBackControls(input.csrf, 4, d);
+    backForms = back.formHtml;
     body = `
       <form method="post" action="/protect/alerts" class="card stack">
         <input type="hidden" name="csrf" value="${escapeHtml(input.csrf)}" />
@@ -486,9 +533,11 @@ export function renderProtectClientPage(input: {
         <label class="field">Webhook URL
           <input name="url" required placeholder="https://..." />
         </label>
-        <div class="row-actions"><button type="submit">Create and test channel</button></div>
+        <div class="row-actions">${back.buttonHtml}<button type="submit">Create and test channel</button></div>
       </form>`;
   } else {
+    const back = protectBackControls(input.csrf, 5, d);
+    backForms = back.formHtml;
     body = `
       <form method="post" action="/protect/activate" class="card stack">
         <input type="hidden" name="csrf" value="${escapeHtml(input.csrf)}" />
@@ -506,7 +555,7 @@ export function renderProtectClientPage(input: {
           <input type="checkbox" name="acknowledgedNoAlertMode" value="1" />
           <span>Self-hosted local development: acknowledge no-alert mode</span>
         </label>
-        <div class="row-actions"><button type="submit">Activate monitoring</button></div>
+        <div class="row-actions">${back.buttonHtml}<button type="submit">Activate monitoring</button></div>
       </form>`;
   }
 
@@ -523,6 +572,7 @@ export function renderProtectClientPage(input: {
       <p class="page-subtitle">Connect a workflow and define what Quorum should expect.</p>
       ${renderStepper({ steps: PROTECT_STEPS, currentId: stepId })}
       ${body}
+      ${backForms}
     `,
   });
 }

@@ -457,6 +457,12 @@ h3.card-title, .card-title {
   align-items: center;
   margin-top: var(--space-5);
 }
+.wizard-back-bar {
+  margin: 0 0 var(--space-3);
+}
+.wizard-back-bar .btn-secondary {
+  margin: 0;
+}
 .summary-grid {
   display: grid;
   gap: var(--space-3);

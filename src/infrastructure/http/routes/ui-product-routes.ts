@@ -223,6 +223,33 @@ export function registerProductUiRoutes(
     );
   });
 
+  app.post("/protect/back", async (request, reply) => {
+    const session = deps.requireSession(request, reply);
+    if (
+      !session ||
+      !requireAdmin(session, reply) ||
+      !deps.assertCsrf(request, session, reply)
+    ) {
+      return;
+    }
+    const body = formBody(request);
+    const tid = deps.tenantId();
+    const parsed = Number.parseInt(body.to ?? "1", 10);
+    const step = Number.isFinite(parsed)
+      ? Math.min(Math.max(parsed, 1), 5)
+      : 1;
+    return reply.type("text/html").send(
+      renderProtectClientPage({
+        ...pageShell,
+        csrf: session.csrfToken,
+        step,
+        clients: listProtectClients(tid),
+        workflows: listProtectWorkflows(tid),
+        draft: body,
+      }),
+    );
+  });
+
   app.post("/protect/client", async (request, reply) => {
     const session = deps.requireSession(request, reply);
     if (

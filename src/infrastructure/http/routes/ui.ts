@@ -550,6 +550,8 @@ export function registerUiRoutes(
     }
     const body = formBody(request);
     const allowed: OnboardingStep[] = [
+      "choose_method",
+      "select_workflows",
       "define_contracts",
       "review_evidence",
       "configure_alerts",

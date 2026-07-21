@@ -584,4 +584,28 @@ describe("catalog product UX UI acceptance", () => {
 
     await app.close();
   });
+
+  it("protect wizard Back restores the previous step with draft fields", async () => {
+    const sqlite = openDb();
+    const clock = new FixedClock(new Date("2026-07-19T10:00:00.000Z"));
+    const { sessionId, csrf } = seedAdmin(sqlite, clock);
+    const app = await bootApp(sqlite, clock);
+
+    const back = await app.inject({
+      method: "POST",
+      url: "/protect/back",
+      headers: {
+        cookie: `${SESSION_COOKIE}=${sessionId}`,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      payload: `csrf=${encodeURIComponent(csrf)}&to=2&clientId=c-local&businessPurpose=Leads&templateId=custom`,
+    });
+    expect(back.statusCode).toBe(200);
+    expect(back.body).toContain("Identify the critical process");
+    expect(back.body).toContain('value="c-local"');
+    expect(back.body).toContain('value="Leads"');
+    expect(back.body).toContain('action="/protect/back"');
+
+    await app.close();
+  });
 });
