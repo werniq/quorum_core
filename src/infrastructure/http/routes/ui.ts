@@ -843,7 +843,7 @@ export function registerUiRoutes(
     };
     const flash =
       query.registered === "1"
-        ? "Workflow registered. Issue a push credential (or bind a connector), then define a contract in Protect a client or Onboarding."
+        ? "Workflow registered. Copy the Quorum workflow id from the table for QUORUM_WORKFLOW_ID, issue a push credential if needed, then define a contract and activate monitoring — Inactive means no active contract yet."
         : query.error === "duplicate"
           ? "A workflow with this n8n ID is already registered for this organization. Use a different ID, or open the existing workflow below."
           : query.error === "validation"

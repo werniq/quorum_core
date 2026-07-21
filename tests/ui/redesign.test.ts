@@ -173,6 +173,29 @@ describe("UI redesign copy and primitives", () => {
     expect(html).toContain("No workflows registered");
     expect(html).toContain('name="monitoringMethod" value="push"');
     expect(html).toContain("field-label");
+    expect(html).toContain("QUORUM_WORKFLOW_ID");
+  });
+
+  it("workflows page explains Inactive next steps and shows Quorum vs n8n ids", () => {
+    const html = renderWorkflowsPage({
+      csrf: "csrf-token",
+      workflows: [
+        {
+          id: "wf_quorum_9",
+          name: "Lead sync",
+          externalWorkflowId: "n8n-xyz",
+          monitoringMethod: "push",
+          isActive: false,
+        },
+      ],
+    });
+    expect(html).toContain("Quorum ID");
+    expect(html).toContain("wf_quorum_9");
+    expect(html).toContain("n8n-xyz");
+    expect(html).toContain("Inactive means there is no active contract yet");
+    expect(html).toContain("NOT_FOUND");
+    expect(html).toContain("Define contract &amp; activate");
+    expect(html).toContain('href="/protect"');
   });
 
   it("protect wizard uses human-readable stepper and monitoring cards", () => {

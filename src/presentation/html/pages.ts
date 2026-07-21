@@ -231,7 +231,7 @@ export function renderOnboardingPage(input: {
         <label class="field">
           <span class="field-label">n8n workflow ID</span>
           <input name="externalWorkflowId" required placeholder="Enter the ID from your n8n workflow" />
-          <p class="helper">Find it in the n8n workflow URL: <code>http://localhost:5678/workflow/{workflow-id}</code></p>
+          <p class="helper">From the n8n URL: <code>http://localhost:5678/workflow/{workflow-id}</code>. After registration, use the Quorum ID column for <code>QUORUM_WORKFLOW_ID</code> — not this n8n id.</p>
         </label>
         <fieldset class="stack" style="border:0;padding:0;margin:0">
           <legend class="field-label">Monitoring method</legend>
@@ -598,12 +598,17 @@ export function renderCredentialOncePage(input: {
       <h1 class="page-title">Push credential</h1>
       <div class="flash is-error" role="alert">Copy now. Quorum stores only encrypted material and will not show this secret again.</div>
       <div class="card stack">
-        <p>Workflow: <code>${escapeHtml(input.workflowId)}</code></p>
+        <p>Quorum workflow id: <code>${escapeHtml(input.workflowId)}</code></p>
+        <p class="helper">Use this value for <code>QUORUM_WORKFLOW_ID</code>. It is not the n8n workflow id from the n8n URL.</p>
         <p>Key id: <code>${escapeHtml(input.keyId)}</code></p>
         <p>Secret: <code>${escapeHtml(input.secret)}</code></p>
         <p>Ingest: <code>POST ${escapeHtml(input.ingestPath)}</code></p>
       </div>
-      <p><a class="btn" href="/catalog">Back to catalog</a></p>
+      <p class="helper">Credentials alone do not activate monitoring. Define a contract and activate it next.</p>
+      <div class="row-actions" style="justify-content:flex-start">
+        <a class="btn" href="/protect">Next: define contract &amp; activate</a>
+        <a class="btn btn-secondary" href="/workflows">Back to workflows</a>
+      </div>
     `,
   });
 }
@@ -660,14 +665,22 @@ export function renderWorkflowsPage(input: {
           : w.monitoringMethod === "poll"
             ? `<div class="helper">No connector bound</div>`
             : "";
+      const inactiveNext = w.isActive
+        ? ""
+        : `<div class="stack" style="gap:0.35rem;margin-top:0.5rem">
+            <p class="helper">Inactive means there is no active contract yet. Heartbeats return <code>NOT_FOUND</code> until you define a contract and activate monitoring.</p>
+            <a class="btn btn-secondary" href="/protect">Define contract &amp; activate</a>
+          </div>`;
       return `<tr>
         <td data-label="Name"><strong>${escapeHtml(w.name)}</strong></td>
         <td data-label="n8n ID"><code>${escapeHtml(w.externalWorkflowId)}</code></td>
+        <td data-label="Quorum ID"><code>${escapeHtml(w.id)}</code></td>
         <td data-label="Method">${escapeHtml(methodLabel)}</td>
         <td data-label="Status">${w.isActive ? `<span class="badge badge-status-healthy">Active</span>` : `<span class="badge badge-status-paused">Inactive</span>`}</td>
         <td data-label="Actions">
           ${w.monitoringMethod === "push" ? pushCredential : bindForm}
           ${bound}
+          ${inactiveNext}
         </td>
       </tr>`;
     })
@@ -681,7 +694,7 @@ export function renderWorkflowsPage(input: {
         </div>`
       : `<div class="card table-wrap" style="padding:0">
         <table class="responsive-cards">
-          <thead><tr><th>Name</th><th>n8n ID</th><th>Method</th><th>Status</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Name</th><th>n8n ID</th><th>Quorum ID</th><th>Method</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>`;
@@ -696,10 +709,11 @@ export function renderWorkflowsPage(input: {
     flashTone: input.flashTone ?? "error",
     body: `
       <h1 class="page-title">Workflows</h1>
-      <p class="page-subtitle">Register an n8n workflow before defining its monitoring contract.</p>
+      <p class="page-subtitle">Register an n8n workflow, then define a contract and activate monitoring. Registration alone does not accept heartbeats.</p>
       <form method="post" action="/workflows" class="card stack">
         <input type="hidden" name="csrf" value="${escapeHtml(input.csrf)}" />
         <h2 class="card-title">Register a workflow</h2>
+        <p class="helper">The n8n workflow id comes from the n8n URL. Quorum assigns a separate Quorum workflow id for <code>QUORUM_WORKFLOW_ID</code> after registration.</p>
         <label class="field">
           <span class="field-label">Workflow name</span>
           <input name="name" required placeholder="Lead synchronization" value="${escapeHtml(draft.name ?? "")}" />
@@ -707,7 +721,7 @@ export function renderWorkflowsPage(input: {
         <label class="field">
           <span class="field-label">n8n workflow ID</span>
           <input name="externalWorkflowId" required placeholder="Enter the ID from your n8n workflow" value="${escapeHtml(draft.externalWorkflowId ?? "")}" />
-          <p class="helper">Find it in the n8n workflow URL: <code>http://localhost:5678/workflow/{workflow-id}</code></p>
+          <p class="helper">From the n8n URL: <code>http://localhost:5678/workflow/{workflow-id}</code>. This is not the Quorum workflow id.</p>
         </label>
         <fieldset class="stack" style="border:0;padding:0;margin:0">
           <legend class="field-label">Monitoring method</legend>
