@@ -11,7 +11,7 @@ Offer self-hosted Quorum for n8n Contract Catalog (push + poll) + alerts when:
 
 Latest verification packet: [docs/verification/release-verification.md](./verification/release-verification.md) (2026-07-21).
 
-**Hosted SaaS production: NO-GO.** Billing and hosted runtime code are not part of the Community AGPL tree.
+**Hosted SaaS production: NO-GO.** Billing and hosted runtime code are not part of the Community Apache-2.0 tree.
 
 Not general GA for outcome verification of all workflows.
 
@@ -19,7 +19,7 @@ Not general GA for outcome verification of all workflows.
 
 | Gate                                             | Result (2026-07-21)                             |
 | ------------------------------------------------ | ----------------------------------------------- |
-| AGPL-3.0 public licence                          | Pass                                            |
+| Apache-2.0 public licence                        | Pass                                            |
 | `format:check` + lint / typecheck / build        | Pass                                            |
 | Unit + integration suites (`verify:self-hosted`) | 246 + staged suites; 0 skipped                  |
 | Domain coverage (`test:cov`)                     | ~98.9% statements / lines on gated domain files |

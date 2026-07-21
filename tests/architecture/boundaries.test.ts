@@ -68,7 +68,7 @@ describe("architecture boundaries", () => {
     expect(operations).toContain("two");
     expect(operations).toContain("never transmits");
     const license = fs.readFileSync(path.join(root, "LICENSE"), "utf8");
-    expect(license).toContain("GNU AFFERO GENERAL PUBLIC LICENSE");
+    expect(license).toContain("Apache License");
     const limitations = fs.readFileSync(
       path.join(root, "docs/known-limitations.md"),
       "utf8",

@@ -70,7 +70,7 @@ describe("release positioning and customer readiness", () => {
 
   it("OSS license and design-partner framing exist", () => {
     const license = readDoc("LICENSE");
-    expect(license).toContain("GNU AFFERO GENERAL PUBLIC LICENSE");
+    expect(license).toContain("Apache License");
     const decision = readDoc("docs/release-decision.md");
     const limitations = readDoc("docs/known-limitations.md");
     expect(decision).toMatch(/design.partner/i);

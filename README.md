@@ -48,7 +48,9 @@ Quorum detects:
 
 Quorum Community is **beta** software for self-hosted design partners. Expect rough edges, incomplete triage UI, and gaps listed below. Hosted multi-tenant SaaS is **not available** from this repository and is not production-ready.
 
-**Licence:** [AGPL-3.0](LICENSE)
+**Licence:** [Apache-2.0](LICENSE)
+
+Quorum Community (this repository) is licensed under the Apache License 2.0. Quorum Cloud (hosted SaaS) is separate proprietary code outside this repository — not a fork of this license.
 
 ## Quick start (Docker)
 

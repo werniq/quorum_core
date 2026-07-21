@@ -12,7 +12,7 @@ Updated 2026-07-21 after Community pre-release verification ([release-verificati
 6. Public copy must not claim general outcome verification across the entire n8n estate.
 7. Volume rules are created in the data model and evaluated by the watcher. There is no Protect-wizard step for volume rules yet.
 8. Incident triage fields exist in the database and repositories. Full triage UI is not complete.
-9. Hosted multi-tenant SaaS, Stripe checkout, and agency billing are **not** in the Community AGPL tree. Hosted production remains **NO-GO**.
+9. Hosted multi-tenant SaaS, Stripe checkout, and agency billing are **not** in the Community Apache-2.0 tree. Hosted production remains **NO-GO**.
 
 ## Runtime and ops
 
