@@ -14,6 +14,10 @@ data/
 *.sqlite
 *.sqlite-*
 
+# Generated verification artifacts (regenerate locally)
+docs/verification/ui-preview/
+docs/verification/artifacts/
+
 # Hosted SaaS / billing (not part of Community self-hosted tree)
 src/domain/billing/
 src/domain/saas/

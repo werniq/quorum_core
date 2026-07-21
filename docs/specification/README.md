@@ -103,7 +103,8 @@ Stage breakdown inside `verify:self-hosted`:
 
 Do not weaken or skip tests to make gates pass.
 
-Latest verification packet: [docs/verification/final-release-verification.md](../verification/final-release-verification.md).
+Latest verification packet: [docs/verification/release-verification.md](../verification/release-verification.md).  
+Historical July 2026 evidence: [docs/archive/2026-07-release-validation/](../archive/2026-07-release-validation/).
 
 ## Release decisions
 
@@ -129,15 +130,15 @@ Regenerate PNGs for the root README (requires `playwright` dev dependency):
 node scripts/capture-readme-screenshots.mjs
 ```
 
-Output: `docs/screenshots/*.png` from `docs/verification/ui-preview/*.html`.
+Output: `docs/screenshots/*.png` from generated `docs/verification/ui-preview/*.html` (gitignored; regenerate locally).
 
 ## Related docs
 
 - [architecture.md](../architecture.md)
 - [operations.md](../operations.md)
 - [security.md](../security.md)
-- [technical-implementation-and-assumptions.md](../technical-implementation-and-assumptions.md) (historical audit trail)
 - [positioning.md](../positioning.md)
+- [archive/2026-07-release-validation/](../archive/2026-07-release-validation/) (historical audits and raw evidence)
 
 ## Traceability (high level)
 

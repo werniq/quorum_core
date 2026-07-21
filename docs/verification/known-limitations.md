@@ -1,6 +1,6 @@
 # Known limitations
 
-Updated 2026-07-21 after Community pre-release verification (`docs/verification/final-release-verification.md`).
+Updated 2026-07-21 after Community pre-release verification (`docs/verification/release-verification.md`).
 
 ## Product scope
 

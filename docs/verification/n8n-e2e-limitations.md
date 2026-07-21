@@ -2,7 +2,7 @@
 
 Pinned image: `n8nio/n8n:1.95.3` (fallback pull: `n8nio/n8n:1.84.0` for the shorter e2e only).
 
-For the definitive real-container matrix (silent absence wall-clock, empty policies via SQL, poll checkpoint/restart), use `npm run test:e2e:n8n:real` (`scripts/verify-real-n8n-validation.mjs`). That script pins **1.95.3 with no fallback**, requires n8n Code-node HMAC for happy-path pushes, and writes `docs/verification/payloads/real-n8n-run.json`.
+For the definitive real-container matrix (silent absence wall-clock, empty policies via SQL, poll checkpoint/restart), use `npm run test:e2e:n8n:real` (`scripts/verify-real-n8n-validation.mjs`). That script pins **1.95.3 with no fallback**, requires n8n Code-node HMAC for happy-path pushes, and writes `docs/verification/artifacts/real-n8n-run.json` (gitignored). A snapshot from 2026-07-21 is archived at [docs/archive/2026-07-release-validation/payloads/real-n8n-run.json](../archive/2026-07-release-validation/payloads/real-n8n-run.json). Narrative results: [release-verification.md](./release-verification.md).
 
 ## What is real
 

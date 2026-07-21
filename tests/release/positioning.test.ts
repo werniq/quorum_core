@@ -70,7 +70,7 @@ describe("release positioning and customer readiness", () => {
   it("OSS license and design-partner plan exist", () => {
     const license = readDoc("LICENSE");
     expect(license).toContain("GNU AFFERO GENERAL PUBLIC LICENSE");
-    const plan = readDoc("docs/design-partner-validation.md");
+    const plan = readDoc("docs/internal/design-partner-validation.md");
     expect(plan).toContain("Protect a client");
     expect(plan).toContain("HubSpot");
     expect(assertNoProhibitedPositioning(plan)).toEqual([]);

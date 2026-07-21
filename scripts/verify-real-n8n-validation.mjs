@@ -42,7 +42,7 @@ const EVIDENCE_PATH = path.join(
   REPO_ROOT,
   "docs",
   "verification",
-  "payloads",
+  "artifacts",
   "real-n8n-run.json",
 );
 

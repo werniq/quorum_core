@@ -9,7 +9,7 @@ Offer self-hosted Quorum for n8n Contract Catalog (push + poll) + alerts when:
 - `docs/verification/known-limitations.md` is accepted
 - Owner completes `docs/verification/manual-owner-checklist.md` (including 24–48 h soak judgment)
 
-Latest verification packet: [docs/verification/final-release-verification.md](./verification/final-release-verification.md) (2026-07-21).
+Latest verification packet: [docs/verification/release-verification.md](./verification/release-verification.md) (2026-07-21).
 
 **Hosted SaaS production: NO-GO.** Billing and hosted runtime code are not part of the Community AGPL tree.
 
@@ -45,5 +45,5 @@ Not general GA for outcome verification of all workflows.
 
 Machine-readable readiness: `src/release/customer-readiness.ts`.
 
-Verification packet: `docs/verification/`.  
-Final real n8n report: `docs/verification/final-real-n8n-validation.md` (update from `payloads/real-n8n-run.json` when re-run).
+Verification packet: [docs/verification/release-verification.md](./verification/release-verification.md).  
+Historical evidence: [docs/archive/2026-07-release-validation/](./archive/2026-07-release-validation/). Re-runs write `docs/verification/artifacts/real-n8n-run.json` (gitignored).
