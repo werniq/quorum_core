@@ -69,13 +69,13 @@ describe("architecture boundaries", () => {
     expect(operations).toContain("never transmits");
     const license = fs.readFileSync(path.join(root, "LICENSE"), "utf8");
     expect(license).toContain("GNU AFFERO GENERAL PUBLIC LICENSE");
-    const positioning = fs.readFileSync(
-      path.join(root, "docs/positioning.md"),
+    const limitations = fs.readFileSync(
+      path.join(root, "docs/known-limitations.md"),
       "utf8",
     );
-    expect(positioning).toContain(
+    expect(limitations).toContain(
       "do not independently prove destination delivery",
     );
-    expect(positioning).toContain("HubSpot webinar registrations");
+    expect(limitations).toContain("HubSpot webinar registrations");
   });
 });

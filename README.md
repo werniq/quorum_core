@@ -10,6 +10,10 @@ n8n can show a green execution while the business outcome is wrong: the workflow
 
 Quorum is for teams running scheduled or event-driven n8n workflows who need a separate check on **whether the process is still happening on time** and **whether reported volume looks sane**. It is a self-hosted Contract Catalog with push heartbeats, optional n8n polling, incidents, and alerts.
 
+Open source, zero telemetry, and designed so your workflow data can stay in your infrastructure. Reliability evidence that protects client retainers and supports proactive maintenance reporting.
+
+Quorum shows what your n8n workflows are expected to do, whether reported volume stayed inside declared bands, and alerts you when they fail, stop reporting, or produce an unacceptable result.
+
 Quorum detects:
 
 - **Silent absence** when expected heartbeats or poll imports stop arriving
@@ -55,7 +59,8 @@ cp .env.example .env
 Edit `.env` and set at least:
 
 - `QUORUM_CREDENTIAL_KEK` - long random secret; back it up separately from the database
-- `QUORUM_SETUP_TOKEN` - at least 24 characters; used once to create the first admin
+
+By default `QUORUM_UI_AUTH_ENABLED=false`, so you can open the UI without a setup token or login. For any shared or production host, set `QUORUM_UI_AUTH_ENABLED=true` and provide `QUORUM_SETUP_TOKEN` (at least 24 characters).
 
 ```bash
 docker compose up --build -d
@@ -65,11 +70,15 @@ Open [http://127.0.0.1:3000/](http://127.0.0.1:3000/). If port 3000 is taken, se
 
 ### First-time setup
 
+**Auth off (default):** open `/` or `/catalog` and walk through onboarding (monitoring method → workflows → contracts → alerts → activate).
+
+**Auth on** (`QUORUM_UI_AUTH_ENABLED=true`):
+
 1. Visit `/setup` and create the local admin with your setup token.
-2. Complete onboarding: monitoring method, register workflow(s), define contract(s), review evidence, configure and test an alert channel, activate.
+2. Complete onboarding as above.
 3. Open the Contract Catalog at `/catalog`.
 
-There is no default password. If you omit `QUORUM_SETUP_TOKEN`, a one-time token may appear in container logs on first boot. Prefer supplying your own token.
+There is no default password. When auth is on and you omit `QUORUM_SETUP_TOKEN`, a one-time token may appear in container logs on first boot. Prefer supplying your own token.
 
 ## Connect n8n
 
@@ -145,20 +154,21 @@ Full self-hosted verification gate (unit tests, Docker compose smoke, restart pe
 npm run verify:self-hosted
 ```
 
-Architecture and implementation notes for contributors and coding agents: [docs/specification/README.md](docs/specification/README.md).
+Architecture: [docs/architecture.md](docs/architecture.md). Release gate: [docs/release-decision.md](docs/release-decision.md). Verification packet: [docs/verification/release-verification.md](docs/verification/release-verification.md).
 
 ## Limitations
 
-Heartbeats and poll imports prove that **a run was reported** with the status and counts you send. They do **not** prove that a CRM row arrived, an email was delivered, or that downstream data is complete. Medium and High evidence add stronger checks where implemented; see the contract detail page.
+Heartbeats and poll imports prove that **a run was reported** with the status and counts you send. They do **not** prove that a CRM row arrived, an email was delivered, or that downstream data is complete. Heartbeat and volume-band evidence can be self-reported. They do not independently prove destination delivery. Medium and High evidence add stronger checks where implemented; see the contract detail page.
 
 Other honest limits:
 
-- HubSpot to Zoom outcome reconciliation is Preview only.
+- HubSpot webinar registrations → Zoom webinar registrants is **Preview** only.
 - Volume rules exist in the data model; the Protect wizard does not configure them yet.
 - Incident triage fields exist in the database; full triage UI is incomplete.
 - Real Slack or SMTP delivery requires your credentials and a manual send test.
-- Hosted multi-tenant SaaS, Stripe checkout, and agency billing are **not** in this Community tree.
+- Hosted multi-tenant SaaS, Stripe checkout, and agency billing are **not** in this Community tree (**NO-GO**).
+- Zapier / Make and general outcome verification for all workflows are **Planned**. Contract Catalog, push heartbeats, and polling are **Available**.
 
-Full list: [docs/verification/known-limitations.md](docs/verification/known-limitations.md).
+Full list: [docs/known-limitations.md](docs/known-limitations.md).
 
 Privacy: [docs/privacy.md](docs/privacy.md).

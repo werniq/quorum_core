@@ -6,8 +6,8 @@ Offer self-hosted Quorum for n8n Contract Catalog (push + poll) + alerts when:
 
 - `npm run verify:self-hosted` is green
 - `npm run test:e2e:n8n:real` is green (n8n-authored HMAC, wall-clock silent absence, recovery, auth/idempotency, poll UI bind)
-- `docs/verification/known-limitations.md` is accepted
-- Owner completes `docs/verification/manual-owner-checklist.md` (including 24–48 h soak judgment)
+- [docs/known-limitations.md](./known-limitations.md) is accepted
+- Owner completes a 24–48 h soak judgment (`scripts/start-soak-test.sh` / `scripts/check-soak-test.sh`; see known-limitations)
 
 Latest verification packet: [docs/verification/release-verification.md](./verification/release-verification.md) (2026-07-21).
 
@@ -37,7 +37,7 @@ Not general GA for outcome verification of all workflows.
 
 ## Unsupported claims
 
-- End-to-end verification for all n8n workflows (Planned)
+- General outcome verification across the entire n8n estate (Planned)
 - Zapier / Make (Planned)
 - Guaranteed delivery / product stops all incidents
 - Production SaaS readiness or checkout
@@ -46,4 +46,4 @@ Not general GA for outcome verification of all workflows.
 Machine-readable readiness: `src/release/customer-readiness.ts`.
 
 Verification packet: [docs/verification/release-verification.md](./verification/release-verification.md).  
-Historical evidence: [docs/archive/2026-07-release-validation/](./archive/2026-07-release-validation/). Re-runs write `docs/verification/artifacts/real-n8n-run.json` (gitignored).
+Re-runs of real n8n validation write `docs/verification/artifacts/real-n8n-run.json` (gitignored).

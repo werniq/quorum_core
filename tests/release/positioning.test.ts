@@ -27,28 +27,29 @@ function readDoc(rel: string): string {
 
 describe("release positioning and customer readiness", () => {
   it("keeps brand promises and required limitations in public docs", () => {
-    const landing = readDoc("docs/landing.md");
-    const positioning = readDoc("docs/positioning.md");
     const readme = readDoc("README.md");
+    const limitations = readDoc("docs/known-limitations.md");
     const decision = readDoc("docs/release-decision.md");
+    const corpus = [readme, limitations, decision].join("\n");
 
-    for (const doc of [landing, positioning, readme]) {
-      expect(doc).toContain(BRAND_PROMISE);
+    for (const doc of [readme, limitations, decision]) {
       expect(assertNoProhibitedPositioning(doc)).toEqual([]);
     }
 
-    expect(landing).toContain(SELF_HOSTED_IDENTITY);
-    expect(landing).toContain(AGENCY_VALUE);
-    expect(landing).toContain(PHASE_A_ALLOWED_CLAIM);
-    expect(landing).toContain(PHASE_A_REQUIRED_LIMITATION);
-    expect(landing).toContain(PHASE_B_SUPPORTED_PATH);
-    expect(landing).toContain("**Preview**");
-    expect(landing).toContain("**Available**");
-    expect(landing).toContain("**Planned**");
+    expect(readme).toContain(BRAND_PROMISE);
+    expect(readme).toContain(SELF_HOSTED_IDENTITY);
+    expect(readme).toContain(AGENCY_VALUE);
+    expect(readme).toContain(PHASE_A_ALLOWED_CLAIM);
+    expect(readme).toContain(PHASE_A_REQUIRED_LIMITATION);
+    expect(corpus).toContain(PHASE_B_SUPPORTED_PATH);
+    expect(limitations).toContain(PHASE_B_ALLOWED_CLAIM);
+    expect(corpus).toContain("**Preview**");
+    expect(corpus).toContain("**Available**");
+    expect(corpus).toContain("**Planned**");
 
-    expect(positioning).toContain(PHASE_B_ALLOWED_CLAIM);
     expect(decision).toMatch(/\bGO\b|early agency|design.partner/i);
     expect(decision).toMatch(/not.*general GA|not.*GA for|Not general GA/i);
+    expect(decision).toMatch(/Hosted SaaS.*NO-GO|NO-GO/);
   });
 
   it("feature matrix uses explicit availability labels", () => {
@@ -67,21 +68,31 @@ describe("release positioning and customer readiness", () => {
     );
   });
 
-  it("OSS license and design-partner plan exist", () => {
+  it("OSS license and design-partner framing exist", () => {
     const license = readDoc("LICENSE");
     expect(license).toContain("GNU AFFERO GENERAL PUBLIC LICENSE");
-    const plan = readDoc("docs/internal/design-partner-validation.md");
-    expect(plan).toContain("Protect a client");
-    expect(plan).toContain("HubSpot");
-    expect(assertNoProhibitedPositioning(plan)).toEqual([]);
+    const decision = readDoc("docs/release-decision.md");
+    const limitations = readDoc("docs/known-limitations.md");
+    expect(decision).toMatch(/design.partner/i);
+    expect(decision).toContain("NO-GO");
+    expect(limitations).toContain("HubSpot");
+    expect(limitations).toMatch(/Protect/i);
+    expect(assertNoProhibitedPositioning(decision)).toEqual([]);
+    expect(assertNoProhibitedPositioning(limitations)).toEqual([]);
   });
 
-  it("static landing page mirrors claim rules", () => {
-    const html = readDoc("docs/landing.html").replace(/\s+/g, " ");
-    expect(html).toContain(BRAND_PROMISE);
-    expect(html).toContain(PHASE_A_REQUIRED_LIMITATION);
-    expect(html).toContain("Preview");
-    expect(assertNoProhibitedPositioning(html)).toEqual([]);
-    expect(html).not.toMatch(/fonts\.googleapis|cdn\.jsdelivr/i);
+  it("positioning source of truth stays outside domain", () => {
+    expect(
+      fs.existsSync(path.join(root, "src/product/positioning.ts")),
+    ).toBe(true);
+    const positioning = readDoc("src/product/positioning.ts");
+    expect(positioning).toContain(BRAND_PROMISE);
+    expect(positioning).toContain(PHASE_A_REQUIRED_LIMITATION);
+    expect(positioning).toContain("PROHIBITED_POSITIONING_PHRASES");
+    expect(positioning).not.toMatch(/from\s+["'][^"']*\/domain\//);
+    const readme = readDoc("README.md");
+    expect(readme).not.toMatch(/fonts\.googleapis|cdn\.jsdelivr/i);
+    expect(assertNoProhibitedPositioning(readme)).toEqual([]);
   });
 });
+

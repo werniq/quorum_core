@@ -4,11 +4,11 @@
 **Host:** Windows 10, Node v24.17.0, Docker 28.4.0  
 **Package:** `quorum@0.1.0`
 
-Canonical packet for the latest self-hosted Community gate. Historical remediation notes and raw evidence from this cycle live under [docs/archive/2026-07-release-validation/](../archive/2026-07-release-validation/).
+Canonical packet for the latest self-hosted Community gate. Prior cycle remediation notes and raw JSON evidence were archival only and are not retained in-tree; re-run the commands below for fresh machine evidence.
 
 **Decisions:** Self-hosted Community **CONDITIONAL GO** (owner 24–48 h soak still required). Hosted SaaS **NO-GO**.
 
-Related: [release-decision.md](../release-decision.md) · [known-limitations.md](./known-limitations.md) · [manual-owner-checklist.md](./manual-owner-checklist.md) · [manual-soak-test.md](./manual-soak-test.md) · [n8n-e2e-limitations.md](./n8n-e2e-limitations.md)
+Related: [release-decision.md](../release-decision.md) · [known-limitations.md](../known-limitations.md)
 
 ## Commands run
 
@@ -43,7 +43,7 @@ Related: [release-decision.md](../release-decision.md) · [known-limitations.md]
 | test:restart | pass (persistence, wrong KEK → 401, no KEK in logs) |
 | test:e2e:n8n | pass (n8n `1.95.3`, webhook HMAC, auth, idempotency, poll UI) |
 
-**Warnings (non-failing):** `npm warn Unknown env config "devdir"`; `DEP0190` child_process shell deprecation; Docker build deprecation notices; `npm audit` 4 moderate / 1 high (dev tree). Full 60 s silent absence is **not** in `test:e2e:n8n` (see `test:e2e:n8n:real`).
+**Warnings (non-failing):** `npm warn Unknown env config "devdir"`; `DEP0190` child_process shell deprecation; Docker build deprecation notices; `npm audit` 4 moderate / 1 high (dev tree). Full 60 s silent absence is **not** in `test:e2e:n8n` (see `test:e2e:n8n:real` and [known-limitations.md](../known-limitations.md)).
 
 **Retries:** none automated; manual re-runs after format/lint/Docker fixes only.
 
@@ -63,7 +63,7 @@ Entrypoints exercised: `src/main.ts` (self-hosted path), `docker-compose.yml`, `
 
 ## 3. Real n8n validation (`test:e2e:n8n:real`)
 
-Archived machine evidence: [archive payloads/real-n8n-run.json](../archive/2026-07-release-validation/payloads/real-n8n-run.json) (`ok: true`). Re-runs write to `docs/verification/artifacts/real-n8n-run.json` (gitignored).
+Machine evidence from this cycle: `ok: true`. Re-runs write `docs/verification/artifacts/real-n8n-run.json` (gitignored).
 
 | Item | Value |
 | ---- | ----- |
@@ -123,7 +123,7 @@ Confirmed this pass:
 | ----- | ------ |
 | Force `verifyHeartbeatSignature` always true | required suites **fail** |
 | Restore HMAC | suites **pass** (`tests/security/heartbeat-hmac-guards.test.ts`) |
-| Ops audit (`ops_audit_events`) | covered; see [audit-coverage-matrix.md](./audit-coverage-matrix.md) |
+| Ops audit (`ops_audit_events`) | covered; immutable table + secret-stripping details ([security.md](../security.md)) |
 | `networkPolicy: self_hosted_local` | private HTTP n8n allowed; cloud metadata still blocked |
 
 Remaining: single-tenant JSON APIs; hosted SaaS not in Community tree.
@@ -139,7 +139,7 @@ Remaining: single-tenant JSON APIs; hosted SaaS not in Community tree.
 | Evidence level | badge + expandable explanation |
 | Workflow health vs alert health | separate badges |
 
-Screenshots for README: `docs/screenshots/*.png` via `npx tsx scripts/generate-ui-previews.mjs` then `node scripts/capture-readme-screenshots.mjs` (preview HTML is generated locally, not committed).
+Screenshots for README: `docs/screenshots/*.png` via `npx tsx scripts/generate-ui-previews.mjs` then `node scripts/capture-readme-screenshots.mjs` (preview HTML is generated locally under `docs/verification/ui-preview/`, gitignored, not committed).
 
 ## 8. Re-running the gate
 
@@ -150,4 +150,4 @@ npm run verify:self-hosted
 npm run test:e2e:n8n:real
 ```
 
-Do not weaken or skip tests to make gates pass. Owner soak: [manual-soak-test.md](./manual-soak-test.md).
+Do not weaken or skip tests to make gates pass. Owner soak: [known-limitations.md](../known-limitations.md#owner-soak-24–48-h).

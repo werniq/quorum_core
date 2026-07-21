@@ -67,7 +67,7 @@ export const EARLY_CUSTOMER_READINESS: ReadinessCriterion[] = [
       "No public page claims broader than current evidence capabilities",
     status: "met",
     evidence:
-      "docs/landing.md + tests/release/positioning.test.ts (product/ positioning)",
+      "README.md + docs/known-limitations.md + tests/release/positioning.test.ts (src/product/positioning.ts)",
   },
 ];
 
