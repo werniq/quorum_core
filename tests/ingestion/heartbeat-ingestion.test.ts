@@ -334,6 +334,82 @@ describe("secure heartbeat ingestion", () => {
       payload: signed.rawBody,
     });
     expect(missing.statusCode).toBe(404);
+    expect(missing.json()).toEqual({ error: { code: "NOT_FOUND" } });
+    await app.close();
+  });
+
+  it("returns 409 CONTRACT_NOT_ACTIVE for inactive workflow or missing active contract", async () => {
+    const sqlite = openDb();
+    const { workflowId, keyId, ingest, env } = seedWorkflow(sqlite);
+    const signed = signedRequest({
+      workflowId,
+      keyId,
+      idempotencyKey: "inactive-1",
+      body: {
+        schemaVersion: 1,
+        executedAt: "2026-07-18T08:00:00Z",
+        status: "success",
+        itemsProcessed: 1,
+      },
+    });
+    const app = await buildApp({
+      env,
+      getSchemaReadiness: () => ({ status: "ready", appliedMigrations: [] }),
+      ingestHeartbeat: ingest,
+    });
+
+    sqlite.prepare(`UPDATE workflows SET is_active = 0 WHERE id = ?`).run(workflowId);
+    const inactive = await app.inject({
+      method: "POST",
+      url: signed.path,
+      headers: {
+        "content-type": "application/json",
+        "x-quorum-key-id": keyId,
+        "x-quorum-timestamp": signed.timestampSeconds,
+        "x-quorum-idempotency-key": "inactive-1",
+        "x-quorum-signature": signed.signature,
+      },
+      payload: signed.rawBody,
+    });
+    expect(inactive.statusCode).toBe(409);
+    expect(inactive.json()).toMatchObject({
+      error: {
+        code: "CONTRACT_NOT_ACTIVE",
+        message: expect.stringContaining("activate monitoring"),
+      },
+    });
+
+    sqlite.prepare(`UPDATE workflows SET is_active = 1 WHERE id = ?`).run(workflowId);
+    sqlite
+      .prepare(`UPDATE workflow_contracts SET is_active = 0 WHERE workflow_id = ?`)
+      .run(workflowId);
+    const noContract = signedRequest({
+      workflowId,
+      keyId,
+      idempotencyKey: "no-contract-1",
+      body: {
+        schemaVersion: 1,
+        executedAt: "2026-07-18T08:00:00Z",
+        status: "success",
+        itemsProcessed: 1,
+      },
+    });
+    const missingContract = await app.inject({
+      method: "POST",
+      url: noContract.path,
+      headers: {
+        "content-type": "application/json",
+        "x-quorum-key-id": keyId,
+        "x-quorum-timestamp": noContract.timestampSeconds,
+        "x-quorum-idempotency-key": "no-contract-1",
+        "x-quorum-signature": noContract.signature,
+      },
+      payload: noContract.rawBody,
+    });
+    expect(missingContract.statusCode).toBe(409);
+    expect(missingContract.json()).toMatchObject({
+      error: { code: "CONTRACT_NOT_ACTIVE" },
+    });
     await app.close();
   });
 

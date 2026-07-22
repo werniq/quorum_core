@@ -40,7 +40,7 @@ Rules:
 - Hosted / public n8n polling uses HTTPS-only egress with DNS/IP checks, redirect re-validation,
   timeouts, and response-size limits. Private/link-local/metadata destinations are rejected for
   hosted policy. Self-hosted Community may allow LAN `http://` n8n via `networkPolicy: self_hosted_local`
-  (cloud metadata stays blocked). Push heartbeats remain the recommended path for private n8n.
+  (cloud metadata stays blocked). Polling is the easiest onboarding path; push heartbeats remain available for detailed signed reporting.
 - Watcher liveness is exposed at `GET /health/watcher` and must be monitored by an external
   uptime check; the endpoint is non-200 when evaluations are stale.
 

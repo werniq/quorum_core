@@ -31,9 +31,17 @@ export type IngestHeartbeatResult =
   | { status: "conflict" }
   | { status: "unauthorized" }
   | { status: "not_found" }
+  | {
+      status: "contract_not_active";
+      /** Optional human hint; clients may ignore and read only `code`. */
+      message: string;
+    }
   | { status: "bad_request"; code: string }
   | { status: "rate_limited" }
   | { status: "not_ready" };
+
+const CONTRACT_NOT_ACTIVE_MESSAGE =
+  "Monitoring is not active for this Quorum workflow id. Define a contract and activate monitoring in Quorum (Workflows → Protect), then retry. Do not use the n8n workflow id from the n8n URL here.";
 
 export interface IngestHeartbeatCommand {
   workflowId: string;
@@ -72,8 +80,14 @@ export function createIngestHeartbeatHandler(deps: {
       | { id: string; tenant_id: string; is_active: number }
       | undefined;
 
-    if (!workflow || !workflow.is_active) {
+    if (!workflow) {
       return { status: "not_found" };
+    }
+    if (!workflow.is_active) {
+      return {
+        status: "contract_not_active",
+        message: CONTRACT_NOT_ACTIVE_MESSAGE,
+      };
     }
 
     const tenantId = workflow.tenant_id;
@@ -248,7 +262,10 @@ export function createIngestHeartbeatHandler(deps: {
       .get(tenantId, command.workflowId) as Record<string, unknown> | undefined;
 
     if (!contract) {
-      return { status: "not_found" };
+      return {
+        status: "contract_not_active",
+        message: CONTRACT_NOT_ACTIVE_MESSAGE,
+      };
     }
 
     const classified = classifyInboundHeartbeatPayload(parsed, {

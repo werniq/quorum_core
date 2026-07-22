@@ -438,7 +438,7 @@ export function renderProtectClientPage(input: {
         <input type="hidden" name="businessPurpose" value="${escapeHtml(d.businessPurpose ?? "")}" />
         <input type="hidden" name="cadenceValue" value="${escapeHtml(d.cadenceValue ?? "15")}" />
         <h2 class="card-title">Select a workflow</h2>
-        <p class="helper">Use a workflow you already registered on the Workflows page, or register a new one here. The Quorum workflow id (for <code>QUORUM_WORKFLOW_ID</code>) is not the n8n workflow id from the n8n URL.</p>
+        <p class="helper">Use a workflow you already registered on the Workflows page, or register a new one here. The <strong>Quorum workflow ID</strong> (push signing / <code>QUORUM_WORKFLOW_ID</code>) is not the <strong>n8n workflow ID</strong> from the n8n URL.</p>
         ${
           registeredWorkflows.length > 0
             ? `<label class="field">Existing registered workflow
@@ -457,23 +457,23 @@ export function renderProtectClientPage(input: {
         </label>
         <label class="field">n8n workflow ID
           <input name="externalWorkflowId" placeholder="Enter the ID from your n8n workflow" value="${escapeHtml(d.externalWorkflowId ?? "")}" />
-          <p class="helper">From the n8n URL: <code>http://localhost:5678/workflow/{workflow-id}</code>. This is not the Quorum workflow id.</p>
+          <p class="helper">From the n8n URL: <code>http://localhost:5678/workflow/{workflow-id}</code>. This is the <strong>n8n workflow ID</strong>, not the Quorum workflow ID.</p>
         </label>
         <fieldset class="stack" style="border:0;padding:0;margin:0">
           <legend class="field-label">Monitoring method</legend>
           <div class="radio-card-group" role="radiogroup" aria-label="Monitoring method">
             <label class="radio-card">
-              <input type="radio" name="monitoringMethod" value="push"${d.monitoringMethod !== "poll" ? " checked" : ""} />
+              <input type="radio" name="monitoringMethod" value="poll"${d.monitoringMethod !== "push" ? " checked" : ""} />
               <span>
-                <span class="radio-card-title">Push heartbeats <span class="badge badge-rec">Recommended</span></span>
-                <p class="radio-card-desc">Best for precise status, item counts, failures, and immediate reporting.</p>
+                <span class="radio-card-title">Connect n8n <span class="badge badge-rec">Easiest</span></span>
+                <p class="radio-card-desc">URL + API key. No workflow changes or n8n env vars.</p>
               </span>
             </label>
             <label class="radio-card">
-              <input type="radio" name="monitoringMethod" value="poll"${d.monitoringMethod === "poll" ? " checked" : ""} />
+              <input type="radio" name="monitoringMethod" value="push"${d.monitoringMethod === "push" ? " checked" : ""} />
               <span>
-                <span class="radio-card-title">Connect n8n</span>
-                <p class="radio-card-desc">Quorum reads workflow executions through the n8n API.</p>
+                <span class="radio-card-title">Push heartbeats</span>
+                <p class="radio-card-desc">More detailed reporting. Edit one n8n setup node; HMAC secret in a Crypto credential when supported.</p>
               </span>
             </label>
           </div>

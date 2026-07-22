@@ -91,6 +91,13 @@ function mapIngestResult(
       return reply.code(401).send({ error: { code: "UNAUTHORIZED" } });
     case "not_found":
       return reply.code(404).send({ error: { code: "NOT_FOUND" } });
+    case "contract_not_active":
+      return reply.code(409).send({
+        error: {
+          code: "CONTRACT_NOT_ACTIVE",
+          message: result.message,
+        },
+      });
     case "bad_request":
       return reply.code(400).send({ error: { code: result.code } });
     case "rate_limited":

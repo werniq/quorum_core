@@ -166,17 +166,17 @@ export function renderOnboardingPage(input: {
         <p class="helper">Choose how execution evidence reaches Quorum. You can change this later per workflow.</p>
         <div class="radio-card-group" role="radiogroup" aria-label="Monitoring method">
           <label class="radio-card">
-            <input type="radio" name="method" value="push" required />
+            <input type="radio" name="method" value="poll" required checked />
             <span>
-              <span class="radio-card-title">Push heartbeats <span class="badge badge-rec">Recommended</span></span>
-              <p class="radio-card-desc">The workflow sends signed execution results directly to Quorum. Best for failures, item counts, silent absence, and fast detection.</p>
+              <span class="radio-card-title">Connect n8n <span class="badge badge-rec">Easiest</span></span>
+              <p class="radio-card-desc">Quorum connects with your n8n URL and API key and imports execution history. No workflow changes, no n8n environment variables, no restart.</p>
             </span>
           </label>
           <label class="radio-card">
-            <input type="radio" name="method" value="poll" />
+            <input type="radio" name="method" value="push" />
             <span>
-              <span class="radio-card-title">Connect n8n</span>
-              <p class="radio-card-desc">Quorum connects to your n8n instance and imports execution history. Useful when you cannot modify the workflow.</p>
+              <span class="radio-card-title">Push heartbeats</span>
+              <p class="radio-card-desc">More detailed reporting (status, item counts, failures). Configure Quorum URL, Quorum workflow ID, and Key ID in an n8n setup node; store the HMAC secret in an n8n Crypto credential when your n8n version supports it.</p>
             </span>
           </label>
         </div>
@@ -231,23 +231,23 @@ export function renderOnboardingPage(input: {
         <label class="field">
           <span class="field-label">n8n workflow ID</span>
           <input name="externalWorkflowId" required placeholder="Enter the ID from your n8n workflow" />
-          <p class="helper">From the n8n URL: <code>http://localhost:5678/workflow/{workflow-id}</code>. After registration, use the Quorum ID column for <code>QUORUM_WORKFLOW_ID</code> — not this n8n id.</p>
+          <p class="helper">This is the <strong>n8n workflow ID</strong> from the n8n URL: <code>http://localhost:5678/workflow/{workflow-id}</code>. After registration, the Quorum ID column is the <strong>Quorum workflow ID</strong> used for push signing (<code>QUORUM_WORKFLOW_ID</code>) — not this n8n id.</p>
         </label>
         <fieldset class="stack" style="border:0;padding:0;margin:0">
           <legend class="field-label">Monitoring method</legend>
           <div class="radio-card-group" role="radiogroup" aria-label="Monitoring method">
             <label class="radio-card">
-              <input type="radio" name="monitoringMethod" value="push"${input.method !== "poll" ? " checked" : ""} required />
+              <input type="radio" name="monitoringMethod" value="poll"${input.method !== "push" ? " checked" : ""} required />
               <span>
-                <span class="radio-card-title">Push heartbeats <span class="badge badge-rec">Recommended</span></span>
-                <p class="radio-card-desc">Best for precise status, item counts, failures, and immediate reporting.</p>
+                <span class="radio-card-title">Connect n8n <span class="badge badge-rec">Easiest</span></span>
+                <p class="radio-card-desc">URL + API key only. No workflow changes or n8n env vars.</p>
               </span>
             </label>
             <label class="radio-card">
-              <input type="radio" name="monitoringMethod" value="poll"${input.method === "poll" ? " checked" : ""} />
+              <input type="radio" name="monitoringMethod" value="push"${input.method === "push" ? " checked" : ""} />
               <span>
-                <span class="radio-card-title">Connect n8n</span>
-                <p class="radio-card-desc">Quorum reads workflow executions through the n8n API.</p>
+                <span class="radio-card-title">Push heartbeats</span>
+                <p class="radio-card-desc">More detailed reporting. Edit one setup node in n8n; HMAC secret in a Crypto credential when supported.</p>
               </span>
             </label>
           </div>
@@ -598,13 +598,15 @@ export function renderCredentialOncePage(input: {
       <h1 class="page-title">Push credential</h1>
       <div class="flash is-error" role="alert">Copy now. Quorum stores only encrypted material and will not show this secret again.</div>
       <div class="card stack">
-        <p>Quorum workflow id: <code>${escapeHtml(input.workflowId)}</code></p>
-        <p class="helper">Use this value for <code>QUORUM_WORKFLOW_ID</code>. It is not the n8n workflow id from the n8n URL.</p>
-        <p>Key id: <code>${escapeHtml(input.keyId)}</code></p>
-        <p>Secret: <code>${escapeHtml(input.secret)}</code></p>
+        <p><strong>Quorum workflow ID:</strong> <code>${escapeHtml(input.workflowId)}</code></p>
+        <p class="helper">Paste into the n8n <strong>Quorum Setup</strong> node (or advanced env <code>QUORUM_WORKFLOW_ID</code>). This is not the <strong>n8n workflow ID</strong> from the n8n URL.</p>
+        <p><strong>Key ID:</strong> <code>${escapeHtml(input.keyId)}</code></p>
+        <p class="helper">Paste into the same setup node (or advanced env <code>QUORUM_KEY_ID</code>).</p>
+        <p><strong>HMAC secret:</strong> <code>${escapeHtml(input.secret)}</code></p>
+        <p class="helper">Store in an n8n <strong>Crypto</strong> credential when your n8n version supports it (≥ 2.7), or paste into the Crypto HMAC node Secret field. Do not commit it to workflow JSON. Advanced Docker/K8s: <code>QUORUM_HMAC_SECRET</code>.</p>
         <p>Ingest: <code>POST ${escapeHtml(input.ingestPath)}</code></p>
       </div>
-      <p class="helper">Credentials alone do not activate monitoring. Define a contract and activate it next.</p>
+      <p class="helper">Credentials alone do not activate monitoring. Define a contract and activate it next. Until then, push heartbeats return <code>CONTRACT_NOT_ACTIVE</code> (HTTP 409).</p>
       <div class="row-actions" style="justify-content:flex-start">
         <a class="btn" href="/protect">Next: define contract &amp; activate</a>
         <a class="btn btn-secondary" href="/workflows">Back to workflows</a>
@@ -635,7 +637,7 @@ export function renderWorkflowsPage(input: {
 }): string {
   const connectors = input.connectors ?? [];
   const draft = input.draft ?? {};
-  const method = draft.monitoringMethod === "poll" ? "poll" : "push";
+  const method = draft.monitoringMethod === "push" ? "push" : "poll";
   const connectorOptions = connectors
     .map(
       (c) =>
@@ -668,7 +670,7 @@ export function renderWorkflowsPage(input: {
       const inactiveNext = w.isActive
         ? ""
         : `<div class="stack" style="gap:0.35rem;margin-top:0.5rem">
-            <p class="helper">Inactive means there is no active contract yet. Heartbeats return <code>NOT_FOUND</code> until you define a contract and activate monitoring.</p>
+            <p class="helper">Inactive means there is no active contract yet. Push heartbeats return <code>CONTRACT_NOT_ACTIVE</code> (HTTP 409) until you define a contract and activate monitoring. An unknown Quorum workflow id still returns <code>NOT_FOUND</code>.</p>
             <a class="btn btn-secondary" href="/protect">Define contract &amp; activate</a>
           </div>`;
       return `<tr>
@@ -713,7 +715,7 @@ export function renderWorkflowsPage(input: {
       <form method="post" action="/workflows" class="card stack">
         <input type="hidden" name="csrf" value="${escapeHtml(input.csrf)}" />
         <h2 class="card-title">Register a workflow</h2>
-        <p class="helper">The n8n workflow id comes from the n8n URL. Quorum assigns a separate Quorum workflow id for <code>QUORUM_WORKFLOW_ID</code> after registration.</p>
+        <p class="helper">The <strong>n8n workflow ID</strong> comes from the n8n URL. Quorum assigns a separate <strong>Quorum workflow ID</strong> for the push signing path (<code>QUORUM_WORKFLOW_ID</code>) after registration.</p>
         <label class="field">
           <span class="field-label">Workflow name</span>
           <input name="name" required placeholder="Lead synchronization" value="${escapeHtml(draft.name ?? "")}" />
@@ -721,23 +723,23 @@ export function renderWorkflowsPage(input: {
         <label class="field">
           <span class="field-label">n8n workflow ID</span>
           <input name="externalWorkflowId" required placeholder="Enter the ID from your n8n workflow" value="${escapeHtml(draft.externalWorkflowId ?? "")}" />
-          <p class="helper">From the n8n URL: <code>http://localhost:5678/workflow/{workflow-id}</code>. This is not the Quorum workflow id.</p>
+          <p class="helper">From the n8n URL: <code>http://localhost:5678/workflow/{workflow-id}</code>. This is not the Quorum workflow ID.</p>
         </label>
         <fieldset class="stack" style="border:0;padding:0;margin:0">
           <legend class="field-label">Monitoring method</legend>
           <div class="radio-card-group" role="radiogroup" aria-label="Monitoring method">
             <label class="radio-card">
-              <input type="radio" name="monitoringMethod" value="push"${method !== "poll" ? " checked" : ""} required />
+              <input type="radio" name="monitoringMethod" value="poll"${method !== "push" ? " checked" : ""} required />
               <span>
-                <span class="radio-card-title">Push heartbeats <span class="badge badge-rec">Recommended</span></span>
-                <p class="radio-card-desc">The workflow sends signed execution results directly to Quorum.</p>
+                <span class="radio-card-title">Connect n8n <span class="badge badge-rec">Easiest</span></span>
+                <p class="radio-card-desc">URL + API key. No workflow changes or n8n env vars.</p>
               </span>
             </label>
             <label class="radio-card">
-              <input type="radio" name="monitoringMethod" value="poll"${method === "poll" ? " checked" : ""} />
+              <input type="radio" name="monitoringMethod" value="push"${method === "push" ? " checked" : ""} />
               <span>
-                <span class="radio-card-title">Connect n8n</span>
-                <p class="radio-card-desc">Quorum connects to your n8n instance and imports execution history.</p>
+                <span class="radio-card-title">Push heartbeats</span>
+                <p class="radio-card-desc">More detailed reporting via a signed setup node in n8n (no container restart).</p>
               </span>
             </label>
           </div>

@@ -337,7 +337,7 @@ export function registerProductUiRoutes(
     const existingWorkflowId = (body.existingWorkflowId ?? "").trim();
     const workflowName = (body.workflowName ?? "").trim();
     const externalWorkflowId = (body.externalWorkflowId ?? "").trim();
-    const monitoringMethod = body.monitoringMethod === "poll" ? "poll" : "push";
+    const monitoringMethod = body.monitoringMethod === "push" ? "push" : "poll";
     const draft = {
       clientId: body.clientId ?? "",
       templateId: body.templateId ?? "",
@@ -442,7 +442,7 @@ export function registerProductUiRoutes(
         step: 4,
         clients,
         workflows,
-        flash: `Workflow registered. Quorum workflow id: ${workflow.id} (for QUORUM_WORKFLOW_ID). Define the monitoring contract next.`,
+        flash: `Workflow registered. Quorum workflow ID: ${workflow.id} (for push signing / QUORUM_WORKFLOW_ID — not the n8n workflow ID). Define the monitoring contract next.`,
         flashTone: "success",
         draft: {
           ...draft,

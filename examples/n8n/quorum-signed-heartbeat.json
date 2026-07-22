@@ -1,5 +1,7 @@
 {
   "name": "Quorum signed heartbeat (Crypto nodes)",
+  "id": "quorum-signed-heartbeat-example",
+  "active": false,
   "nodes": [
     {
       "parameters": {
@@ -15,10 +17,10 @@
     },
     {
       "parameters": {
-        "jsCode": "// Build Quorum heartbeat body + signing inputs.\n// No require()/import of Node modules — Crypto nodes hash and HMAC.\n//\n// Config (prefer n8n process env; edit literals below if $env is blocked):\n//   QUORUM_WORKFLOW_ID, QUORUM_KEY_ID, QUORUM_BASE_URL\n// HMAC secret:\n//   - Default export: Crypto HMAC typeVersion 1 Secret = {{ $env.QUORUM_HMAC_SECRET }}\n//   - Or Crypto credentials (Crypto node v2, n8n >= 2.7): set QUORUM_USE_CRYPTO_CREDENTIAL=1\n// On n8n 2.x, env path also needs N8N_BLOCK_ENV_ACCESS_IN_NODE=false.\n\nconst CONFIG = {\n  workflowId: String($env.QUORUM_WORKFLOW_ID || '').trim(),\n  keyId: String($env.QUORUM_KEY_ID || '').trim(),\n  baseUrl: String($env.QUORUM_BASE_URL || '').trim(),\n  hmacSecret: String($env.QUORUM_HMAC_SECRET || '').trim(),\n  useCryptoCredential: String($env.QUORUM_USE_CRYPTO_CREDENTIAL || '').trim() === '1',\n};\n\n// Optional post-import overrides when $env access is blocked:\n// CONFIG.workflowId = 'YOUR_QUORUM_WORKFLOW_ID';\n// CONFIG.keyId = 'YOUR_KEY_ID';\n// CONFIG.baseUrl = 'http://host.docker.internal:3000';\n// CONFIG.useCryptoCredential = true;\n\nfunction requireValue(label, value) {\n  const s = value == null ? '' : String(value).trim();\n  if (!s || s.startsWith('REPLACE_') || s.startsWith('YOUR_')) {\n    throw new Error(\n      `Missing ${label}. Set it on the n8n process env (and N8N_BLOCK_ENV_ACCESS_IN_NODE=false on n8n 2.x), or edit CONFIG in Prepare Heartbeat.`,\n    );\n  }\n  return s;\n}\n\nconst workflowId = requireValue('QUORUM_WORKFLOW_ID', CONFIG.workflowId);\nconst keyId = requireValue('QUORUM_KEY_ID', CONFIG.keyId);\nconst baseUrl = requireValue('QUORUM_BASE_URL', CONFIG.baseUrl).replace(/\\/+$/, '');\n\nif (!CONFIG.useCryptoCredential && !CONFIG.hmacSecret) {\n  throw new Error(\n    'Missing QUORUM_HMAC_SECRET (set n8n env for the Crypto HMAC Secret expression, or set QUORUM_USE_CRYPTO_CREDENTIAL=1 when using Crypto credentials on Crypto node v2)',\n  );\n}\n\nconst path = `/api/v1/workflows/${workflowId}/heartbeats`;\n\nconst bodyObj = {\n  schemaVersion: 1,\n  executedAt: new Date().toISOString(),\n  status: 'success',\n  itemsProcessed: 1,\n  externalExecutionRef: `n8n-${Date.now()}`,\n};\nconst bodyRaw = JSON.stringify(bodyObj);\nconst timestampSeconds = String(Math.floor(Date.now() / 1000));\nconst idempotencyKey = `n8n-${timestampSeconds}-${Math.random().toString(16).slice(2)}`;\n\nreturn [{\n  json: {\n    url: `${baseUrl}${path}`,\n    path,\n    bodyRaw,\n    keyId,\n    timestampSeconds,\n    idempotencyKey,\n  },\n}];"
+        "jsCode": "// =============================================================================\n// Quorum Setup (edit me) — normal path: edit literals in this node only.\n// No n8n container env vars. No NODE_FUNCTION_ALLOW_BUILTIN. No restart.\n//\n// ID glossary (do not mix these up):\n//   n8n workflow ID     — from the n8n URL …/workflow/{id} (NOT used for signing)\n//   Quorum workflow ID  — from Quorum Workflows / Protect / credential page\n//   Key ID              — from Quorum “Issue push credential”\n//   HMAC secret         — store in Crypto credential (≥2.7) or Crypto HMAC Secret field\n// =============================================================================\n\nconst CONFIG = {\n  // Quorum base URL (no trailing slash), e.g. http://host.docker.internal:3000\n  quorumBaseUrl: 'REPLACE_QUORUM_BASE_URL',\n  // Quorum workflow ID — NOT the n8n workflow ID from the n8n URL\n  quorumWorkflowId: 'REPLACE_QUORUM_WORKFLOW_ID',\n  // Key ID from Quorum push credential\n  keyId: 'REPLACE_KEY_ID',\n};\n\n// Advanced Docker/K8s only: set the same names as process env and uncomment:\n// CONFIG.quorumBaseUrl = String($env.QUORUM_BASE_URL || CONFIG.quorumBaseUrl).trim();\n// CONFIG.quorumWorkflowId = String($env.QUORUM_WORKFLOW_ID || CONFIG.quorumWorkflowId).trim();\n// CONFIG.keyId = String($env.QUORUM_KEY_ID || CONFIG.keyId).trim();\n// (n8n 2.x may also need N8N_BLOCK_ENV_ACCESS_IN_NODE=false for $env.)\n\nfunction requireConfig(fieldName, label, value) {\n  const s = value == null ? '' : String(value).trim();\n  if (!s || s.startsWith('REPLACE_')) {\n    throw new Error(\n      `Missing ${label} (CONFIG.${fieldName}) in node \"Quorum Setup (edit me)\". ` +\n        'Set Quorum base URL, Quorum workflow ID (not the n8n workflow ID from the n8n URL), and Key ID. ' +\n        'HMAC secret belongs on the Crypto HMAC node Secret field or a Crypto credential — not in this node.',\n    );\n  }\n  return s;\n}\n\nconst quorumBaseUrl = requireConfig('quorumBaseUrl', 'Quorum base URL', CONFIG.quorumBaseUrl).replace(/\\/+$/, '');\nconst quorumWorkflowId = requireConfig('quorumWorkflowId', 'Quorum workflow ID', CONFIG.quorumWorkflowId);\nconst keyId = requireConfig('keyId', 'Key ID', CONFIG.keyId);\n\nconst path = `/api/v1/workflows/${quorumWorkflowId}/heartbeats`;\n\nconst bodyObj = {\n  schemaVersion: 1,\n  executedAt: new Date().toISOString(),\n  status: 'success',\n  itemsProcessed: 1,\n  externalExecutionRef: `n8n-${Date.now()}`,\n};\nconst bodyRaw = JSON.stringify(bodyObj);\nconst timestampSeconds = String(Math.floor(Date.now() / 1000));\nconst idempotencyKey = `n8n-${timestampSeconds}-${Math.random().toString(16).slice(2)}`;\n\nreturn [{\n  json: {\n    url: `${quorumBaseUrl}${path}`,\n    path,\n    bodyRaw,\n    keyId,\n    timestampSeconds,\n    idempotencyKey,\n  },\n}];"
       },
-      "id": "prepare-heartbeat",
-      "name": "Prepare Heartbeat",
+      "id": "quorum-setup",
+      "name": "Quorum Setup (edit me)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [220, 0]
@@ -55,14 +57,15 @@
         "binaryData": false,
         "value": "={{ $json.signingPayload }}",
         "dataPropertyName": "signature",
-        "secret": "={{ $env.QUORUM_HMAC_SECRET }}",
+        "secret": "REPLACE_HMAC_SECRET_IN_N8N_UI",
         "encoding": "hex"
       },
       "id": "hmac-signature",
       "name": "HMAC SHA256 Signature",
       "type": "n8n-nodes-base.crypto",
       "typeVersion": 1,
-      "position": [880, 0]
+      "position": [880, 0],
+      "notes": "HMAC secret: after import, paste the Quorum HMAC secret into this node's Secret field (typeVersion 1, portable). On n8n ≥ 2.7 prefer Crypto credentials: switch this node to typeVersion 2, create Crypto credentials with Hmac Secret, attach them. Never commit real secrets. Advanced: Secret = {{ $env.QUORUM_HMAC_SECRET }} with process env."
     },
     {
       "parameters": {
@@ -114,9 +117,9 @@
   ],
   "connections": {
     "Schedule Trigger": {
-      "main": [[{ "node": "Prepare Heartbeat", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "Quorum Setup (edit me)", "type": "main", "index": 0 }]]
     },
-    "Prepare Heartbeat": {
+    "Quorum Setup (edit me)": {
       "main": [[{ "node": "Hash Body SHA256", "type": "main", "index": 0 }]]
     },
     "Hash Body SHA256": {
@@ -132,20 +135,21 @@
   "settings": { "executionOrder": "v1" },
   "meta": {
     "quorumSetup": [
-      "1. In Quorum: register a push workflow, issue a credential, copy Workflow ID, Key ID, and Secret (secret shown once).",
-      "2. On the n8n process set QUORUM_WORKFLOW_ID, QUORUM_KEY_ID, QUORUM_HMAC_SECRET, QUORUM_BASE_URL. Do not put secrets in this JSON.",
-      "3. On n8n 2.x set N8N_BLOCK_ENV_ACCESS_IN_NODE=false so Code/Crypto expressions can read $env (or edit CONFIG literals / use Crypto credentials).",
-      "4. Import this workflow. Uses Crypto Hash + Crypto HMAC typeVersion 1 — no NODE_FUNCTION_ALLOW_BUILTIN.",
-      "5. Optional on n8n >= 2.7: upgrade HMAC node to Crypto v2, attach Crypto credentials (Hmac Secret), set QUORUM_USE_CRYPTO_CREDENTIAL=1.",
-      "6. Activate. Confirm Quorum catalog shows Healthy with Basic evidence after the first accepted heartbeat."
+      "1. Prefer Connect n8n (polling) in Quorum when you can — no workflow changes.",
+      "2. For push: in Quorum register push, issue credential, activate monitoring (else HTTP 409 CONTRACT_NOT_ACTIVE).",
+      "3. Copy Quorum workflow ID, Key ID, HMAC secret (not the n8n workflow ID).",
+      "4. Import this workflow. Edit node \"Quorum Setup (edit me)\": quorumBaseUrl, quorumWorkflowId, keyId.",
+      "5. HMAC secret: paste into Crypto HMAC Secret (typeVersion 1 export), or on n8n ≥ 2.7 switch HMAC node to Crypto v2 + Crypto credentials (Hmac Secret).",
+      "6. No NODE_FUNCTION_ALLOW_BUILTIN. No container env for the normal path. Activate and confirm HTTP 202.",
+      "7. Advanced: Docker/K8s process env QUORUM_* (+ N8N_BLOCK_ENV_ACCESS_IN_NODE=false on n8n 2.x) — see examples/n8n/README.md."
     ],
     "supportedN8nRange": "1.95.3 – current stable (Crypto typeVersion 1 export; Crypto credentials preferred on >= 2.7.0)",
-    "cryptoNode": "n8n-nodes-base.crypto typeVersion 1 (Secret parameter + $env). Crypto credentials require typeVersion 2 (n8n >= 2.7.0).",
+    "cryptoNode": "n8n-nodes-base.crypto typeVersion 1 (Secret parameter, filled in n8n UI after import). Crypto credentials require typeVersion 2 (n8n >= 2.7.0).",
     "placeholders": {
-      "QUORUM_WORKFLOW_ID": "set via $env (not embedded)",
-      "QUORUM_KEY_ID": "set via $env (not embedded)",
-      "QUORUM_HMAC_SECRET": "={{ $env.QUORUM_HMAC_SECRET }} on Crypto HMAC node",
-      "QUORUM_BASE_URL": "set via $env (not embedded)"
+      "quorumBaseUrl": "REPLACE_QUORUM_BASE_URL in Quorum Setup (edit me)",
+      "quorumWorkflowId": "REPLACE_QUORUM_WORKFLOW_ID in Quorum Setup (edit me) — Quorum id, not n8n URL id",
+      "keyId": "REPLACE_KEY_ID in Quorum Setup (edit me)",
+      "hmacSecret": "REPLACE_HMAC_SECRET_IN_N8N_UI on Crypto HMAC node, or Crypto credentials on >= 2.7"
     }
   }
 }

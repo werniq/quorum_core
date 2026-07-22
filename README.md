@@ -30,9 +30,9 @@ Quorum detects:
 
 **Contracts** tie a registered workflow to a cadence, evidence level, volume rules (optional), and alert routes. The Contract Catalog is the main surface: health, evidence strength, next deadline, and alert channel status in one place.
 
-**Push heartbeats** (recommended) are signed HTTP reports from a step at the end of your n8n workflow. Quorum verifies HMAC, timestamp, and idempotency before recording evidence.
+**Polling** (easiest) imports finished executions from n8n on a schedule. You add an n8n connector (URL + API key), register the workflow with method **Connect n8n**, and bind the connector in the UI — no workflow changes and no n8n environment variables.
 
-**Polling** imports finished executions from n8n on a schedule when you prefer not to add a push step. You add an n8n connector, register the workflow with method **Connect n8n**, and bind the connector in the UI.
+**Push heartbeats** are signed HTTP reports from a step at the end of your n8n workflow for more detailed reporting (status, item counts, failures). Quorum verifies HMAC, timestamp, and idempotency before recording evidence. Configure Quorum URL, Quorum workflow ID, and Key ID in one n8n setup node; store the HMAC secret in an n8n Crypto credential when your version supports it.
 
 **Incidents** open when the watcher finds a breach: silent absence, failure status, volume out of range, and similar contract violations. Each incident has a severity and summary.
 
@@ -110,28 +110,30 @@ On **Select a workflow**:
 - Prefer **Existing registered workflow** when the n8n workflow is already in Quorum (from **Workflows** or an earlier Protect run). Selecting it continues with that Quorum id — it does **not** re-register.
 - Only use **Register new…** when you need a new Quorum registration.
 
-Two different IDs matter:
+Two different IDs matter (plus credential fields for push):
 
 | ID | Where it comes from | Used for |
 | --- | --- | --- |
 | **n8n workflow ID** | n8n URL: `…/workflow/{id}` | Registration field “n8n workflow ID” / external id |
-| **Quorum workflow ID** | Assigned by Quorum (shown on **Workflows**, Protect flash, credential page, URL `/workflows/<id>`) | n8n env `QUORUM_WORKFLOW_ID` |
+| **Quorum workflow ID** | Assigned by Quorum (shown on **Workflows**, Protect flash, credential page, URL `/workflows/<id>`) | Push setup node / advanced env `QUORUM_WORKFLOW_ID` |
+| **Key ID** | Quorum “Issue push credential” | Push setup node / advanced `QUORUM_KEY_ID` |
+| **HMAC secret** | Shown once with the credential | n8n Crypto credential or Crypto HMAC Secret / advanced `QUORUM_HMAC_SECRET` |
 
-Monitoring method: choose **Push heartbeats** (recommended) unless you intentionally want polling (**Connect n8n**).
+Monitoring method: choose **Connect n8n** (easiest — URL + API key, no workflow changes) unless you need push detail.
 
 You can also register first on **Workflows**, then pick that workflow in Protect. Inactive on **Workflows** means there is no active contract yet — use the next-step hint to define and activate.
 
 ### 3. Issue a push credential (push only)
 
-On **Workflows**, for a push workflow, click **Issue push credential**. Quorum shows **Key ID** and **Secret once**. Copy them immediately; the secret is not shown again.
+On **Workflows**, for a push workflow, click **Issue push credential**. Quorum shows **Key ID** and **HMAC secret** once. Copy them immediately; the secret is not shown again.
 
-Map to n8n env (see below): `QUORUM_KEY_ID`, `QUORUM_HMAC_SECRET`, plus `QUORUM_WORKFLOW_ID` (Quorum id, not the n8n URL id).
+Paste into the n8n **Quorum Setup (edit me)** node and Crypto HMAC / Crypto credential (see [examples/n8n/README.md](examples/n8n/README.md)). Advanced fleets may map the same values to process env: `QUORUM_KEY_ID`, `QUORUM_HMAC_SECRET`, plus `QUORUM_WORKFLOW_ID` (Quorum id, not the n8n URL id).
 
 Credentials alone do **not** activate monitoring. The credential page links next to Protect for contract + activate.
 
 ### 4. Define the contract and activate
 
-A registered workflow stays **Inactive** until a contract is defined and monitoring is activated. Until then, push heartbeats return HTTP **404** with `NOT_FOUND`.
+A registered workflow stays **Inactive** until a contract is defined and monitoring is activated. Until then, push heartbeats return HTTP **409** with `CONTRACT_NOT_ACTIVE` (and a short `message` hint). An unknown Quorum workflow id still returns **404** `NOT_FOUND`.
 
 In Protect (or after registering on Workflows → Protect):
 
@@ -141,24 +143,18 @@ In Protect (or after registering on Workflows → Protect):
 
 After activation the workflow shows **Active**, the first expected deadline appears, and accepted heartbeats can satisfy the contract.
 
-### 5. Wire n8n (push)
+### 5. Wire n8n
 
-1. Start n8n with at least:
+**Polling (easiest):** add a connector, register with **Connect n8n**, bind, activate — skip the push example workflow.
 
-   ```bash
-   QUORUM_WORKFLOW_ID=<quorum-workflow-id>
-   QUORUM_KEY_ID=<key-id>
-   QUORUM_HMAC_SECRET=<secret-shown-once>
-   QUORUM_BASE_URL=http://host.docker.internal:3000   # or your Quorum URL
-   ```
+**Push (normal path — no n8n restart):**
 
-   On **n8n 2.x**, also set `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` so Code nodes / `$env` can read those variables (or use Crypto credentials on n8n ≥ 2.7 — see the n8n example README).
+1. Import [examples/n8n/quorum-signed-heartbeat.json](examples/n8n/quorum-signed-heartbeat.json) (Crypto Hash + Crypto HMAC; no `NODE_FUNCTION_ALLOW_BUILTIN`).
+2. Edit **Quorum Setup (edit me)**: Quorum base URL, Quorum workflow ID, Key ID.
+3. Paste the HMAC secret into the Crypto HMAC **Secret** field, or on n8n ≥ 2.7 attach **Crypto** credentials.
+4. Activate and run (or wait for the schedule). Expect **HTTP 202** and `{ "status": "accepted", ... }`.
 
-2. Import [examples/n8n/quorum-signed-heartbeat.json](examples/n8n/quorum-signed-heartbeat.json), activate the workflow, and run it (or wait for the schedule).
-
-3. Expect Quorum to accept the heartbeat with **HTTP 202** and `{ "status": "accepted", ... }`.
-
-Deep n8n details (supported versions, Crypto credentials, Cloud notes, legacy Code crypto): [examples/n8n/README.md](examples/n8n/README.md).
+**Advanced (Docker/K8s env):** set `QUORUM_WORKFLOW_ID`, `QUORUM_KEY_ID`, `QUORUM_HMAC_SECRET`, `QUORUM_BASE_URL` on the n8n process (and often `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` on n8n 2.x). Details: [examples/n8n/README.md](examples/n8n/README.md).
 
 ### 6. What “healthy” means
 
@@ -167,29 +163,33 @@ Deep n8n details (supported versions, Crypto credentials, Cloud notes, legacy Co
 - **Workflow Active** only means an active contract exists — not that the last run was healthy.
 - **Alert channel failing** is separate: delivery problems show in the catalog banner / cards without rewriting contract overdue state by themselves.
 
-If heartbeats still get `NOT_FOUND`, the workflow is still Inactive or you are using the wrong Quorum workflow id.
+If push heartbeats get `CONTRACT_NOT_ACTIVE`, the workflow is still Inactive. If you get `NOT_FOUND`, check you are using the Quorum workflow ID (not the n8n URL id).
 
 ## Connect n8n
 
-### Push heartbeats (recommended)
-
-Short checklist (same path as [Protect a client](#protect-a-client)):
-
-1. Register the workflow (Protect or **Workflows**), preferring an existing registration when it already exists.
-2. Issue a push credential; copy Key ID + Secret once.
-3. Define the contract and **activate** (Inactive → Active). Heartbeats are `NOT_FOUND` until then.
-4. Import and wire [examples/n8n/quorum-signed-heartbeat.json](examples/n8n/quorum-signed-heartbeat.json) (Crypto Hash + Crypto HMAC; no `NODE_FUNCTION_ALLOW_BUILTIN`).
-5. Set on the n8n process: `QUORUM_WORKFLOW_ID`, `QUORUM_KEY_ID`, `QUORUM_HMAC_SECRET`, `QUORUM_BASE_URL`. On n8n 2.x set `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` (or Crypto credentials on ≥ 2.7). Confirm **HTTP 202** accepted.
-
-Full n8n setup: [examples/n8n/README.md](examples/n8n/README.md).
-
-### Polling
+### Polling (easiest)
 
 1. Add an n8n connector under **Connectors** (base URL + API key).
 2. Register the workflow with monitoring method **Connect n8n** (or select that existing registration in Protect).
 3. Bind the connector, define the contract, activate.
 
-Community self-hosted builds allow LAN `http://` n8n URLs via `networkPolicy: self_hosted_local` in the default runtime.
+No workflow modification and no n8n environment variables. Community self-hosted builds allow LAN `http://` n8n URLs via `networkPolicy: self_hosted_local` in the default runtime.
+
+### Push heartbeats
+
+Short checklist (same path as [Protect a client](#protect-a-client)):
+
+1. Register the workflow (Protect or **Workflows**), preferring an existing registration when it already exists.
+2. Issue a push credential; copy Quorum workflow ID, Key ID, and HMAC secret once.
+3. Define the contract and **activate** (Inactive → Active). Heartbeats are `CONTRACT_NOT_ACTIVE` until then.
+4. Import [examples/n8n/quorum-signed-heartbeat.json](examples/n8n/quorum-signed-heartbeat.json) (Crypto Hash + Crypto HMAC; no `NODE_FUNCTION_ALLOW_BUILTIN`).
+5. Edit **Quorum Setup (edit me)** in the n8n UI; put the HMAC secret in a Crypto credential (≥ 2.7) or the Crypto HMAC Secret field. Confirm **HTTP 202** accepted.
+
+Full n8n setup (including advanced env vars): [examples/n8n/README.md](examples/n8n/README.md).
+
+### Advanced: n8n process environment variables
+
+Only when you inject secrets via Docker/K8s. Set `QUORUM_WORKFLOW_ID`, `QUORUM_KEY_ID`, `QUORUM_HMAC_SECRET`, `QUORUM_BASE_URL` on the n8n process (and often `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` on n8n 2.x). Not required for the normal polling or UI push paths.
 
 ## Alerts
 

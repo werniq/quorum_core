@@ -91,10 +91,12 @@ describe("UI redesign copy and primitives", () => {
       method: null,
     });
     expect(html).toContain("Monitoring method");
-    expect(html).toContain("Push heartbeats");
-    expect(html).toContain("Recommended");
     expect(html).toContain("Connect n8n");
+    expect(html).toContain("Easiest");
+    expect(html).toContain("Push heartbeats");
     expect(html).toContain('role="radiogroup"');
+    expect(html).toContain('name="method" value="poll"');
+    expect(html).toContain("No workflow changes");
     expect(html).not.toContain(">choose_method<");
     expect(html).toContain("--font-sans: Inter");
     expect(html).not.toContain("Georgia");
@@ -205,9 +207,10 @@ describe("UI redesign copy and primitives", () => {
     expect(html).toContain("http://localhost:5678/workflow/{workflow-id}");
     expect(html).toContain("Register workflow");
     expect(html).toContain("No workflows registered");
-    expect(html).toContain('name="monitoringMethod" value="push"');
+    expect(html).toContain('name="monitoringMethod" value="poll"');
     expect(html).toContain("field-label");
     expect(html).toContain("QUORUM_WORKFLOW_ID");
+    expect(html).toContain("Easiest");
   });
 
   it("workflows page explains Inactive next steps and shows Quorum vs n8n ids", () => {
@@ -227,7 +230,7 @@ describe("UI redesign copy and primitives", () => {
     expect(html).toContain("wf_quorum_9");
     expect(html).toContain("n8n-xyz");
     expect(html).toContain("Inactive means there is no active contract yet");
-    expect(html).toContain("NOT_FOUND");
+    expect(html).toContain("CONTRACT_NOT_ACTIVE");
     expect(html).toContain("Define contract &amp; activate");
     expect(html).toContain('href="/protect"');
   });

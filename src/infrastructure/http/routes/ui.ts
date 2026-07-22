@@ -475,7 +475,7 @@ export function registerUiRoutes(
       return;
     }
     const body = formBody(request);
-    const method = body.method === "poll" ? "poll" : "push";
+    const method = body.method === "push" ? "push" : "poll";
     onboarding.setStep(
       tenantId(),
       "select_workflows",
@@ -499,7 +499,7 @@ export function registerUiRoutes(
     const nowIso = deps.clock.now().toISOString();
     const name = (body.name ?? "").trim();
     const externalWorkflowId = (body.externalWorkflowId ?? "").trim();
-    const method = body.monitoringMethod === "poll" ? "poll" : "push";
+    const method = body.monitoringMethod === "push" ? "push" : "poll";
     const validationError = validateWorkflowRegistrationInput({
       name,
       externalWorkflowId,
@@ -843,9 +843,9 @@ export function registerUiRoutes(
     };
     const flash =
       query.registered === "1"
-        ? "Workflow registered. Copy the Quorum workflow id from the table for QUORUM_WORKFLOW_ID, issue a push credential if needed, then define a contract and activate monitoring — Inactive means no active contract yet."
+        ? "Workflow registered. Copy the Quorum workflow ID from the table for push setup (not the n8n workflow ID). For Connect n8n, bind a connector next. Inactive means no active contract yet — push heartbeats then return CONTRACT_NOT_ACTIVE."
         : query.error === "duplicate"
-          ? "A workflow with this n8n ID is already registered for this organization. Use a different ID, or open the existing workflow below."
+          ? "A workflow with this n8n workflow ID is already registered for this organization. Use a different ID, or open the existing workflow below."
           : query.error === "validation"
             ? "Workflow name and n8n workflow ID are required."
             : null;
@@ -933,7 +933,7 @@ export function registerUiRoutes(
     const body = formBody(request);
     const name = (body.name ?? "").trim();
     const externalWorkflowId = (body.externalWorkflowId ?? "").trim();
-    const monitoringMethod = body.monitoringMethod === "poll" ? "poll" : "push";
+    const monitoringMethod = body.monitoringMethod === "push" ? "push" : "poll";
     const validationError = validateWorkflowRegistrationInput({
       name,
       externalWorkflowId,

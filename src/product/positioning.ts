@@ -59,15 +59,16 @@ export const FEATURE_MATRIX: FeatureMatrixRow[] = [
     notes: "Health and Evidence Level are separate dimensions.",
   },
   {
-    name: "n8n push heartbeats",
-    availability: "Available",
-    notes: "Signed POST heartbeats with HMAC credentials.",
-  },
-  {
     name: "n8n public API polling",
     availability: "Available",
     notes:
-      "Self-hosted: UI connector create, test, and workflow bind; poll scheduler in default process. Private n8n may prefer push. Poll URLs are SSRF-gated.",
+      "Easiest onboarding: URL + API key, no workflow changes. Self-hosted: UI connector create, test, and workflow bind; poll scheduler in default process. Poll URLs are SSRF-gated.",
+  },
+  {
+    name: "n8n push heartbeats",
+    availability: "Available",
+    notes:
+      "Signed POST heartbeats with HMAC credentials. Configure via n8n setup node + Crypto credential; no container restart for the normal path.",
   },
   {
     name: "Heartbeat contracts (basic evidence)",
