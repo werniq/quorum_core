@@ -57,6 +57,20 @@ describe("UI redesign copy and primitives", () => {
     expect(html).toContain("@keyframes card-appear");
     expect(html).toContain("@keyframes toast-in");
     expect(html).toContain("@keyframes success-in");
+    /* No cross-document VT — MPA nav double-flashed (old-out + new-in). */
+    expect(html).not.toContain("@view-transition");
+    expect(html).not.toContain("view-transition-name");
+    expect(html).not.toContain("::view-transition");
+    expect(html).not.toContain("vt-main-out");
+    expect(html).not.toContain("vt-active");
+    expect(html).not.toContain("onpagereveal");
+    expect(html).not.toContain("hasCrossDocVT");
+    /* No exit fade — only one opacity-only enter after load. */
+    expect(html).not.toContain("page-exit");
+    expect(html).not.toContain("@keyframes page-exit");
+    expect(html).toMatch(
+      /@keyframes page-enter\s*\{\s*from\s*\{\s*opacity:\s*0;\s*\}\s*to\s*\{\s*opacity:\s*1;\s*\}/,
+    );
     expect(html).toContain("prefers-reduced-motion");
     expect(html).toContain("animation: none !important");
     expect(html).toContain("is-submitting");

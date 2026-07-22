@@ -977,10 +977,14 @@ code {
   100% { background-position: -100% 0; }
 }
 
-/* Motion polish (120–250ms; see prefers-reduced-motion below) */
+/*
+ * Motion polish (120–200ms). Cross-document View Transitions are intentionally
+ * OFF: on MPA sidebar nav they produce a double flash (old fade-out + new fade-in,
+ * often racing page-enter). Prefer one short opacity-only enter, no exit, no VT.
+ */
 @keyframes page-enter {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 @keyframes card-appear {
   from { opacity: 0; transform: translateY(5px); }
@@ -990,9 +994,10 @@ code {
   from { opacity: 0; transform: translateY(5px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
 .app-content.page-enter,
 .auth-card.page-enter {
-  animation: page-enter 200ms ease-out both;
+  animation: page-enter 140ms ease-out both;
 }
 .wizard-panel {
   animation: wizard-panel 190ms ease-out both;
@@ -1198,6 +1203,18 @@ const SHELL_SCRIPT = `
   }
 
   var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function restartPageEnter() {
+    if (reduceMotion) return;
+    var nodes = document.querySelectorAll('.app-content.page-enter, .auth-card.page-enter');
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      el.classList.remove('page-enter');
+      void el.offsetWidth;
+      el.classList.add('page-enter');
+    }
+  }
+
   if (!reduceMotion) {
     document.addEventListener('submit', function (e) {
       var form = e.target;
@@ -1212,6 +1229,11 @@ const SHELL_SCRIPT = `
         if (primary) primary.classList.add('is-busy');
       }
     }, true);
+
+    /* bfcache restores skip CSS animations — re-run the single enter fade */
+    window.addEventListener('pageshow', function (e) {
+      if (e.persisted) restartPageEnter();
+    });
   }
 })();
 `;
