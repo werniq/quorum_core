@@ -1,7 +1,7 @@
 # Release verification — Quorum Community
 
 **Date:** 2026-07-21  
-**Host:** Windows 10, Node v24.17.0, Docker 28.4.0  
+**Host:** Windows 11, Node v24.17.0, Docker 28.4.0  
 **Package:** `quorum@0.1.0`
 
 Canonical packet for the latest self-hosted Community gate. Prior cycle remediation notes and raw JSON evidence were archival only and are not retained in-tree; re-run the commands below for fresh machine evidence.
