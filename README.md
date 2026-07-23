@@ -138,7 +138,7 @@ A registered workflow stays **Inactive** until a contract is defined and monitor
 In Protect (or after registering on Workflows → Protect):
 
 1. Define the contract (name, cadence, confirmations).
-2. Optionally configure and test an alert channel (or acknowledge no-alert local mode on activate).
+2. Optionally configure and test an alert channel, or skip alert delivery on the Alerts step (Catalog still shows monitoring status with “No alert channel”).
 3. **Activate monitoring**.
 
 After activation the workflow shows **Active**, the first expected deadline appears, and accepted heartbeats can satisfy the contract.

@@ -328,6 +328,7 @@ const PROTECT_DRAFT_KEYS = [
   "existingWorkflowId",
   "contractId",
   "channelId",
+  "acknowledgedNoAlertMode",
 ] as const;
 
 /** Back control associated via the HTML form= attribute (avoids nested forms). */
@@ -520,6 +521,7 @@ export function renderProtectClientPage(input: {
   } else if (input.step === 5) {
     const back = protectBackControls(input.csrf, 4, d);
     backForms = back.formHtml;
+    const noAlertChecked = d.acknowledgedNoAlertMode === "1" ? " checked" : "";
     body = `
       <form method="post" action="/protect/alerts" class="card stack">
         <input type="hidden" name="csrf" value="${escapeHtml(input.csrf)}" />
@@ -527,17 +529,23 @@ export function renderProtectClientPage(input: {
         <input type="hidden" name="workflowId" value="${escapeHtml(d.workflowId ?? "")}" />
         <input type="hidden" name="contractId" value="${escapeHtml(d.contractId ?? "")}" />
         <h2 class="card-title">Configure alerts</h2>
+        <p class="helper">Optional for local try-outs. Monitoring status still appears on the <strong>Catalog</strong> dashboard either way. Without a channel, Catalog shows <strong>No alert channel</strong> and incidents are not delivered.</p>
         <label class="field">Channel name
-          <input name="channelName" value="Ops webhook" required />
+          <input name="channelName" value="Ops webhook" />
         </label>
         <label class="field">Webhook URL
-          <input name="url" required placeholder="https://..." />
+          <input name="url" placeholder="https://..." />
         </label>
-        <div class="row-actions">${back.buttonHtml}<button type="submit">Create and test channel</button></div>
+        <label class="check-row">
+          <input type="checkbox" name="acknowledgedNoAlertMode" value="1"${noAlertChecked} />
+          <span>Skip alert delivery for now (local / self-hosted). Catalog will still show Waiting, Healthy, Overdue, and Incident — only outbound alerts are skipped.</span>
+        </label>
+        <div class="row-actions">${back.buttonHtml}<button type="submit">Continue</button></div>
       </form>`;
   } else {
     const back = protectBackControls(input.csrf, 5, d);
     backForms = back.formHtml;
+    const noAlert = d.acknowledgedNoAlertMode === "1";
     body = `
       <form method="post" action="/protect/activate" class="card stack">
         <input type="hidden" name="csrf" value="${escapeHtml(input.csrf)}" />
@@ -545,15 +553,16 @@ export function renderProtectClientPage(input: {
         <input type="hidden" name="workflowId" value="${escapeHtml(d.workflowId ?? "")}" />
         <input type="hidden" name="contractId" value="${escapeHtml(d.contractId ?? "")}" />
         <input type="hidden" name="channelId" value="${escapeHtml(d.channelId ?? "")}" />
+        <input type="hidden" name="acknowledgedNoAlertMode" value="${noAlert ? "1" : ""}" />
         <h2 class="card-title">Activate monitoring</h2>
-        <p class="helper">The first expected deadline appears after activation. An alert route must be tested unless you acknowledge no-alert local mode.</p>
+        <p class="helper">The first expected deadline appears after activation.${
+          noAlert
+            ? " You skipped alert delivery — Catalog will still show contract health, with <strong>No alert channel</strong>."
+            : " Alert delivery uses the channel from the previous step."
+        }</p>
         <label class="check-row">
           <input type="checkbox" name="explicitlyConfirmed" value="1" required />
           <span>Activate monitoring for this contract</span>
-        </label>
-        <label class="check-row">
-          <input type="checkbox" name="acknowledgedNoAlertMode" value="1" />
-          <span>Self-hosted local development: acknowledge no-alert mode</span>
         </label>
         <div class="row-actions">${back.buttonHtml}<button type="submit">Activate monitoring</button></div>
       </form>`;

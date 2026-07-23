@@ -299,6 +299,38 @@ describe("UI redesign copy and primitives", () => {
     expect(step4).not.toContain("Save inactive contract");
   });
 
+  it("protect alerts step offers skip with Catalog visibility copy", () => {
+    const alerts = renderProtectClientPage({
+      csrf: "csrf-token",
+      step: 5,
+      clients: [],
+      draft: { clientId: "c1", workflowId: "w1", contractId: "ct1" },
+    });
+    expect(alerts).toContain('name="acknowledgedNoAlertMode"');
+    expect(alerts).toContain("Skip alert delivery for now");
+    expect(alerts).toContain("Catalog");
+    expect(alerts).toContain("No alert channel");
+    expect(alerts).not.toContain('name="url" required');
+    expect(alerts).not.toContain('name="channelName" required');
+
+    const activate = renderProtectClientPage({
+      csrf: "csrf-token",
+      step: 6,
+      clients: [],
+      draft: {
+        clientId: "c1",
+        workflowId: "w1",
+        contractId: "ct1",
+        acknowledgedNoAlertMode: "1",
+      },
+    });
+    expect(activate).toContain('name="acknowledgedNoAlertMode" value="1"');
+    expect(activate).toContain("No alert channel");
+    expect(activate).not.toContain(
+      "Self-hosted local development: acknowledge no-alert mode",
+    );
+  });
+
   it("protect and onboarding wizards expose Back controls after the first step", () => {
     const protect = renderProtectClientPage({
       csrf: "csrf-token",

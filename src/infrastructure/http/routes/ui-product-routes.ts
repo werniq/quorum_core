@@ -553,10 +553,50 @@ export function registerProductUiRoutes(
       return;
     }
     const body = formBody(request);
+    const acknowledgedNoAlertMode = body.acknowledgedNoAlertMode === "1";
+    const url = (body.url ?? "").trim();
+    const draftBase = {
+      clientId: body.clientId ?? "",
+      workflowId: body.workflowId ?? "",
+      contractId: body.contractId ?? "",
+      acknowledgedNoAlertMode: acknowledgedNoAlertMode ? "1" : "",
+    };
+
+    if (acknowledgedNoAlertMode) {
+      return reply.type("text/html").send(
+        renderProtectClientPage({
+          ...pageShell,
+          csrf: session.csrfToken,
+          step: 6,
+          clients: [],
+          flash:
+            "Alert delivery skipped. Catalog will still show monitoring status (with No alert channel).",
+          flashTone: "success",
+          draft: draftBase,
+        }),
+      );
+    }
+
+    if (!url) {
+      return reply.type("text/html").send(
+        renderProtectClientPage({
+          ...pageShell,
+          csrf: session.csrfToken,
+          step: 5,
+          clients: [],
+          flash:
+            "Enter a webhook URL, or check “Skip alert delivery for now” to continue without outbound alerts.",
+          draft: {
+            ...draftBase,
+            channelName: body.channelName ?? "Ops webhook",
+          },
+        }),
+      );
+    }
+
     const tid = deps.tenantId();
     const nowIso = deps.clock.now().toISOString();
     const channelId = createId();
-    const url = body.url ?? "";
     alerting.createAlertChannel(tid, {
       id: channelId,
       name: body.channelName ?? "Ops webhook",
@@ -626,9 +666,7 @@ export function registerProductUiRoutes(
         step: 6,
         clients: [],
         draft: {
-          clientId: body.clientId ?? "",
-          workflowId: body.workflowId ?? "",
-          contractId: body.contractId ?? "",
+          ...draftBase,
           channelId,
         },
       }),
