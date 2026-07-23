@@ -18,6 +18,11 @@ data/
 docs/verification/ui-preview/
 docs/verification/artifacts/
 
+# Demo recorder intermediates (keep docs/demo/*.mp4)
+docs/demo/_frames/
+docs/demo/_record/
+.cursor-tmp/
+
 # Hosted SaaS / billing (not part of Community self-hosted tree)
 src/domain/billing/
 src/domain/saas/

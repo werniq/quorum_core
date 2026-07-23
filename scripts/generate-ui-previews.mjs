@@ -3,6 +3,7 @@ import path from "node:path";
 import {
   renderOnboardingPage,
   renderWorkflowsPage,
+  renderAlertsPage,
 } from "../src/presentation/html/pages.ts";
 import {
   renderCatalogPage,
@@ -683,6 +684,86 @@ fs.writeFileSync(
     csrf: "x",
     step: "select_workflows",
     method: "push",
+  }),
+);
+
+fs.writeFileSync(
+  path.join(dir, "alerts.html"),
+  renderAlertsPage({
+    csrf: "x",
+    channels: [
+      { id: "ch-slack", name: "Ops Slack webhook", type: "webhook", health: "healthy" },
+      { id: "ch-pager", name: "Pager email (SMTP)", type: "webhook", health: "healthy" },
+      { id: "ch-sms", name: "Acme on-call SMS", type: "webhook", health: "healthy" },
+      { id: "ch-status", name: "Status page webhook", type: "webhook", health: "degraded" },
+      { id: "ch-harbor", name: "Harbor Mutual ops", type: "webhook", health: "failing" },
+    ],
+  }),
+);
+
+const protectWorkflows = [
+  {
+    id: "w-leads",
+    name: "Lead sync · production",
+    externalWorkflowId: "n8n-prod-leads-01",
+    monitoringMethod: "push",
+  },
+  {
+    id: "w-onboard",
+    name: "Patient onboarding · poll",
+    externalWorkflowId: "n8n-prod-onboard-07",
+    monitoringMethod: "poll",
+  },
+  {
+    id: "w-claims",
+    name: "Claims batch · poll",
+    externalWorkflowId: "n8n-prod-claims-11",
+    monitoringMethod: "poll",
+  },
+];
+
+fs.writeFileSync(
+  path.join(dir, "protect-workflow.html"),
+  renderProtectClientPage({
+    csrf: "x",
+    step: 3,
+    clients,
+    workflows: protectWorkflows,
+    draft: {
+      clientId: "c-acme",
+      businessPurpose: "Nightly reconciliation export",
+      templateId: "lead_delivery",
+    },
+  }),
+);
+
+fs.writeFileSync(
+  path.join(dir, "protect-alerts.html"),
+  renderProtectClientPage({
+    csrf: "x",
+    step: 5,
+    clients,
+    draft: {
+      clientId: "c-acme",
+      workflowId: "w-new-recon",
+      contractId: "ct-new-recon",
+      businessPurpose: "Nightly reconciliation export",
+    },
+  }),
+);
+
+fs.writeFileSync(
+  path.join(dir, "protect-activate.html"),
+  renderProtectClientPage({
+    csrf: "x",
+    step: 6,
+    clients,
+    draft: {
+      clientId: "c-acme",
+      workflowId: "w-new-recon",
+      contractId: "ct-new-recon",
+      acknowledgedNoAlertMode: "1",
+    },
   }),
 );
 
