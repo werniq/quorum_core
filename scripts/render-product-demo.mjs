@@ -1,6 +1,7 @@
 /**
  * Product-functionality demo (no pitch slides).
- * Story: live Catalog with alerts → inspect existing → configs → protect a new workflow.
+ * Story: Catalog → contract detail → incidents → alerts → workflows → Catalog.
+ * Omits Protect / create-workflow onboarding.
  *
  * Usage: node scripts/render-product-demo.mjs
  * Output: docs/demo/quorum-demo.mp4
@@ -130,86 +131,9 @@ await pause(page, 1100);
 await page.mouse.wheel(0, 320);
 await pause(page, 1000);
 
-// --- Protect a new workflow --------------------------------------------------
-await go(page, "onboarding-method.html");
-await pause(page, 700);
-const pollCard = page
-  .locator(".radio-card")
-  .filter({ hasText: "Connect n8n" })
-  .first();
-await moveClick(page, pollCard, { after: 900 });
-
-await go(page, "protect-workflow.html");
-await pause(page, 900);
-const existingSelect = page.locator('select[name="existingWorkflowId"]');
-if ((await existingSelect.count()) > 0) {
-  await moveClick(page, existingSelect, { after: 400 });
-  await existingSelect.selectOption({ index: 1 });
-  await pause(page, 700);
-}
-await page.mouse.wheel(0, 260);
-await pause(page, 700);
-const continueBtn = page
-  .locator('button[type="submit"]')
-  .filter({ hasText: /^Continue$/ });
-if ((await continueBtn.count()) > 0) {
-  await moveClick(page, continueBtn.last(), { after: 500 });
-}
-
-await go(page, "protect-contract.html");
-await pause(page, 900);
-const confirmCadence = page.locator('input[name="explicitlyConfirmed"]');
-if ((await confirmCadence.count()) > 0) {
-  await moveClick(page, confirmCadence, { after: 350 });
-}
-const confirmEvidence = page.locator('input[name="evidenceAcknowledged"]');
-if ((await confirmEvidence.count()) > 0) {
-  await moveClick(page, confirmEvidence, { after: 350 });
-}
-if ((await continueBtn.count()) > 0) {
-  await moveClick(
-    page,
-    page
-      .locator('button[type="submit"]')
-      .filter({ hasText: /^Continue$/ })
-      .last(),
-    {
-      after: 500,
-    },
-  );
-}
-
-await go(page, "protect-alerts.html");
-await pause(page, 800);
-const skipAlerts = page.locator('input[name="acknowledgedNoAlertMode"]');
-if ((await skipAlerts.count()) > 0) {
-  await moveClick(page, skipAlerts, { after: 500 });
-}
-await moveClick(
-  page,
-  page
-    .locator('button[type="submit"]')
-    .filter({ hasText: /^Continue$/ })
-    .last(),
-  { after: 600 },
-);
-
-await go(page, "protect-activate.html");
-await pause(page, 800);
-const activateConfirm = page.locator('input[name="explicitlyConfirmed"]');
-if ((await activateConfirm.count()) > 0) {
-  await moveClick(page, activateConfirm, { after: 400 });
-}
-const activateBtn = page
-  .locator('button[type="submit"]')
-  .filter({ hasText: /Activate monitoring/i });
-if ((await activateBtn.count()) > 0) {
-  await moveClick(page, activateBtn.last(), { after: 900 });
-}
-
-// Land back on catalog as the “estate” view
+// Close on Catalog (feature tour only — no Protect / create flow)
 await go(page, "catalog.html");
-await pause(page, 1600);
+await pause(page, 1400);
 
 await context.close();
 await browser.close();

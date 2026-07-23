@@ -24,7 +24,9 @@ Quorum detects:
 - **Stale or missing evidence** relative to the contract deadline
 - **Alert delivery problems** separately from workflow health
 
-![Contract Catalog with summary stats, alert banner, and active contracts](docs/screenshots/contract-catalog.png)
+<video src="docs/demo/quorum-demo.mp4" controls playsinline width="100%"></video>
+
+[Product demo](docs/demo/quorum-demo.mp4) — Catalog, contract detail, incidents, alerts, and workflows.
 
 ## How it works
 
