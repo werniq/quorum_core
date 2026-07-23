@@ -47,7 +47,9 @@ for (const shot of shots) {
     throw new Error(`Missing preview: ${filePath}`);
   }
   await page.setViewportSize({ width: shot.width, height: shot.height });
-  await page.goto(pathToFileURL(path.resolve(filePath)).href, { waitUntil: "networkidle" });
+  await page.goto(pathToFileURL(path.resolve(filePath)).href, {
+    waitUntil: "networkidle",
+  });
   await page.screenshot({
     path: path.join(outDir, shot.name),
     fullPage: shot.fullPage ?? true,

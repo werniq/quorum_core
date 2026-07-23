@@ -39,7 +39,9 @@ async function pause(page, ms) {
 
 async function moveClick(page, locator, opts = {}) {
   const el =
-    typeof locator === "string" ? page.locator(locator).first() : locator.first();
+    typeof locator === "string"
+      ? page.locator(locator).first()
+      : locator.first();
   await el.waitFor({ state: "visible", timeout: 10_000 });
   await el.scrollIntoViewIfNeeded();
   const box = await el.boundingBox();
@@ -147,7 +149,9 @@ if ((await existingSelect.count()) > 0) {
 }
 await page.mouse.wheel(0, 260);
 await pause(page, 700);
-const continueBtn = page.locator('button[type="submit"]').filter({ hasText: /^Continue$/ });
+const continueBtn = page
+  .locator('button[type="submit"]')
+  .filter({ hasText: /^Continue$/ });
 if ((await continueBtn.count()) > 0) {
   await moveClick(page, continueBtn.last(), { after: 500 });
 }
@@ -163,9 +167,16 @@ if ((await confirmEvidence.count()) > 0) {
   await moveClick(page, confirmEvidence, { after: 350 });
 }
 if ((await continueBtn.count()) > 0) {
-  await moveClick(page, page.locator('button[type="submit"]').filter({ hasText: /^Continue$/ }).last(), {
-    after: 500,
-  });
+  await moveClick(
+    page,
+    page
+      .locator('button[type="submit"]')
+      .filter({ hasText: /^Continue$/ })
+      .last(),
+    {
+      after: 500,
+    },
+  );
 }
 
 await go(page, "protect-alerts.html");
@@ -176,7 +187,10 @@ if ((await skipAlerts.count()) > 0) {
 }
 await moveClick(
   page,
-  page.locator('button[type="submit"]').filter({ hasText: /^Continue$/ }).last(),
+  page
+    .locator('button[type="submit"]')
+    .filter({ hasText: /^Continue$/ })
+    .last(),
   { after: 600 },
 );
 

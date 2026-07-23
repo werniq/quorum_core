@@ -636,7 +636,7 @@ export function renderClientsPage(input: {
 
 export function renderClientHealthPage(input: {
   demoMode?: boolean;
- 
+
   role: "admin" | "operator" | "viewer";
   clientName: string;
   status: string;
@@ -820,7 +820,7 @@ export function renderWorkflowContractDetailPage(input: {
 
 export function renderSimpleNavPage(input: {
   demoMode?: boolean;
- 
+
   title: string;
   current: string;
   role: "admin" | "operator" | "viewer";

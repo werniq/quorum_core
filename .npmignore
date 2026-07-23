@@ -1,0 +1,23 @@
+# Not published as a library today; keep accidental npm pack lean if used.
+.env
+.env.*
+!.env.example
+data/
+*.sqlite
+*.sqlite-*
+*.db
+*.db-journal
+coverage/
+dist/
+tmp/
+tmp-*
+.idea/
+.cursor-tmp/
+docs/demo/_frames/
+docs/demo/_record/
+docs/verification/ui-preview/
+docs/verification/artifacts/
+**/*.log
+node_modules/
+.git/
+.github/

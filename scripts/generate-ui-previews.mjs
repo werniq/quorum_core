@@ -568,12 +568,27 @@ fs.writeFileSync(
       { at: "2026-07-22T13:47:00Z", label: "success · 287 items" },
       { at: "2026-07-22T13:42:00Z", label: "success · 319 items" },
       { at: "2026-07-22T13:37:00Z", label: "success · 301 items" },
-      { at: "2026-07-21T09:18:00Z", label: "incident resolved · empty result burst" },
-      { at: "2026-07-21T08:55:00Z", label: "incident opened · empty result burst" },
-      { at: "2026-07-19T08:14:00Z", label: "incident resolved · silent absence" },
+      {
+        at: "2026-07-21T09:18:00Z",
+        label: "incident resolved · empty result burst",
+      },
+      {
+        at: "2026-07-21T08:55:00Z",
+        label: "incident opened · empty result burst",
+      },
+      {
+        at: "2026-07-19T08:14:00Z",
+        label: "incident resolved · silent absence",
+      },
       { at: "2026-07-19T07:02:00Z", label: "incident opened · silent absence" },
-      { at: "2026-07-12T16:30:00Z", label: "incident resolved · volume below minimum" },
-      { at: "2026-07-12T16:22:00Z", label: "incident opened · volume below minimum" },
+      {
+        at: "2026-07-12T16:30:00Z",
+        label: "incident resolved · volume below minimum",
+      },
+      {
+        at: "2026-07-12T16:22:00Z",
+        label: "incident opened · volume below minimum",
+      },
       { at: "2026-06-28T09:00:00Z", label: "contract activated" },
       { at: "2026-06-27T15:40:00Z", label: "push credential issued" },
     ],
@@ -585,7 +600,10 @@ fs.writeFileSync(
       status: "Within range",
       unknownCountEvents: 1,
       verified: ["workflow reported execution counts each run"],
-      unverified: ["exact destination record totals", "per-owner lead attribution"],
+      unverified: [
+        "exact destination record totals",
+        "per-owner lead attribution",
+      ],
     },
   }),
 );
@@ -692,11 +710,36 @@ fs.writeFileSync(
   renderAlertsPage({
     csrf: "x",
     channels: [
-      { id: "ch-slack", name: "Ops Slack webhook", type: "webhook", health: "healthy" },
-      { id: "ch-pager", name: "Pager email (SMTP)", type: "webhook", health: "healthy" },
-      { id: "ch-sms", name: "Acme on-call SMS", type: "webhook", health: "healthy" },
-      { id: "ch-status", name: "Status page webhook", type: "webhook", health: "degraded" },
-      { id: "ch-harbor", name: "Harbor Mutual ops", type: "webhook", health: "failing" },
+      {
+        id: "ch-slack",
+        name: "Ops Slack webhook",
+        type: "webhook",
+        health: "healthy",
+      },
+      {
+        id: "ch-pager",
+        name: "Pager email (SMTP)",
+        type: "webhook",
+        health: "healthy",
+      },
+      {
+        id: "ch-sms",
+        name: "Acme on-call SMS",
+        type: "webhook",
+        health: "healthy",
+      },
+      {
+        id: "ch-status",
+        name: "Status page webhook",
+        type: "webhook",
+        health: "degraded",
+      },
+      {
+        id: "ch-harbor",
+        name: "Harbor Mutual ops",
+        type: "webhook",
+        health: "failing",
+      },
     ],
   }),
 );

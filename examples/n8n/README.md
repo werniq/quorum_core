@@ -4,10 +4,10 @@
 
 Tested with:
 
-| Bound | Image / version | Notes |
-| --- | --- | --- |
-| **Minimum** | `n8nio/n8n:1.95.3` | Crypto Hash/HMAC via **typeVersion 1** (`Secret` parameter filled in the n8n UI after import). CLI `import:workflow` of this export succeeded (2026-07-22). |
-| **Current stable** | `n8nio/n8n:2.31.4` (or newer patch on the same minor) | Same export works; Crypto **credentials** available from **n8n ≥ 2.7.0** (Crypto typeVersion 2). CLI `import:workflow` succeeded (2026-07-22). |
+| Bound              | Image / version                                       | Notes                                                                                                                                                       |
+| ------------------ | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Minimum**        | `n8nio/n8n:1.95.3`                                    | Crypto Hash/HMAC via **typeVersion 1** (`Secret` parameter filled in the n8n UI after import). CLI `import:workflow` of this export succeeded (2026-07-22). |
+| **Current stable** | `n8nio/n8n:2.31.4` (or newer patch on the same minor) | Same export works; Crypto **credentials** available from **n8n ≥ 2.7.0** (Crypto typeVersion 2). CLI `import:workflow` succeeded (2026-07-22).              |
 
 Full live signed-heartbeat round-trip against a running Quorum was not re-run in this onboarding change; import smoke + unit tests cover the export and API error shape.
 
@@ -58,12 +58,12 @@ This path does **not** need `NODE_FUNCTION_ALLOW_BUILTIN` and does **not** need 
 
 ### ID glossary (do not mix these up)
 
-| Name | Where it comes from | Used for |
-| --- | --- | --- |
-| **n8n workflow ID** | n8n URL: `…/workflow/{id}` | Quorum registration field only |
-| **Quorum workflow ID** | Quorum Workflows / Protect / credential page | Setup node `quorumWorkflowId` / advanced `QUORUM_WORKFLOW_ID` |
-| **Key ID** | Quorum “Issue push credential” | Setup node `keyId` / advanced `QUORUM_KEY_ID` |
-| **HMAC secret** | Shown once with the credential | Crypto credential or Crypto HMAC Secret field / advanced `QUORUM_HMAC_SECRET` |
+| Name                   | Where it comes from                          | Used for                                                                      |
+| ---------------------- | -------------------------------------------- | ----------------------------------------------------------------------------- |
+| **n8n workflow ID**    | n8n URL: `…/workflow/{id}`                   | Quorum registration field only                                                |
+| **Quorum workflow ID** | Quorum Workflows / Protect / credential page | Setup node `quorumWorkflowId` / advanced `QUORUM_WORKFLOW_ID`                 |
+| **Key ID**             | Quorum “Issue push credential”               | Setup node `keyId` / advanced `QUORUM_KEY_ID`                                 |
+| **HMAC secret**        | Shown once with the credential               | Crypto credential or Crypto HMAC Secret field / advanced `QUORUM_HMAC_SECRET` |
 
 ### Setup (copy-paste) — UI only
 

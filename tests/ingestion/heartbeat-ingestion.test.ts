@@ -358,7 +358,9 @@ describe("secure heartbeat ingestion", () => {
       ingestHeartbeat: ingest,
     });
 
-    sqlite.prepare(`UPDATE workflows SET is_active = 0 WHERE id = ?`).run(workflowId);
+    sqlite
+      .prepare(`UPDATE workflows SET is_active = 0 WHERE id = ?`)
+      .run(workflowId);
     const inactive = await app.inject({
       method: "POST",
       url: signed.path,
@@ -379,9 +381,13 @@ describe("secure heartbeat ingestion", () => {
       },
     });
 
-    sqlite.prepare(`UPDATE workflows SET is_active = 1 WHERE id = ?`).run(workflowId);
     sqlite
-      .prepare(`UPDATE workflow_contracts SET is_active = 0 WHERE workflow_id = ?`)
+      .prepare(`UPDATE workflows SET is_active = 1 WHERE id = ?`)
+      .run(workflowId);
+    sqlite
+      .prepare(
+        `UPDATE workflow_contracts SET is_active = 0 WHERE workflow_id = ?`,
+      )
       .run(workflowId);
     const noContract = signedRequest({
       workflowId,

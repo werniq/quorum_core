@@ -82,9 +82,9 @@ describe("release positioning and customer readiness", () => {
   });
 
   it("positioning source of truth stays outside domain", () => {
-    expect(
-      fs.existsSync(path.join(root, "src/product/positioning.ts")),
-    ).toBe(true);
+    expect(fs.existsSync(path.join(root, "src/product/positioning.ts"))).toBe(
+      true,
+    );
     const positioning = readDoc("src/product/positioning.ts");
     expect(positioning).toContain(BRAND_PROMISE);
     expect(positioning).toContain(PHASE_A_REQUIRED_LIMITATION);
@@ -95,4 +95,3 @@ describe("release positioning and customer readiness", () => {
     expect(assertNoProhibitedPositioning(readme)).toEqual([]);
   });
 });
-

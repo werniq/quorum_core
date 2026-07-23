@@ -193,7 +193,10 @@ function escapeHtml(s) {
 }
 
 function shotHtml(imgPath, crop) {
-  const objectPos = crop === "top" ? "object-position: top center;" : "object-position: center;";
+  const objectPos =
+    crop === "top"
+      ? "object-position: top center;"
+      : "object-position: center;";
   return `<!doctype html>
 <html lang="en">
 <head>

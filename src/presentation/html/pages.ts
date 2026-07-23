@@ -582,7 +582,7 @@ export function renderNetworkPrivacyPage(input: {
 
 export function renderCredentialOncePage(input: {
   demoMode?: boolean;
- 
+
   workflowId: string;
   keyId: string;
   secret: string;

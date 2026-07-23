@@ -4,7 +4,7 @@ Define what each critical workflow should do. Quorum checks whether it ran, whet
 
 Quorum watches n8n workflows against explicit contracts. You define when a workflow should report in, what counts as success or failure, and how strong the evidence needs to be. Quorum opens incidents when reality drifts from that contract and resolves them when reporting recovers.
 
-**Quick links:** [How it works](#how-it-works) · [Quick start](#quick-start-docker) · [Protect a client](#protect-a-client) · [Connect n8n](#connect-n8n) · [Alerts](#alerts) · [Security](#security) · [Backup](#backup-and-upgrades) · [Health](#health-endpoints) · [Development](#development) · [Limitations](#limitations) · [n8n heartbeat example](examples/n8n/) · [Architecture](docs/architecture.md)
+**Quick links:** [How it works](#how-it-works) · [Quick start](#quick-start-docker) · [Protect a client](#protect-a-client) · [Connect n8n](#connect-n8n) · [Alerts](#alerts) · [Security](#security) · [Backup](#backup-and-upgrades) · [Health](#health-endpoints) · [Development](#development) · [Limitations](#limitations) · [n8n heartbeat example](examples/n8n/) · [Architecture](docs/architecture.md) · [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md)
 
 ## The silent-failure problem
 
@@ -64,14 +64,14 @@ cp .env.example .env
 
 Edit `.env` and set at least:
 
-| Variable | Required | Notes |
-| --- | --- | --- |
-| `QUORUM_CREDENTIAL_KEK` | Yes | Long random secret (min 16 characters). Encrypts push credentials and similar secrets. **Back it up separately from the database** — without it you cannot decrypt stored credentials after restore. |
-| `QUORUM_SETUP_TOKEN` | When UI auth is on (default) | One-time bootstrap token (min 24 characters). Used only at `/setup`. **Not** the admin password. |
-| `QUORUM_UI_AUTH_ENABLED` | Defaults to `true` | Setup token + login. Set `false` for a local open UI without login. |
-| `QUORUM_DEMO_MODE` | Optional | `true` opens the UI without login, but only when `HOST` is localhost (`127.0.0.1` / `localhost` / `::1`). Rejected with `0.0.0.0` — do not enable it in the default Docker compose bind. |
-| `PUBLIC_BASE_URL` | Recommended | e.g. `http://127.0.0.1:3000`. |
-| `QUORUM_HOST_PORT` | Optional | Host port if `3000` is already taken. |
+| Variable                 | Required                     | Notes                                                                                                                                                                                                |
+| ------------------------ | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `QUORUM_CREDENTIAL_KEK`  | Yes                          | Long random secret (min 16 characters). Encrypts push credentials and similar secrets. **Back it up separately from the database** — without it you cannot decrypt stored credentials after restore. |
+| `QUORUM_SETUP_TOKEN`     | When UI auth is on (default) | One-time bootstrap token (min 24 characters). Used only at `/setup`. **Not** the admin password.                                                                                                     |
+| `QUORUM_UI_AUTH_ENABLED` | Defaults to `true`           | Setup token + login. Set `false` for a local open UI without login.                                                                                                                                  |
+| `QUORUM_DEMO_MODE`       | Optional                     | `true` opens the UI without login, but only when `HOST` is localhost (`127.0.0.1` / `localhost` / `::1`). Rejected with `0.0.0.0` — do not enable it in the default Docker compose bind.             |
+| `PUBLIC_BASE_URL`        | Recommended                  | e.g. `http://127.0.0.1:3000`.                                                                                                                                                                        |
+| `QUORUM_HOST_PORT`       | Optional                     | Host port if `3000` is already taken.                                                                                                                                                                |
 
 ```bash
 docker compose up --build -d
@@ -112,12 +112,12 @@ On **Select a workflow**:
 
 Two different IDs matter (plus credential fields for push):
 
-| ID | Where it comes from | Used for |
-| --- | --- | --- |
-| **n8n workflow ID** | n8n URL: `…/workflow/{id}` | Registration field “n8n workflow ID” / external id |
-| **Quorum workflow ID** | Assigned by Quorum (shown on **Workflows**, Protect flash, credential page, URL `/workflows/<id>`) | Push setup node / advanced env `QUORUM_WORKFLOW_ID` |
-| **Key ID** | Quorum “Issue push credential” | Push setup node / advanced `QUORUM_KEY_ID` |
-| **HMAC secret** | Shown once with the credential | n8n Crypto credential or Crypto HMAC Secret / advanced `QUORUM_HMAC_SECRET` |
+| ID                     | Where it comes from                                                                                | Used for                                                                    |
+| ---------------------- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| **n8n workflow ID**    | n8n URL: `…/workflow/{id}`                                                                         | Registration field “n8n workflow ID” / external id                          |
+| **Quorum workflow ID** | Assigned by Quorum (shown on **Workflows**, Protect flash, credential page, URL `/workflows/<id>`) | Push setup node / advanced env `QUORUM_WORKFLOW_ID`                         |
+| **Key ID**             | Quorum “Issue push credential”                                                                     | Push setup node / advanced `QUORUM_KEY_ID`                                  |
+| **HMAC secret**        | Shown once with the credential                                                                     | n8n Crypto credential or Crypto HMAC Secret / advanced `QUORUM_HMAC_SECRET` |
 
 Monitoring method: choose **Connect n8n** (easiest — URL + API key, no workflow changes) unless you need push detail.
 

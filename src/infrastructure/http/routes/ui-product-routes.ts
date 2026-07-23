@@ -235,9 +235,7 @@ export function registerProductUiRoutes(
     const body = formBody(request);
     const tid = deps.tenantId();
     const parsed = Number.parseInt(body.to ?? "1", 10);
-    const step = Number.isFinite(parsed)
-      ? Math.min(Math.max(parsed, 1), 5)
-      : 1;
+    const step = Number.isFinite(parsed) ? Math.min(Math.max(parsed, 1), 5) : 1;
     return reply.type("text/html").send(
       renderProtectClientPage({
         ...pageShell,
@@ -362,7 +360,8 @@ export function registerProductUiRoutes(
               step: 3,
               clients,
               workflows,
-              flash: "That registered workflow was not found. Select another or register a new one.",
+              flash:
+                "That registered workflow was not found. Select another or register a new one.",
               draft,
             }),
           );
@@ -470,7 +469,7 @@ export function registerProductUiRoutes(
     } catch {
       return reply.type("text/html").send(
         renderProtectClientPage({
-        ...pageShell,
+          ...pageShell,
           csrf: session.csrfToken,
           step: 4,
           clients: [],
@@ -483,7 +482,7 @@ export function registerProductUiRoutes(
     if (body.evidenceAcknowledged !== "1") {
       return reply.type("text/html").send(
         renderProtectClientPage({
-        ...pageShell,
+          ...pageShell,
           csrf: session.csrfToken,
           step: 4,
           clients: [],
@@ -691,7 +690,7 @@ export function registerProductUiRoutes(
     } catch {
       return reply.type("text/html").send(
         renderProtectClientPage({
-        ...pageShell,
+          ...pageShell,
           csrf: session.csrfToken,
           step: 6,
           clients: [],
@@ -774,7 +773,7 @@ export function registerProductUiRoutes(
     if (!validation.ok) {
       return reply.type("text/html").send(
         renderProtectClientPage({
-        ...pageShell,
+          ...pageShell,
           csrf: session.csrfToken,
           step: 6,
           clients: [],

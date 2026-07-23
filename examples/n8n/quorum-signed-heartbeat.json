@@ -117,19 +117,27 @@
   ],
   "connections": {
     "Schedule Trigger": {
-      "main": [[{ "node": "Quorum Setup (edit me)", "type": "main", "index": 0 }]]
+      "main": [
+        [{ "node": "Quorum Setup (edit me)", "type": "main", "index": 0 }]
+      ]
     },
     "Quorum Setup (edit me)": {
       "main": [[{ "node": "Hash Body SHA256", "type": "main", "index": 0 }]]
     },
     "Hash Body SHA256": {
-      "main": [[{ "node": "Compose Signing Payload", "type": "main", "index": 0 }]]
+      "main": [
+        [{ "node": "Compose Signing Payload", "type": "main", "index": 0 }]
+      ]
     },
     "Compose Signing Payload": {
-      "main": [[{ "node": "HMAC SHA256 Signature", "type": "main", "index": 0 }]]
+      "main": [
+        [{ "node": "HMAC SHA256 Signature", "type": "main", "index": 0 }]
+      ]
     },
     "HMAC SHA256 Signature": {
-      "main": [[{ "node": "POST Quorum Heartbeat", "type": "main", "index": 0 }]]
+      "main": [
+        [{ "node": "POST Quorum Heartbeat", "type": "main", "index": 0 }]
+      ]
     }
   },
   "settings": { "executionOrder": "v1" },

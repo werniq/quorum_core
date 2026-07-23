@@ -12,12 +12,12 @@ Related: [release-decision.md](../release-decision.md) · [known-limitations.md]
 
 ## Commands run
 
-| Step | Command | Exit |
-| ---- | ------- | ---- |
-| Clean install | `Remove-Item -Recurse -Force node_modules; npm ci` | 0 |
-| Full gate | `npm run verify:self-hosted` | 0 |
-| Real n8n | `npm run test:e2e:n8n:real` | 0 |
-| Manual Compose | `docker compose down -v --remove-orphans` then `docker compose up -d --build` with inline `QUORUM_CREDENTIAL_KEK` + `QUORUM_SETUP_TOKEN` | 0 |
+| Step           | Command                                                                                                                                  | Exit |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| Clean install  | `Remove-Item -Recurse -Force node_modules; npm ci`                                                                                       | 0    |
+| Full gate      | `npm run verify:self-hosted`                                                                                                             | 0    |
+| Real n8n       | `npm run test:e2e:n8n:real`                                                                                                              | 0    |
+| Manual Compose | `docker compose down -v --remove-orphans` then `docker compose up -d --build` with inline `QUORUM_CREDENTIAL_KEK` + `QUORUM_SETUP_TOKEN` | 0    |
 
 ## 1. Clean install + `verify:self-hosted`
 
@@ -27,21 +27,21 @@ Related: [release-decision.md](../release-decision.md) · [known-limitations.md]
 
 **Final `verify:self-hosted`:** exit **0**
 
-| Stage | Result |
-| ----- | ------ |
-| format:check | pass |
-| lint | pass |
-| typecheck | pass |
-| test | **246 passed**, 0 skipped (46 files) |
-| test:integration | 5 passed |
-| test:repository | 12 passed |
-| test:migrations | 15 passed |
-| test:security | 26 passed |
-| test:cov | 42 passed; **98.92%** stmts/lines (gated domain files); branches ~95.7%; functions 100% |
-| build | pass |
-| test:compose | pass (setup → login → catalog, `/readyz`, `/health/watcher`) |
-| test:restart | pass (persistence, wrong KEK → 401, no KEK in logs) |
-| test:e2e:n8n | pass (n8n `1.95.3`, webhook HMAC, auth, idempotency, poll UI) |
+| Stage            | Result                                                                                  |
+| ---------------- | --------------------------------------------------------------------------------------- |
+| format:check     | pass                                                                                    |
+| lint             | pass                                                                                    |
+| typecheck        | pass                                                                                    |
+| test             | **246 passed**, 0 skipped (46 files)                                                    |
+| test:integration | 5 passed                                                                                |
+| test:repository  | 12 passed                                                                               |
+| test:migrations  | 15 passed                                                                               |
+| test:security    | 26 passed                                                                               |
+| test:cov         | 42 passed; **98.92%** stmts/lines (gated domain files); branches ~95.7%; functions 100% |
+| build            | pass                                                                                    |
+| test:compose     | pass (setup → login → catalog, `/readyz`, `/health/watcher`)                            |
+| test:restart     | pass (persistence, wrong KEK → 401, no KEK in logs)                                     |
+| test:e2e:n8n     | pass (n8n `1.95.3`, webhook HMAC, auth, idempotency, poll UI)                           |
 
 **Warnings (non-failing):** `npm warn Unknown env config "devdir"`; `DEP0190` child_process shell deprecation; Docker build deprecation notices; `npm audit` 4 moderate / 1 high (dev tree). Full 60 s silent absence is **not** in `test:e2e:n8n` (see `test:e2e:n8n:real` and [known-limitations.md](../known-limitations.md)).
 
@@ -65,40 +65,40 @@ Entrypoints exercised: `src/main.ts` (self-hosted path), `docker-compose.yml`, `
 
 Machine evidence from this cycle: `ok: true`. Re-runs write `docs/verification/artifacts/real-n8n-run.json` (gitignored).
 
-| Item | Value |
-| ---- | ----- |
-| n8n image | `n8nio/n8n:1.95.3` (pinned, no fallback) |
-| Compose | `docker-compose.e2e.yml` + `docker-compose.e2e.validation.yml` |
-| Example workflow | `examples/n8n/quorum-signed-heartbeat.json` |
-| Alert destination | Host alert mock webhook (no Slack/SMTP credentials) |
+| Item              | Value                                                          |
+| ----------------- | -------------------------------------------------------------- |
+| n8n image         | `n8nio/n8n:1.95.3` (pinned, no fallback)                       |
+| Compose           | `docker-compose.e2e.yml` + `docker-compose.e2e.validation.yml` |
+| Example workflow  | `examples/n8n/quorum-signed-heartbeat.json`                    |
+| Alert destination | Host alert mock webhook (no Slack/SMTP credentials)            |
 
 **n8n-authored HMAC:** Success, recovery, hard-failure, and empty-result heartbeats were signed inside an n8n Code node (`NODE_FUNCTION_ALLOW_BUILTIN=crypto`). Host `signHeartbeat` was used only for adversarial auth cases and idempotency conflict bodies.
 
-| Check | Result |
-| ----- | ------ |
-| ≥2 success heartbeats → catalog Healthy + Basic | yes |
-| Invalid signature / stale timestamp / wrong workflow / revoked credential | 401 |
-| Idempotency replay (n8n-signed) | 1 row; conflict body → 409 |
-| Hard failure incident | opened (`01KY24MF7M69VX1XGXSA95WN8G`) |
-| Empty-result allowed | no empty_result incident; `last_nonempty_success_at` unchanged |
-| Empty-result warning | open empty_result severity `warning` |
-| Empty-result failure | open empty_result severity `critical` |
-| Poll UI + checkpoint | `last_seen_execution_id=15` |
-| Restart Quorum container | heartbeats 15→15, checkpoint unchanged |
-| Invalid API key connector | `auth_failed` |
+| Check                                                                     | Result                                                         |
+| ------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| ≥2 success heartbeats → catalog Healthy + Basic                           | yes                                                            |
+| Invalid signature / stale timestamp / wrong workflow / revoked credential | 401                                                            |
+| Idempotency replay (n8n-signed)                                           | 1 row; conflict body → 409                                     |
+| Hard failure incident                                                     | opened (`01KY24MF7M69VX1XGXSA95WN8G`)                          |
+| Empty-result allowed                                                      | no empty_result incident; `last_nonempty_success_at` unchanged |
+| Empty-result warning                                                      | open empty_result severity `warning`                           |
+| Empty-result failure                                                      | open empty_result severity `critical`                          |
+| Poll UI + checkpoint                                                      | `last_seen_execution_id=15`                                    |
+| Restart Quorum container                                                  | heartbeats 15→15, checkpoint unchanged                         |
+| Invalid API key connector                                                 | `auth_failed`                                                  |
 
 ## 4. Silent absence (wall clock)
 
 Cadence: 1 minute, `since_last_success`, `allowed_lateness_minutes=0`.
 
-| Event | UTC timestamp |
-| ----- | ------------- |
-| Last successful heartbeat | `2026-07-21T10:46:32.235Z` |
-| Workflow deactivated | `2026-07-21T10:46:32.617Z` |
+| Event                          | UTC timestamp              |
+| ------------------------------ | -------------------------- |
+| Last successful heartbeat      | `2026-07-21T10:46:32.235Z` |
+| Workflow deactivated           | `2026-07-21T10:46:32.617Z` |
 | Expected deadline (~last + 1m) | `2026-07-21T10:47:32.235Z` |
-| `silent_absence` opened | `2026-07-21T10:47:34.665Z` |
-| Same incident resolved | `2026-07-21T10:47:59.710Z` |
-| Resolution outbox processed | `2026-07-21T10:48:04.703Z` |
+| `silent_absence` opened        | `2026-07-21T10:47:34.665Z` |
+| Same incident resolved         | `2026-07-21T10:47:59.710Z` |
+| Resolution outbox processed    | `2026-07-21T10:48:04.703Z` |
 
 **Detection latency (last success → incident open):** ~**62.4 s** (~2.4 s after the 60 s deadline).  
 **Duplicate incident after open:** none within two watcher cycles.  
@@ -119,25 +119,25 @@ Still green: JSON API tenant trust (`resolveTrustedTenantId`); metrics disabled 
 
 Confirmed this pass:
 
-| Check | Result |
-| ----- | ------ |
-| Force `verifyHeartbeatSignature` always true | required suites **fail** |
-| Restore HMAC | suites **pass** (`tests/security/heartbeat-hmac-guards.test.ts`) |
-| Ops audit (`ops_audit_events`) | covered; immutable table + secret-stripping details ([security.md](../security.md)) |
-| `networkPolicy: self_hosted_local` | private HTTP n8n allowed; cloud metadata still blocked |
+| Check                                        | Result                                                                              |
+| -------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Force `verifyHeartbeatSignature` always true | required suites **fail**                                                            |
+| Restore HMAC                                 | suites **pass** (`tests/security/heartbeat-hmac-guards.test.ts`)                    |
+| Ops audit (`ops_audit_events`)               | covered; immutable table + secret-stripping details ([security.md](../security.md)) |
+| `networkPolicy: self_hosted_local`           | private HTTP n8n allowed; cloud metadata still blocked                              |
 
 Remaining: single-tenant JSON APIs; hosted SaaS not in Community tree.
 
 ## 7. UI review
 
-| Item | Status |
-| ---- | ------ |
-| Catalog expectation labels (`interval:5@UTC` raw) | fixed — e.g. `Every 5 minutes (UTC)` |
-| Contract detail cadence subtitle | same formatter |
-| Alert banner vs summary vs card | consistent (`tests/ui/catalog-product-ux.test.ts`) |
-| Waiting / Paused health labels | present |
-| Evidence level | badge + expandable explanation |
-| Workflow health vs alert health | separate badges |
+| Item                                              | Status                                             |
+| ------------------------------------------------- | -------------------------------------------------- |
+| Catalog expectation labels (`interval:5@UTC` raw) | fixed — e.g. `Every 5 minutes (UTC)`               |
+| Contract detail cadence subtitle                  | same formatter                                     |
+| Alert banner vs summary vs card                   | consistent (`tests/ui/catalog-product-ux.test.ts`) |
+| Waiting / Paused health labels                    | present                                            |
+| Evidence level                                    | badge + expandable explanation                     |
+| Workflow health vs alert health                   | separate badges                                    |
 
 Screenshots for README: `docs/screenshots/*.png` via `npx tsx scripts/generate-ui-previews.mjs` then `node scripts/capture-readme-screenshots.mjs` (preview HTML is generated locally under `docs/verification/ui-preview/`, gitignored, not committed).
 

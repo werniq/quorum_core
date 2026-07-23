@@ -297,7 +297,9 @@ describe("self-hosted privacy and auth", () => {
     const root = await app.inject({ method: "GET", url: "/" });
     expect(root.statusCode).toBe(302);
     expect(root.headers.location).toBe("/onboarding");
-    expect(String(root.headers["set-cookie"] ?? "")).toMatch(/quorum_open_csrf=/);
+    expect(String(root.headers["set-cookie"] ?? "")).toMatch(
+      /quorum_open_csrf=/,
+    );
 
     const onboarding = await app.inject({
       method: "GET",

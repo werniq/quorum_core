@@ -966,7 +966,7 @@ export function registerUiRoutes(
         .type("text/html")
         .send(
           renderWorkflowsPage({
-        ...pageShell,
+            ...pageShell,
             csrf: session.csrfToken,
             connectors,
             flash,
@@ -1102,7 +1102,7 @@ export function registerUiRoutes(
         });
         return reply.type("text/html").send(
           renderCredentialOncePage({
-        ...pageShell,
+            ...pageShell,
             workflowId,
             keyId,
             secret,
