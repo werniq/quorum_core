@@ -24,9 +24,7 @@ Quorum detects:
 - **Stale or missing evidence** relative to the contract deadline
 - **Alert delivery problems** separately from workflow health
 
-<video src="docs/demo/quorum-demo.mp4" controls playsinline width="100%"></video>
-
-[Product demo](docs/demo/quorum-demo.mp4) — Catalog, contract detail, incidents, alerts, and workflows.
+[![Quorum product demo](docs/demo/quorum-demo.gif)](docs/demo/quorum-demo.mp4)
 
 ## How it works
 
@@ -41,12 +39,6 @@ Quorum detects:
 **Alerts** deliver incident and resolution events through webhook or SMTP channels you configure. Failed deliveries surface in the catalog banner and on contract cards without changing whether a contract is overdue.
 
 **Recovery** resolves open incidents when valid evidence arrives again (for example after you fix n8n and heartbeats resume).
-
-![Contract detail](docs/screenshots/contract-detail.png)
-
-![Incidents](docs/screenshots/incidents.png)
-
-![Onboarding: choose monitoring method](docs/screenshots/onboarding-method.png)
 
 ## Beta status
 
