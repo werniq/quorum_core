@@ -314,8 +314,12 @@ export async function mintCredential(baseUrl, cookie, csrf, workflowId) {
       `credential mint failed: ${response.status} ${html.slice(0, 300)}`,
     );
   }
-  const keyId = html.match(/Key id:\s*<code>([^<]+)<\/code>/i)?.[1];
-  const secret = html.match(/Secret:\s*<code>([^<]+)<\/code>/i)?.[1];
+  const keyId = html.match(
+    /Key ID:<\/strong>\s*<code>([^<]+)<\/code>/i,
+  )?.[1];
+  const secret = html.match(
+    /HMAC secret:<\/strong>\s*<code>([^<]+)<\/code>/i,
+  )?.[1];
   if (!keyId || !secret) {
     throw new Error("could not parse keyId/secret from credential page");
   }
