@@ -123,6 +123,32 @@ export class SqliteN8nConnectorRepositories {
     return row ? mapConnector(row) : null;
   }
 
+  listConnectors(tenantId: string): N8nConnectorRecord[] {
+    const rows = this.sqlite
+      .prepare(
+        `SELECT * FROM n8n_connectors
+         WHERE tenant_id = ?
+         ORDER BY created_at ASC`,
+      )
+      .all(tenantId) as Array<Record<string, unknown>>;
+    return rows.map(mapConnector);
+  }
+
+  findConnectorByNormalizedBaseUrl(
+    tenantId: string,
+    normalizedBaseUrl: string,
+  ): N8nConnectorRecord | null {
+    const normalized = normalizedBaseUrl.replace(/\/+$/, "");
+    const rows = this.listConnectors(tenantId);
+    return (
+      rows.find(
+        (row) =>
+          row.status === "active" &&
+          row.baseUrl.replace(/\/+$/, "") === normalized,
+      ) ?? null
+    );
+  }
+
   getConnectorHealthView(
     tenantId: string,
     connectorId: string,

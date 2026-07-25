@@ -526,6 +526,23 @@ export class SqliteCoreRepositories implements CoreRepositories {
     return row ? mapWorkflow(row) : null;
   }
 
+  findWorkflowByExternalId(
+    tenantId: string,
+    externalWorkflowId: string,
+    sourcePlatform: string = "n8n",
+  ): WorkflowRecord | null {
+    const row = this.sqlite
+      .prepare(
+        `SELECT * FROM workflows
+         WHERE tenant_id = ? AND source_platform = ? AND external_workflow_id = ?
+         LIMIT 1`,
+      )
+      .get(tenantId, sourcePlatform, externalWorkflowId) as
+      | Record<string, unknown>
+      | undefined;
+    return row ? mapWorkflow(row) : null;
+  }
+
   listWorkflows(tenantId: string): WorkflowRecord[] {
     const rows = this.sqlite
       .prepare(

@@ -113,6 +113,13 @@
       "when": 1752900015000,
       "tag": "0016_volume_rules_incident_triage",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1752900016000,
+      "tag": "0017_simplified_onboarding",
+      "breakpoints": true
     }
   ]
 }
