@@ -10,6 +10,8 @@ import type {
   ContractAlertChannelRecord,
   IncidentRecord,
   IncidentType,
+  ListIncidentsQuery,
+  ListIncidentsResult,
   NotificationAttemptRecord,
   NotificationOutboxRecord,
   OpenIncidentInput,
@@ -300,6 +302,70 @@ export class SqliteAlertingRepositories implements AlertingRepositories {
       )
       .all(tenantId) as Array<Record<string, unknown>>;
     return rows.map(mapIncident);
+  }
+
+  queryIncidents(
+    tenantId: string,
+    query: ListIncidentsQuery,
+  ): ListIncidentsResult {
+    this.assertTenantExists(tenantId);
+    const limit = query.limit;
+    if (!Number.isInteger(limit) || limit < 1) {
+      throw new Error("list incidents limit must be a positive integer");
+    }
+
+    const where: string[] = ["tenant_id = ?"];
+    const params: unknown[] = [tenantId];
+
+    if (query.statuses && query.statuses.length > 0) {
+      where.push(`status IN (${query.statuses.map(() => "?").join(", ")})`);
+      params.push(...query.statuses);
+    }
+    if (query.severity) {
+      where.push("severity = ?");
+      params.push(query.severity);
+    }
+    if (query.workflowId) {
+      where.push("workflow_id = ?");
+      params.push(query.workflowId);
+    }
+    if (query.contractId) {
+      where.push("(workflow_id = ? OR outcome_contract_id = ?)");
+      params.push(query.contractId, query.contractId);
+    }
+    if (query.clientId) {
+      where.push("client_id = ?");
+      params.push(query.clientId);
+    }
+    if (query.updatedAfter) {
+      where.push("updated_at > ?");
+      params.push(query.updatedAfter);
+    }
+    if (query.cursor) {
+      where.push("(updated_at < ? OR (updated_at = ? AND id < ?))");
+      params.push(
+        query.cursor.updatedAt,
+        query.cursor.updatedAt,
+        query.cursor.id,
+      );
+    }
+
+    const rows = this.sqlite
+      .prepare(
+        `SELECT * FROM incidents
+         WHERE ${where.join(" AND ")}
+         ORDER BY updated_at DESC, id DESC
+         LIMIT ?`,
+      )
+      .all(...params, limit + 1) as Array<Record<string, unknown>>;
+
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+    const items = page.map(mapIncident);
+    const last = items[items.length - 1];
+    const nextCursor =
+      hasMore && last ? { updatedAt: last.updatedAt, id: last.id } : null;
+    return { items, nextCursor };
   }
 
   createAlertChannel(

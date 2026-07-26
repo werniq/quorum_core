@@ -140,6 +140,31 @@ export interface OpenIncidentInput {
   resolutionTargetMinutes?: number | null;
 }
 
+/** Keyset cursor for incident listing (updatedAt DESC, id DESC). */
+export interface IncidentListCursor {
+  updatedAt: string;
+  id: string;
+}
+
+export interface ListIncidentsQuery {
+  statuses?: IncidentStatus[];
+  severity?: IncidentSeverity;
+  workflowId?: string;
+  /** Matches workflow_id or outcome_contract_id. */
+  contractId?: string;
+  clientId?: string;
+  /** Inclusive lower bound on updated_at (ISO-8601). */
+  updatedAfter?: string;
+  /** Page size; caller should clamp to 1..100 (API default 50). */
+  limit: number;
+  cursor?: IncidentListCursor;
+}
+
+export interface ListIncidentsResult {
+  items: IncidentRecord[];
+  nextCursor: IncidentListCursor | null;
+}
+
 /** Tenant-scoped incident, routing, health, and outbox persistence. */
 export interface AlertingRepositories {
   openOrObserveIncident(
@@ -180,6 +205,14 @@ export interface AlertingRepositories {
     },
   ): IncidentRecord;
   listIncidents(tenantId: string): IncidentRecord[];
+  /**
+   * Tenant-scoped incident listing with filters and keyset pagination.
+   * Ordering: updated_at DESC, id DESC. Does not include alert-delivery history.
+   */
+  queryIncidents(
+    tenantId: string,
+    query: ListIncidentsQuery,
+  ): ListIncidentsResult;
   createAlertChannel(
     tenantId: string,
     input: Omit<AlertChannelRecord, "tenantId" | "createdAt" | "updatedAt"> & {

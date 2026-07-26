@@ -189,6 +189,65 @@ Only when you inject secrets via Docker/K8s. Set `QUORUM_WORKFLOW_ID`, `QUORUM_K
 
 Create at least one webhook or SMTP channel under **Alert channels** and route it to contracts. Use **Send test** on the channel page. Route failures appear in the catalog banner and on cards; they do not mark a contract as satisfied or overdue.
 
+Webhooks **push** incident change notifications. They are not a pull API for current state. Use the incident JSON API below to retrieve authoritative incident records.
+
+## Incident API (read)
+
+Tenant-scoped, read-only JSON endpoints. The local tenant is resolved server-side (foreign `x-quorum-tenant-id` values are rejected). Responses use camelCase incident records (same shape as acknowledge/resolve) and never include webhook/SMTP delivery attempts or outbox rows.
+
+### List incidents
+
+```http
+GET /api/v1/incidents
+```
+
+| Query          | Description                                                                   |
+| -------------- | ----------------------------------------------------------------------------- |
+| `status`       | One or more of `open`, `acknowledged`, `resolved` (comma-separated)           |
+| `severity`     | `warning` or `critical`                                                       |
+| `workflowId`   | Exact workflow id                                                             |
+| `contractId`   | Matches `workflowId` or `outcomeContractId`                                   |
+| `clientId`     | Exact client id                                                               |
+| `updatedAfter` | ISO-8601; only incidents with `updatedAt` strictly after this value           |
+| `limit`        | Page size (default `50`, max `100`)                                           |
+| `cursor`       | Opaque cursor from a previous `nextCursor` (keyset on `updatedAt`, then `id`) |
+
+Ordering is deterministic: `updatedAt DESC`, then `id DESC`. Invalid filters, limits, or cursors return `400` with `{ "error": "…" }`.
+
+```bash
+curl "http://localhost:3000/api/v1/incidents?status=open,acknowledged&limit=50"
+```
+
+```json
+{
+  "items": [
+    {
+      "id": "…",
+      "tenantId": "…",
+      "status": "open",
+      "severity": "critical",
+      "summary": "…",
+      "updatedAt": "…"
+    }
+  ],
+  "nextCursor": null
+}
+```
+
+### Get one incident
+
+```http
+GET /api/v1/incidents/:incidentId
+```
+
+Returns `{ "incident": { … } }` for incidents visible to the local tenant. Missing or other-tenant ids return `404` `{ "error": "not_found" }` (no existence leak).
+
+```bash
+curl "http://localhost:3000/api/v1/incidents/<incidentId>"
+```
+
+Acknowledge / resolve remain `POST /api/v1/incidents/:incidentId/acknowledge` and `…/resolve`.
+
 ## Security
 
 - No telemetry in self-hosted mode; no remote fonts or analytics in the UI.
