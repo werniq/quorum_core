@@ -11,6 +11,7 @@ import {
   renderOnboardingPage,
   renderWorkflowsPage,
 } from "../../src/presentation/html/pages.js";
+import { renderSimplifiedOnboardingPage } from "../../src/presentation/html/simplified-onboarding-ui.js";
 import {
   renderCatalogPage,
   renderProtectClientPage,
@@ -22,8 +23,8 @@ describe("UI redesign copy and primitives", () => {
       expect(label).not.toMatch(/_/);
       expect(onboardingStepLabel(id)).toBe(label);
     }
-    expect(onboardingStepLabel("choose_method")).toBe("Monitoring method");
-    expect(onboardingStepLabel("select_workflows")).toBe("Select workflow");
+    expect(onboardingStepLabel("choose_method")).toBe("Client");
+    expect(onboardingStepLabel("select_workflows")).toBe("Select workflows");
   });
 
   it("renders stepper with completed, current, and future steps", () => {
@@ -231,8 +232,8 @@ describe("UI redesign copy and primitives", () => {
     expect(html).toContain("n8n-xyz");
     expect(html).toContain("Inactive means there is no active contract yet");
     expect(html).toContain("CONTRACT_NOT_ACTIVE");
-    expect(html).toContain("Define contract &amp; activate");
-    expect(html).toContain('href="/protect"');
+    expect(html).toContain("Define monitoring &amp; activate");
+    expect(html).toContain('href="/onboarding"');
   });
 
   it("protect wizard uses human-readable stepper and monitoring cards", () => {
@@ -343,13 +344,36 @@ describe("UI redesign copy and primitives", () => {
     expect(protect).toContain(">Back</button>");
     expect(protect).toContain('name="to" value="2"');
 
-    const onboarding = renderOnboardingPage({
+    const onboarding = renderSimplifiedOnboardingPage({
       csrf: "csrf-token",
-      step: "define_contracts",
-      method: "push",
-      workflows: [],
+      step: "configure_monitoring",
+      draft: {
+        selectedExternalWorkflowIds: ["wf1"],
+        workflowConfigs: {
+          wf1: {
+            externalWorkflowId: "wf1",
+            name: "Lead sync",
+            activeInN8n: true,
+            triggerSummary: "Every 15 minutes",
+            cadenceType: "interval",
+            cadenceValue: "15m",
+            timezone: "UTC",
+            quietHours: null,
+            monitorMissingRuns: true,
+            monitorFailures: true,
+            monitorEmptyResult: false,
+            monitorVolumeRange: false,
+            volumeMin: null,
+            volumeMax: null,
+            monitoringMethod: "poll",
+          },
+        },
+      },
+      clients: [],
+      connectors: [],
+      alertChannels: [],
     });
-    expect(onboarding).toContain('action="/onboarding/advance"');
+    expect(onboarding).toContain('action="/onboarding/back"');
     expect(onboarding).toContain('name="to" value="select_workflows"');
     expect(onboarding).toContain(">Back</button>");
   });
@@ -371,7 +395,7 @@ describe("UI redesign copy and primitives", () => {
       filters: {},
     });
     expect(html).toContain("No contracts yet");
-    expect(html).toContain("Protect a client");
+    expect(html).toContain("Set up monitoring");
     expect(html).toContain("app-sidebar");
     expect(html).toContain('aria-label="Open navigation"');
   });

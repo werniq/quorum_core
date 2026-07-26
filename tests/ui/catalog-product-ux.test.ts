@@ -309,7 +309,7 @@ describe("catalog product UX UI acceptance", () => {
     });
     expect(catalog.statusCode).toBe(200);
     expect(catalog.body).toContain("Contract Catalog");
-    expect(catalog.body).toContain("Protect a client");
+    expect(catalog.body).toContain("Set up monitoring");
     expect(catalog.body).toContain('aria-label="Evidence level basic');
     expect(catalog.body).toContain("destination not independently checked");
     expect(catalog.body).toContain("Health:");
@@ -515,9 +515,8 @@ describe("catalog product UX UI acceptance", () => {
       url: "/protect",
       headers: { cookie: `${SESSION_COOKIE}=${sessionId}` },
     });
-    expect(adminProtect.statusCode).toBe(200);
-    expect(adminProtect.body).toContain("Protect a client");
-    expect(adminProtect.body).toContain("Create or select a client");
+    expect(adminProtect.statusCode).toBe(302);
+    expect(adminProtect.headers.location).toBe("/onboarding");
 
     await app.close();
   });
@@ -538,11 +537,11 @@ describe("catalog product UX UI acceptance", () => {
     await app.close();
   });
 
-  it("protect wizard reuses an existing registered workflow without duplicating it", async () => {
+  it("protect wizard routes redirect to unified onboarding", async () => {
     const sqlite = openDb();
     const clock = new FixedClock(new Date("2026-07-19T10:00:00.000Z"));
     const { sessionId, csrf, core, tenant } = seedAdmin(sqlite, clock);
-    const existing = core.createWorkflow(tenant.id, {
+    core.createWorkflow(tenant.id, {
       id: createId(),
       clientId: null,
       name: "Already registered",
@@ -563,29 +562,14 @@ describe("catalog product UX UI acceptance", () => {
       },
       payload: `csrf=${encodeURIComponent(csrf)}&clientId=c-local&templateId=custom&businessPurpose=Leads`,
     });
-    expect(step3.statusCode).toBe(200);
-    expect(step3.body).toContain('name="existingWorkflowId"');
-    expect(step3.body).toContain(existing.id);
-
-    const selected = await app.inject({
-      method: "POST",
-      url: "/protect/workflow",
-      headers: {
-        cookie: `${SESSION_COOKIE}=${sessionId}`,
-        "content-type": "application/x-www-form-urlencoded",
-      },
-      payload: `csrf=${encodeURIComponent(csrf)}&clientId=c-local&templateId=custom&businessPurpose=Leads&existingWorkflowId=${encodeURIComponent(existing.id)}`,
-    });
-    expect(selected.statusCode).toBe(200);
-    expect(selected.body).toContain("Define the contract");
-    expect(selected.body).toContain(`value="${existing.id}"`);
-    expect(selected.body).toContain("Using existing workflow");
+    expect(step3.statusCode).toBe(302);
+    expect(step3.headers.location).toBe("/onboarding");
     expect(core.listWorkflows(tenant.id)).toHaveLength(1);
 
     await app.close();
   });
 
-  it("protect wizard Back restores the previous step with draft fields", async () => {
+  it("protect wizard Back redirects to unified onboarding", async () => {
     const sqlite = openDb();
     const clock = new FixedClock(new Date("2026-07-19T10:00:00.000Z"));
     const { sessionId, csrf } = seedAdmin(sqlite, clock);
@@ -600,11 +584,8 @@ describe("catalog product UX UI acceptance", () => {
       },
       payload: `csrf=${encodeURIComponent(csrf)}&to=2&clientId=c-local&businessPurpose=Leads&templateId=custom`,
     });
-    expect(back.statusCode).toBe(200);
-    expect(back.body).toContain("Identify the critical process");
-    expect(back.body).toContain('value="c-local"');
-    expect(back.body).toContain('value="Leads"');
-    expect(back.body).toContain('action="/protect/back"');
+    expect(back.statusCode).toBe(302);
+    expect(back.headers.location).toBe("/onboarding");
 
     await app.close();
   });

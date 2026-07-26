@@ -250,23 +250,23 @@ describe("self-hosted privacy and auth", () => {
 
     const bad = await app.inject({
       method: "POST",
-      url: "/onboarding/method",
+      url: "/onboarding/client",
       headers: {
         cookie: `${SESSION_COOKIE}=${login.sessionId}`,
         "content-type": "application/x-www-form-urlencoded",
       },
-      payload: "method=push&csrf=wrong",
+      payload: "newClientName=Acme&csrf=wrong",
     });
     expect(bad.statusCode).toBe(403);
 
     const good = await app.inject({
       method: "POST",
-      url: "/onboarding/method",
+      url: "/onboarding/client",
       headers: {
         cookie: `${SESSION_COOKIE}=${login.sessionId}`,
         "content-type": "application/x-www-form-urlencoded",
       },
-      payload: `method=push&csrf=${login.csrfToken}`,
+      payload: `newClientName=Acme&csrf=${login.csrfToken}`,
     });
     expect(good.statusCode).toBe(302);
 

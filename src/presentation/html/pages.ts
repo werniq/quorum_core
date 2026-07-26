@@ -608,7 +608,7 @@ export function renderCredentialOncePage(input: {
       </div>
       <p class="helper">Credentials alone do not activate monitoring. Define a contract and activate it next. Until then, push heartbeats return <code>CONTRACT_NOT_ACTIVE</code> (HTTP 409).</p>
       <div class="row-actions" style="justify-content:flex-start">
-        <a class="btn" href="/protect">Next: define contract &amp; activate</a>
+        <a class="btn" href="/onboarding">Next: define monitoring &amp; activate</a>
         <a class="btn btn-secondary" href="/workflows">Back to workflows</a>
       </div>
     `,
@@ -671,7 +671,7 @@ export function renderWorkflowsPage(input: {
         ? ""
         : `<div class="stack" style="gap:0.35rem;margin-top:0.5rem">
             <p class="helper">Inactive means there is no active contract yet. Push heartbeats return <code>CONTRACT_NOT_ACTIVE</code> (HTTP 409) until you define a contract and activate monitoring. An unknown Quorum workflow id still returns <code>NOT_FOUND</code>.</p>
-            <a class="btn btn-secondary" href="/protect">Define contract &amp; activate</a>
+            <a class="btn btn-secondary" href="/onboarding">Define monitoring &amp; activate</a>
           </div>`;
       return `<tr>
         <td data-label="Name"><strong>${escapeHtml(w.name)}</strong></td>

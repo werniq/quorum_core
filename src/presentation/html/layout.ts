@@ -15,12 +15,17 @@ export function escapeHtml(value: string): string {
 /** Human-readable labels for legacy onboarding step IDs (DB still stores snake_case). */
 export const ONBOARDING_STEP_LABELS: Record<string, string> = {
   create_admin: "Create admin",
-  choose_method: "Monitoring method",
-  select_workflows: "Select workflow",
-  define_contracts: "Define contract",
-  review_evidence: "Review evidence",
-  configure_alerts: "Configure alerts",
-  activate: "Activate",
+  choose_method: "Client",
+  client: "Client",
+  connect_n8n: "Connect n8n",
+  select_workflows: "Select workflows",
+  define_contracts: "Monitoring",
+  configure_monitoring: "Monitoring",
+  review_evidence: "Monitoring",
+  configure_alerts: "Alerts",
+  alerts_activate: "Alerts",
+  activate: "Alerts",
+  complete: "Done",
   catalog: "Catalog",
 };
 
@@ -1152,10 +1157,10 @@ function renderSidebar(input: {
   orgName: string;
   userLabel: string;
 }): string {
-  const protect =
+  const setupCta =
     input.role === "viewer"
       ? ""
-      : `<a class="nav-link nav-cta" href="/protect">Protect a client</a>`;
+      : `<a class="nav-link nav-cta" href="/onboarding">Set up monitoring</a>`;
   return `
     <aside class="app-sidebar" id="app-sidebar" aria-label="Application">
       <a class="sidebar-brand" href="/catalog">
@@ -1175,7 +1180,7 @@ function renderSidebar(input: {
         ${sidebarLink("/workflows", "Workflows", "workflows", input.current)}
         <div class="nav-section-label">Account</div>
         ${sidebarLink("/settings", "Settings", "settings", input.current)}
-        ${protect}
+        ${setupCta}
       </nav>
       <div class="sidebar-footer">
         <a class="nav-link" href="/network-privacy">Network &amp; privacy</a>

@@ -216,7 +216,7 @@ export function renderCatalogPage(input: {
            <p>Define the first business process that should always work. Quorum protects explicit contracts, not generic monitors.</p>
            ${
              input.role !== "viewer"
-               ? `<a class="btn" href="/protect">Protect a client</a>`
+               ? `<a class="btn" href="/onboarding">Set up monitoring</a>`
                : ""
            }
          </div>`
@@ -619,7 +619,7 @@ export function renderClientsPage(input: {
       <p class="page-subtitle">Protection status does not mean every process is covered.</p>
       ${
         input.role !== "viewer"
-          ? `<p style="margin-bottom:1.25rem"><a class="btn" href="/protect">Protect a client</a></p>`
+          ? `<p style="margin-bottom:1.25rem"><a class="btn" href="/onboarding">Set up monitoring</a></p>`
           : ""
       }
       ${

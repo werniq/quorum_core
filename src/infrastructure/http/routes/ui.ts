@@ -2,7 +2,6 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { randomBytes } from "node:crypto";
 import type Database from "better-sqlite3";
 import type { Clock } from "../../../domain/clock.js";
-import { assertExplicitContractConfirmation } from "../../../domain/contracts/explicit-activation.js";
 import { createId } from "../../../domain/ids.js";
 import { queryContractCatalog } from "../../catalog/query-catalog.js";
 import { isUiOpenWithoutLogin, type QuorumEnv } from "../../config/env.js";
@@ -11,10 +10,7 @@ import { SqliteAuthRepositories } from "../../db/repositories/sqlite-auth-reposi
 import { SqliteCoreRepositories } from "../../db/repositories/sqlite-core-repositories.js";
 import { SqliteOpsAuditRepositories } from "../../db/repositories/sqlite-ops-audit-repositories.js";
 import { SqliteN8nConnectorRepositories } from "../../db/repositories/sqlite-n8n-connector-repositories.js";
-import {
-  SqliteOnboardingRepositories,
-  type OnboardingStep,
-} from "../../db/repositories/sqlite-onboarding-repositories.js";
+import { SqliteOnboardingRepositories } from "../../db/repositories/sqlite-onboarding-repositories.js";
 import { SqliteOutboundDestinationRepositories } from "../../db/repositories/sqlite-outbound-destinations.js";
 import {
   encryptCredentialSecret,
@@ -30,12 +26,12 @@ import {
   SESSION_COOKIE,
   sessionCookieHeader,
 } from "../cookies.js";
+import { registerSimplifiedOnboardingRoutes } from "./ui-onboarding-routes.js";
 import {
   renderAlertsPage,
   renderCredentialOncePage,
   renderLoginPage,
   renderNetworkPrivacyPage,
-  renderOnboardingPage,
   renderOutcomeEvidencePage,
   renderSetupPage,
   renderWorkflowsPage,
@@ -51,8 +47,6 @@ import {
 } from "../../../domain/auth/passwords.js";
 import { registerProductUiRoutes } from "./ui-product-routes.js";
 import {
-  contractDefinitionErrorMessage,
-  validateContractDefinitionInput,
   validateWorkflowRegistrationInput,
   workflowRegistrationErrorMessage,
 } from "../ui-form-errors.js";
@@ -102,95 +96,6 @@ export function registerUiRoutes(
 
   function tenantId(): string {
     return core.ensureSelfHostedTenant().id;
-  }
-
-  function listOnboardingWorkflows() {
-    return core.listWorkflows(tenantId()).map((w) => ({
-      id: w.id,
-      name: w.name,
-      externalWorkflowId: w.externalWorkflowId,
-      monitoringMethod: w.monitoringMethod,
-    }));
-  }
-
-  function listOnboardingContracts() {
-    const tid = tenantId();
-    const rows = deps.sqlite
-      .prepare(
-        `SELECT c.id, c.name, c.cadence_type, c.cadence_value, c.is_active, w.name AS workflow_name
-         FROM workflow_contracts c
-         JOIN workflows w ON w.id = c.workflow_id AND w.tenant_id = c.tenant_id
-         WHERE c.tenant_id = ?
-         ORDER BY c.created_at DESC`,
-      )
-      .all(tid) as Array<{
-      id: string;
-      name: string;
-      cadence_type: string;
-      cadence_value: string;
-      is_active: number;
-      workflow_name: string;
-    }>;
-    return rows.map((row) => ({
-      id: row.id,
-      name: row.name,
-      workflowName: row.workflow_name,
-      cadenceType: row.cadence_type,
-      cadenceValue: row.cadence_value,
-      isActive: Boolean(row.is_active),
-    }));
-  }
-
-  function listOnboardingAlertChannels() {
-    const tid = tenantId();
-    const rows = deps.sqlite
-      .prepare(
-        `SELECT c.id, c.name, c.type, c.is_active,
-                s.current_health, s.last_tested_at
-         FROM alert_channels c
-         LEFT JOIN alert_channel_states s
-           ON s.alert_channel_id = c.id AND s.tenant_id = c.tenant_id
-         WHERE c.tenant_id = ?
-         ORDER BY c.created_at DESC`,
-      )
-      .all(tid) as Array<{
-      id: string;
-      name: string;
-      type: string;
-      is_active: number;
-      current_health: string | null;
-      last_tested_at: string | null;
-    }>;
-    return rows.map((row) => ({
-      id: row.id,
-      name: row.name,
-      type: row.type,
-      isActive: Boolean(row.is_active),
-      health: row.current_health ?? "unknown",
-      lastTestedAt: row.last_tested_at,
-    }));
-  }
-
-  function onboardingPageContext(
-    session: Session,
-    step: OnboardingStep,
-    extras: {
-      method?: string | null;
-      flash?: string | null;
-      flashTone?: "error" | "success";
-    } = {},
-  ) {
-    return {
-      ...pageShell,
-      csrf: session.csrfToken,
-      step,
-      method: extras.method ?? null,
-      flash: extras.flash ?? null,
-      flashTone: extras.flashTone ?? "error",
-      workflows: listOnboardingWorkflows(),
-      contracts: listOnboardingContracts(),
-      alertChannels: listOnboardingAlertChannels(),
-    };
   }
 
   function readSession(request: FastifyRequest): Session | null {
@@ -431,404 +336,16 @@ export function registerUiRoutes(
     );
   });
 
-  app.get("/onboarding", async (request, reply) => {
-    const session = requireSession(request, reply);
-    if (!session) {
-      return;
-    }
-    const tid = tenantId();
-    const state = onboarding.ensure(tid, deps.clock.now().toISOString());
-    const query = request.query as {
-      registered?: string;
-      contract?: string;
-      alerts?: string;
-      activated?: string;
-    };
-    const flash =
-      query.activated === "1"
-        ? "Monitoring activated. Open the Contract Catalog when you are ready."
-        : query.alerts === "1"
-          ? "Alert channel created and tested. Continue to activation when you are ready."
-          : query.contract === "1"
-            ? "Contract saved as inactive. Review evidence strength next."
-            : query.registered === "1"
-              ? "Workflow registered. Continue to define the contract when you are ready."
-              : null;
-    return reply.type("text/html").send(
-      renderOnboardingPage(
-        onboardingPageContext(session, state.step, {
-          method: state.monitoringMethodChoice,
-          flash,
-          flashTone: flash ? "success" : "error",
-        }),
-      ),
-    );
-  });
-
-  app.post("/onboarding/method", async (request, reply) => {
-    const session = requireSession(request, reply);
-    if (
-      !session ||
-      !requireAdmin(session, reply) ||
-      !assertCsrf(request, session, reply)
-    ) {
-      return;
-    }
-    const body = formBody(request);
-    const method = body.method === "push" ? "push" : "poll";
-    onboarding.setStep(
-      tenantId(),
-      "select_workflows",
-      deps.clock.now().toISOString(),
-      { monitoringMethodChoice: method },
-    );
-    return reply.redirect("/onboarding");
-  });
-
-  app.post("/onboarding/workflows", async (request, reply) => {
-    const session = requireSession(request, reply);
-    if (
-      !session ||
-      !requireAdmin(session, reply) ||
-      !assertCsrf(request, session, reply)
-    ) {
-      return;
-    }
-    const body = formBody(request);
-    const tid = tenantId();
-    const nowIso = deps.clock.now().toISOString();
-    const name = (body.name ?? "").trim();
-    const externalWorkflowId = (body.externalWorkflowId ?? "").trim();
-    const method = body.monitoringMethod === "push" ? "push" : "poll";
-    const validationError = validateWorkflowRegistrationInput({
-      name,
-      externalWorkflowId,
-    });
-    if (validationError) {
-      return reply.type("text/html").send(
-        renderOnboardingPage(
-          onboardingPageContext(session, "select_workflows", {
-            method,
-            flash: validationError,
-          }),
-        ),
-      );
-    }
-    try {
-      core.createWorkflow(tid, {
-        id: createId(),
-        clientId: null,
-        name,
-        externalWorkflowId,
-        description: null,
-        monitoringMethod: method,
-        isActive: false,
-        monitoringStartedAt: null,
-      });
-    } catch (error) {
-      return reply.type("text/html").send(
-        renderOnboardingPage(
-          onboardingPageContext(session, "select_workflows", {
-            method,
-            flash: workflowRegistrationErrorMessage(error),
-          }),
-        ),
-      );
-    }
-    onboarding.setStep(tid, "select_workflows", nowIso);
-    return reply.redirect("/onboarding?registered=1");
-  });
-
-  app.post("/onboarding/advance", async (request, reply) => {
-    const session = requireSession(request, reply);
-    if (
-      !session ||
-      !requireAdmin(session, reply) ||
-      !assertCsrf(request, session, reply)
-    ) {
-      return;
-    }
-    const body = formBody(request);
-    const allowed: OnboardingStep[] = [
-      "choose_method",
-      "select_workflows",
-      "define_contracts",
-      "review_evidence",
-      "configure_alerts",
-      "activate",
-      "catalog",
-    ];
-    const to = body.to as OnboardingStep;
-    if (allowed.includes(to)) {
-      onboarding.setStep(tenantId(), to, deps.clock.now().toISOString());
-    }
-    return reply.redirect("/onboarding");
-  });
-
-  app.post("/onboarding/contracts", async (request, reply) => {
-    const session = requireSession(request, reply);
-    if (
-      !session ||
-      !requireAdmin(session, reply) ||
-      !assertCsrf(request, session, reply)
-    ) {
-      return;
-    }
-    const body = formBody(request);
-    const tid = tenantId();
-    const workflowId = (body.workflowId ?? "").trim();
-    const name = (body.name ?? "").trim();
-    const businessPurpose = (body.businessPurpose ?? "").trim();
-    const cadenceValue = (body.cadenceValue ?? "").trim();
-    const renderDefineError = (flash: string) =>
-      reply.type("text/html").send(
-        renderOnboardingPage(
-          onboardingPageContext(session, "define_contracts", {
-            method: null,
-            flash,
-          }),
-        ),
-      );
-    try {
-      assertExplicitContractConfirmation(
-        body.explicitlyConfirmed === "1",
-        "activate",
-      );
-    } catch {
-      return renderDefineError("explicit_confirmation_required");
-    }
-    const validationError = validateContractDefinitionInput({
-      workflowId,
-      name,
-      businessPurpose,
-      cadenceValue,
-    });
-    if (validationError) {
-      return renderDefineError(validationError);
-    }
-    const cadenceType =
-      body.cadenceType === "cron" || body.cadenceType === "event_driven"
-        ? body.cadenceType
-        : "interval";
-    const contractId = createId();
-    try {
-      core.createWorkflowContract(tid, {
-        id: contractId,
-        workflowId,
-        name: name || "Contract",
-        businessPurpose,
-        cadenceType,
-        cadenceValue: cadenceValue || "5",
-        intervalMode: cadenceType === "interval" ? "fixed_rate" : null,
-        scheduleAnchorAt:
-          cadenceType === "interval" ? deps.clock.now().toISOString() : null,
-        timezone: body.timezone || "UTC",
-        allowedLatenessMinutes: 5,
-        maxQuietWindowMinutes: cadenceType === "event_driven" ? 60 : null,
-        initialGraceMinutes: 5,
-        emptyResultPolicy: "allowed",
-        countLessSuccessAllowed: true,
-        notificationBackoffMinutes: 30,
-        evidenceLevel: "basic",
-        schemaVersion: 1,
-        isActive: false,
-        activatedAt: null,
-      });
-    } catch (error) {
-      return renderDefineError(contractDefinitionErrorMessage(error));
-    }
-    opsAudit.recordOpsAudit({
-      tenantId: tid,
-      actorUserId: session.adminUserId,
-      action: "contract.created",
-      resourceType: "workflow_contract",
-      resourceId: contractId,
-      details: { cadenceType, cadenceValue: cadenceValue || "5" },
-      nowIso: deps.clock.now().toISOString(),
-    });
-    onboarding.setStep(tid, "review_evidence", deps.clock.now().toISOString());
-    return reply.redirect("/onboarding?contract=1");
-  });
-
-  app.post("/onboarding/alerts", async (request, reply) => {
-    const session = requireSession(request, reply);
-    if (
-      !session ||
-      !requireAdmin(session, reply) ||
-      !assertCsrf(request, session, reply)
-    ) {
-      return;
-    }
-    const body = formBody(request);
-    const tid = tenantId();
-    const nowIso = deps.clock.now().toISOString();
-    const channelName = (body.name ?? "").trim() || "Webhook";
-    const url = (body.url ?? "").trim();
-    if (!url) {
-      return reply.type("text/html").send(
-        renderOnboardingPage(
-          onboardingPageContext(session, "configure_alerts", {
-            flash: "Webhook URL is required.",
-          }),
-        ),
-      );
-    }
-    const channelId = createId();
-    try {
-      alerting.createAlertChannel(tid, {
-        id: channelId,
-        name: channelName,
-        type: "webhook",
-        encryptedConfig: encryptCredentialSecret(
-          JSON.stringify({ url }),
-          deps.env.QUORUM_CREDENTIAL_KEK,
-        ),
-        isActive: true,
-        createdAt: nowIso,
-        updatedAt: nowIso,
-      });
-    } catch {
-      return reply.type("text/html").send(
-        renderOnboardingPage(
-          onboardingPageContext(session, "configure_alerts", {
-            flash:
-              "Could not create the alert channel. Check the values and try again.",
-          }),
-        ),
-      );
-    }
-    outbound.upsertDestination({
-      tenantId: tid,
-      kind: "webhook",
-      label: channelName,
-      destination: url,
-      nowIso,
-    });
-    opsAudit.recordOpsAudit({
-      tenantId: tid,
-      actorUserId: session.adminUserId,
-      action: "alert_channel.created",
-      resourceType: "alert_channel",
-      resourceId: channelId,
-      details: { type: "webhook", name: channelName },
-      nowIso,
-    });
-    for (const contract of listOnboardingContracts()) {
-      try {
-        alerting.routeContractToChannel(tid, {
-          contractKind: "workflow",
-          contractId: contract.id,
-          alertChannelId: channelId,
-        });
-      } catch {
-        // Ignore duplicate route rows if the channel was re-tested.
-      }
-    }
-    const outboxId = createId();
-    alerting.enqueueOutbox(tid, {
-      id: outboxId,
-      incidentId: null,
-      eventType: "channel_test",
-      payloadJson: JSON.stringify({ alertChannelId: channelId }),
-      availableAt: nowIso,
-    });
-    if (deps.processOutbox) {
-      await deps.processOutbox.processBatch(10);
-    } else {
-      alerting.applyChannelDeliveryResult(
-        tid,
-        channelId,
-        { type: "test_succeeded" },
-        nowIso,
-      );
-      alerting.markOutboxProcessed(tid, outboxId, nowIso);
-    }
-    onboarding.setStep(tid, "activate", nowIso);
-    return reply.redirect("/onboarding?alerts=1");
-  });
-
-  app.post("/onboarding/activate", async (request, reply) => {
-    const session = requireSession(request, reply);
-    if (
-      !session ||
-      !requireAdmin(session, reply) ||
-      !assertCsrf(request, session, reply)
-    ) {
-      return;
-    }
-    const body = formBody(request);
-    const tid = tenantId();
-    const nowIso = deps.clock.now().toISOString();
-    const contractId = (body.contractId ?? "").trim();
-    const renderActivateError = (flash: string) =>
-      reply
-        .type("text/html")
-        .send(
-          renderOnboardingPage(
-            onboardingPageContext(session, "activate", { flash }),
-          ),
-        );
-    try {
-      assertExplicitContractConfirmation(
-        body.explicitlyConfirmed === "1",
-        "activate",
-      );
-    } catch {
-      return renderActivateError(
-        "Confirm activation explicitly before starting monitoring.",
-      );
-    }
-    if (!contractId) {
-      return renderActivateError("Choose a contract to activate.");
-    }
-    const contract = listOnboardingContracts().find((c) => c.id === contractId);
-    if (!contract) {
-      return renderActivateError("Choose a saved contract to activate.");
-    }
-    deps.sqlite
-      .prepare(
-        `UPDATE workflow_contracts
-         SET is_active = 1, activated_at = ?, updated_at = ?
-         WHERE tenant_id = ? AND id = ?`,
-      )
-      .run(nowIso, nowIso, tid, contractId);
-    const workflow = deps.sqlite
-      .prepare(
-        `SELECT workflow_id FROM workflow_contracts WHERE tenant_id = ? AND id = ?`,
-      )
-      .get(tid, contractId) as { workflow_id: string } | undefined;
-    if (workflow) {
-      deps.sqlite
-        .prepare(
-          `UPDATE workflows
-           SET is_active = 1, monitoring_started_at = COALESCE(monitoring_started_at, ?), updated_at = ?
-           WHERE tenant_id = ? AND id = ?`,
-        )
-        .run(nowIso, nowIso, tid, workflow.workflow_id);
-    }
-    opsAudit.recordOpsAudit({
-      tenantId: tid,
-      actorUserId: session.adminUserId,
-      action: "contract.activated",
-      resourceType: "workflow_contract",
-      resourceId: contractId,
-      nowIso,
-    });
-    onboarding.setStep(tid, "activate", nowIso);
-    return reply.redirect("/onboarding?activated=1");
-  });
-
-  app.post("/onboarding/finish", async (request, reply) => {
-    const session = requireSession(request, reply);
-    if (
-      !session ||
-      !requireAdmin(session, reply) ||
-      !assertCsrf(request, session, reply)
-    ) {
-      return;
-    }
-    onboarding.complete(tenantId(), deps.clock.now().toISOString());
-    return reply.redirect("/catalog");
+  registerSimplifiedOnboardingRoutes(app, {
+    env: deps.env,
+    sqlite: deps.sqlite,
+    clock: deps.clock,
+    ...(deps.processOutbox ? { processOutbox: deps.processOutbox } : {}),
+    requireSession,
+    assertCsrf,
+    requireAdmin,
+    tenantId,
+    demoMode: pageShell.demoMode === true,
   });
 
   app.get("/workflows", async (request, reply) => {
