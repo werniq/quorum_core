@@ -75,33 +75,56 @@ Open [http://127.0.0.1:3000/](http://127.0.0.1:3000/).
 
 ### First-time setup
 
-**Auth on (default):** set `QUORUM_SETUP_TOKEN` (≥24 characters), visit `/setup`, create the local admin, then use the UI (onboarding or **Protect a client**).
+1. Start Quorum (`docker compose up --build -d`).
+2. Create the local administrator at `/setup` (when UI auth is on).
+3. Open **Set up monitoring** (`/onboarding`) — this is the canonical first-run flow.
+4. Create or select a client.
+5. Connect n8n (URL + API key) and test the connection.
+6. Select workflows by name (discovered automatically).
+7. Confirm monitoring expectations (cadence and what to alert on).
+8. Test a notification channel.
+9. Click **Start monitoring**.
 
-The admin **password** is not the setup token. It must be ≥12 characters and must not be an exact match (case-insensitive) of a known default such as `password`, `changeme`, or `quorum123`. There is no charset or entropy score requirement beyond that. A rejected password shows as `weak_password` (with a clearer message on the setup form).
+You should not need to copy Quorum workflow IDs, connector IDs, contract IDs, or HMAC secrets for the normal polling path. Those remain under **Advanced setup** / Workflows for push heartbeats.
 
-**Open UI:** `QUORUM_UI_AUTH_ENABLED=false`, or `QUORUM_DEMO_MODE=true` on a localhost bind — open `/` or `/catalog` without login.
+**Auth on (default):** set `QUORUM_SETUP_TOKEN` (≥24 characters), visit `/setup`, create the local admin, then open onboarding.
 
-There is no default password. When auth is on and you omit `QUORUM_SETUP_TOKEN`, a one-time token may appear in container logs on first boot. Prefer supplying your own token.
+The admin **password** is not the setup token. It must be ≥12 characters and must not be an exact match (case-insensitive) of a known default such as `password`, `changeme`, or `quorum123`.
 
-## Protect a client
+**Open UI:** `QUORUM_UI_AUTH_ENABLED=false`, or `QUORUM_DEMO_MODE=true` on a localhost bind — open `/` without login.
 
-End-to-end path for a real client after Quorum is up. Use **Protect a client** in the UI (`/protect`). Steps use **Continue** (and **Back** where shown); selecting an existing client or workflow continues with that record — it does not create a duplicate.
+`/protect` redirects to `/onboarding` for compatibility. Connectors, Workflows, and Alert channels remain available as advanced management pages.
 
-### 1. Create or select the client
+## Set up monitoring (onboarding)
 
-1. Open **Protect a client**.
-2. Choose an **existing client** from the list, or leave that blank and enter a **new client name**.
-3. Click **Continue**.
+Canonical path after Quorum is up: **Set up monitoring** in the sidebar (`/onboarding`).
 
-Do not create a second client for the same agency relationship unless you mean to. Selecting an existing client and continuing is the normal path.
+1. **Client** — who these workflows are for (select or create by name).
+2. **Connect n8n** — URL + API key, test connection, or reuse an existing connection.
+3. **Select workflows** — searchable list from n8n (name, active/inactive, schedule summary). Manual workflow ID entry is a collapsed fallback only.
+4. **Monitoring expectations** — confirm cadence (including values detected from n8n) and alert conditions. Advanced settings (push heartbeats, verification strength, volume bands) stay collapsed.
+5. **Alerts** — reuse or create a webhook channel, send a test, then **Start monitoring**.
+6. **Completion** — per-workflow checklist. Workflows stay “Waiting for first execution” until evidence arrives (not labelled healthy early).
 
-### 2. Identify the process, then register (or reuse) the workflow
+Polling and heartbeats still do **not** independently prove the final downstream business outcome (Basic / execution reporting).
 
-Continue through the process/template step (templates prefill questions; they do **not** activate a contract).
+## Advanced setup
 
-On **Select a workflow**:
+Push heartbeats, Quorum/n8n workflow IDs, HMAC credentials, evidence levels, and environment-variable injection are documented below for advanced fleets. They are not required for the normal Connect n8n onboarding path.
 
-- Prefer **Existing registered workflow** when the n8n workflow is already in Quorum (from **Workflows** or an earlier Protect run). Selecting it continues with that Quorum id — it does **not** re-register.
+### Protect a client (legacy URL)
+
+`/protect` redirects to `/onboarding`. Existing clients, workflows, contracts, connectors, and channels remain usable.
+
+<details>
+<summary>Legacy Protect step notes (redirected)</summary>
+
+The older Protect wizard steps are superseded by onboarding. Prefer **Set up monitoring**.
+
+</details>
+
+## Connect n8n (advanced / management)
+
 - Only use **Register new…** when you need a new Quorum registration.
 
 Two different IDs matter (plus credential fields for push):
