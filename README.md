@@ -75,7 +75,7 @@ Open [http://127.0.0.1:3000/](http://127.0.0.1:3000/).
 
 ### First-time setup
 
-1. Start Quorum (`docker compose up --build -d`).
+1. Start Quorum (`docker compose up --build -d`), or for onboarding against a bundled n8n: `docker compose -f docker-compose.lab.yml up --build`.
 2. Create the local administrator at `/setup` (when UI auth is on).
 3. Open **Set up monitoring** (`/onboarding`) — this is the canonical first-run flow.
 4. Create or select a client.
@@ -310,6 +310,25 @@ npm test
 npm run build
 npm run dev
 ```
+
+### Local lab (Quorum + n8n)
+
+For trying the onboarding flow against a real n8n container (separate from production `docker-compose.yml`):
+
+```bash
+docker compose -f docker-compose.lab.yml up --build
+```
+
+| Service | In the browser              | From Quorum onboarding   |
+| ------- | --------------------------- | ------------------------ |
+| Quorum  | http://127.0.0.1:3000       | —                        |
+| n8n     | http://127.0.0.1:5678       | `http://n8n:5678`        |
+
+1. Open n8n, create the owner account, then **Settings → n8n API** → create an API key.
+2. Open Quorum → **Set up monitoring** (`/onboarding`).
+3. Connect with URL `http://n8n:5678` and the API key (`localhost` will not work from inside the Quorum container).
+
+Lab defaults disable UI auth and use throwaway secrets. Data lives in `quorum-lab-*` volumes. Tear down with `docker compose -f docker-compose.lab.yml down` (add `-v` to wipe volumes). Automated e2e still uses `docker-compose.e2e.yml`.
 
 Full self-hosted verification gate (unit tests, Docker compose smoke, restart persistence, n8n e2e):
 

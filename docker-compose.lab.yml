@@ -1,0 +1,96 @@
+# Local lab stack: Quorum + n8n for manual onboarding / monitoring tests.
+# Not for production. Uses disposable defaults and a separate Docker network.
+#
+#   docker compose -f docker-compose.lab.yml up --build
+#
+# Then open:
+#   Quorum  → http://127.0.0.1:3000/onboarding
+#   n8n     → http://127.0.0.1:5678
+#
+# In Quorum onboarding, use the Docker service URL (not localhost):
+#   n8n URL → http://n8n:5678
+#
+# Create an n8n owner account on first visit, then Settings → n8n API → create an API key.
+
+services:
+  n8n:
+    image: ${N8N_IMAGE:-n8nio/n8n:1.95.3}
+    ports:
+      - "${N8N_HOST_PORT:-5678}:5678"
+    environment:
+      N8N_HOST: "0.0.0.0"
+      N8N_PORT: "5678"
+      N8N_PROTOCOL: http
+      N8N_LISTEN_ADDRESS: "0.0.0.0"
+      WEBHOOK_URL: http://n8n:5678/
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      N8N_USER_MANAGEMENT_DISABLED: "false"
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:-lab-only-n8n-encryption-key!!}
+      N8N_SECURE_COOKIE: "false"
+      GENERIC_TIMEZONE: UTC
+    volumes:
+      - quorum-lab-n8n-data:/home/node/.n8n
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:5678/healthz || wget -qO- http://127.0.0.1:5678/ || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 40s
+    networks:
+      - quorum-lab
+
+  quorum:
+    build: .
+    ports:
+      - "${QUORUM_HOST_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3000"
+      DATABASE_URL: file:/data/quorum.sqlite
+      QUORUM_EDITION: self_hosted
+      QUORUM_TELEMETRY_ENABLED: "false"
+      # Lab defaults only — override via env for anything beyond local throwaway use.
+      QUORUM_CREDENTIAL_KEK: ${QUORUM_CREDENTIAL_KEK:-lab-only-quorum-kek-do-not-use}
+      QUORUM_SETUP_TOKEN: ${QUORUM_SETUP_TOKEN:-lab-only-setup-token-24chars}
+      # Open UI for faster local onboarding tests (set true to exercise /setup + login).
+      QUORUM_UI_AUTH_ENABLED: ${QUORUM_UI_AUTH_ENABLED:-false}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://127.0.0.1:3000}
+      WATCHER_INTERVAL_MS: "15000"
+      WATCHER_STALE_MS: "60000"
+      OUTBOX_INTERVAL_MS: "10000"
+      N8N_POLL_SCHEDULER_INTERVAL_MS: "15000"
+      N8N_POLL_DEFAULT_INTERVAL_MS: "15000"
+    volumes:
+      - quorum-lab-data:/data
+    depends_on:
+      n8n:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/readyz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 40s
+    networks:
+      - quorum-lab
+    restart: unless-stopped
+
+volumes:
+  quorum-lab-n8n-data:
+  quorum-lab-data:
+
+networks:
+  quorum-lab:
+    driver: bridge
