@@ -20,4 +20,4 @@ Quorum’s simplified onboarding discovers workflows through the selected n8n co
 - Names from n8n are treated as untrusted and HTML-escaped in the UI.
 - After changing a schedule in n8n, save (and publish/activate if your n8n version uses versions), then **Refresh workflow list** in Quorum.
 - **Inactive** on the select list means the workflow is inactive **in n8n**, not that Quorum monitoring failed.
-Polling and heartbeats still do not independently prove the final downstream business outcome.
+  Polling and heartbeats still do not independently prove the final downstream business outcome.
