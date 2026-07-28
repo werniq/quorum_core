@@ -42,25 +42,67 @@ function unitToInterval(
   if (amount <= 0) {
     return null;
   }
+  const plural = amount === 1 ? "" : "s";
   if (u.startsWith("sec")) {
-    return { value: `${amount}s`, label: `Every ${amount} seconds` };
+    return {
+      value: `${amount}s`,
+      label: `Every ${amount} second${plural}`,
+    };
   }
   if (u.startsWith("min")) {
-    return { value: `${amount}m`, label: `Every ${amount} minutes` };
+    return {
+      value: `${amount}m`,
+      label: `Every ${amount} minute${plural}`,
+    };
   }
   if (u.startsWith("hour")) {
-    return { value: `${amount}h`, label: `Every ${amount} hours` };
+    return {
+      value: `${amount}h`,
+      label: `Every ${amount} hour${plural}`,
+    };
   }
   if (u.startsWith("day")) {
-    return { value: `${amount}d`, label: `Every ${amount} days` };
+    return {
+      value: `${amount}d`,
+      label: `Every ${amount} day${plural}`,
+    };
   }
   if (u.startsWith("week")) {
     return {
       value: `${amount * 7}d`,
-      label: `Every ${amount} week${amount === 1 ? "" : "s"}`,
+      label: `Every ${amount} week${plural}`,
+    };
+  }
+  if (u.startsWith("month")) {
+    return {
+      value: `${amount * 30}d`,
+      label: `Every ${amount} month${plural}`,
     };
   }
   return null;
+}
+
+function intervalAmountForField(
+  first: Record<string, unknown>,
+  field: string,
+): number | null {
+  const keyed = readNumber(first[`${field}Interval`]);
+  if (keyed !== null) {
+    return keyed;
+  }
+  // Fallbacks used by some n8n exports / versions.
+  return (
+    readNumber(first.minutesInterval) ??
+    readNumber(first.hoursInterval) ??
+    readNumber(first.secondsInterval) ??
+    readNumber(first.daysInterval) ??
+    readNumber(first.weeksInterval) ??
+    readNumber(first.monthsInterval) ??
+    readNumber(first.interval) ??
+    readNumber(first.value) ??
+    readNumber(first.amount) ??
+    null
+  );
 }
 
 function inferFromScheduleNode(node: RawNode): {
@@ -82,28 +124,45 @@ function inferFromScheduleNode(node: RawNode): {
   if (Array.isArray(rule.interval) && rule.interval.length > 0) {
     const first = asRecord(rule.interval[0]);
     if (first) {
-      const field = readString(first.field) ?? "hours";
-      const amount =
-        readNumber(first[`${field}Interval`]) ??
-        readNumber(first.hoursInterval) ??
-        readNumber(first.minutesInterval) ??
-        readNumber(first.secondsInterval) ??
-        readNumber(first.daysInterval) ??
-        1;
-      const mapped = unitToInterval(amount, field);
-      if (mapped) {
-        const cadence: InferredCadence = {
-          type: "interval",
-          value: mapped.value,
-          label: mapped.label,
-          ...(timezone ? { timezone } : {}),
-        };
-        return {
-          kind: "schedule",
-          cadence,
-          summary: mapped.label,
-          ambiguous: false,
-        };
+      const field = readString(first.field);
+      if (field === "cronExpression") {
+        const cron =
+          readString(first.expression) ??
+          readString(first.cronExpression) ??
+          null;
+        if (cron) {
+          const cadence: InferredCadence = {
+            type: "cron",
+            value: cron,
+            label: `Cron: ${cron}`,
+            ...(timezone ? { timezone } : {}),
+          };
+          return {
+            kind: "schedule",
+            cadence,
+            summary: `Cron (${cron})`,
+            ambiguous: false,
+          };
+        }
+      } else if (field) {
+        const amount = intervalAmountForField(first, field);
+        if (amount !== null) {
+          const mapped = unitToInterval(amount, field);
+          if (mapped) {
+            const cadence: InferredCadence = {
+              type: "interval",
+              value: mapped.value,
+              label: mapped.label,
+              ...(timezone ? { timezone } : {}),
+            };
+            return {
+              kind: "schedule",
+              cadence,
+              summary: mapped.label,
+              ambiguous: false,
+            };
+          }
+        }
       }
     }
   }
@@ -158,7 +217,7 @@ function inferFromScheduleNode(node: RawNode): {
     };
   }
 
-  // Trigger found but expression/dynamic config unresolved.
+  // Trigger found but expression/dynamic config unresolved — never invent "every 1 …".
   return {
     kind: "schedule",
     cadence: null,

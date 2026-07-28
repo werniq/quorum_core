@@ -92,15 +92,48 @@ describe("n8n cadence inference", () => {
         },
       ],
     });
-    // hoursInterval missing → amount defaults to 1 via field hours
-    // OR unresolved. Accept either inferred 1h or ambiguous summary.
-    if (discovered.inferredCadence) {
-      expect(discovered.inferredCadence.type).toBe("interval");
-    } else {
-      expect(discovered.triggerSummary.toLowerCase()).toContain(
-        "could not infer",
-      );
-    }
+    expect(discovered.inferredCadence).toBeNull();
+    expect(discovered.triggerSummary.toLowerCase()).toContain(
+      "could not infer",
+    );
+  });
+
+  it("does not invent every-1-minute when interval amount is missing", () => {
+    const discovered = inferWorkflowDiscovery({
+      externalWorkflowId: "6",
+      name: "Minutes without amount",
+      active: true,
+      nodes: [
+        {
+          type: "n8n-nodes-base.scheduleTrigger",
+          parameters: {
+            rule: { interval: [{ field: "minutes" }] },
+          },
+        },
+      ],
+    });
+    expect(discovered.inferredCadence).toBeNull();
+    expect(discovered.triggerSummary).not.toMatch(/every 1 minute/i);
+  });
+
+  it("infers five-minute schedule", () => {
+    const discovered = inferWorkflowDiscovery({
+      externalWorkflowId: "7",
+      name: "Five",
+      active: true,
+      nodes: [
+        {
+          type: "n8n-nodes-base.scheduleTrigger",
+          parameters: {
+            rule: {
+              interval: [{ field: "minutes", minutesInterval: 5 }],
+            },
+          },
+        },
+      ],
+    });
+    expect(discovered.triggerSummary).toBe("Every 5 minutes");
+    expect(discovered.inferredCadence?.value).toBe("5m");
   });
 
   it("escapes hostile workflow names for HTML rendering", () => {

@@ -137,9 +137,61 @@ export async function validateN8nConnectorConnectivity(
 
 const MAX_DISCOVERED_WORKFLOWS = 500;
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return null;
+}
+
+/**
+ * Prefer published/active nodes when n8n returns versioned workflows.
+ * List payloads may omit full schedule parameters; callers should detail-fetch.
+ */
+export function nodesFromWorkflowPayload(
+  workflow: Record<string, unknown>,
+): unknown {
+  const activeVersion = asRecord(workflow.activeVersion);
+  if (activeVersion && Array.isArray(activeVersion.nodes)) {
+    return activeVersion.nodes;
+  }
+  const version = asRecord(workflow.version);
+  if (version && Array.isArray(version.nodes)) {
+    return version.nodes;
+  }
+  return workflow.nodes;
+}
+
+async function fetchN8nWorkflowDetail(input: {
+  baseUrl: string;
+  apiKey: string;
+  workflowId: string;
+  options: SecureOutboundHttpOptions;
+}): Promise<Record<string, unknown> | null> {
+  const response = await secureOutboundGet(
+    `${input.baseUrl}/api/v1/workflows/${encodeURIComponent(input.workflowId)}`,
+    {
+      Accept: "application/json",
+      "X-N8N-API-KEY": input.apiKey,
+    },
+    httpOptions(input.options),
+  );
+  if (response.status < 200 || response.status >= 300) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(response.bodyText) as unknown;
+    return asRecord(parsed);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Lists workflows from n8n with pagination. Returns normalized discovery DTOs.
  * Caps results to avoid unbounded DB/UI work from untrusted upstream.
+ * Fetches each workflow detail so schedule node parameters are present
+ * (list responses often include names but incomplete trigger config).
  */
 export async function listN8nWorkflows(input: {
   endpoint: N8nConnectorEndpoint;
@@ -219,17 +271,28 @@ export async function listN8nWorkflows(input: {
           continue;
         }
         seenIds.add(externalWorkflowId);
+
+        const detail = await fetchN8nWorkflowDetail({
+          baseUrl: base,
+          apiKey: input.endpoint.apiKey,
+          workflowId: externalWorkflowId,
+          options: input.options,
+        });
+        const source = detail ?? row;
         const name =
-          typeof row.name === "string" && row.name.trim().length > 0
-            ? row.name.trim().slice(0, 200)
-            : `Workflow ${externalWorkflowId}`;
-        const active = row.active === true;
+          typeof source.name === "string" && source.name.trim().length > 0
+            ? source.name.trim().slice(0, 200)
+            : typeof row.name === "string" && row.name.trim().length > 0
+              ? row.name.trim().slice(0, 200)
+              : `Workflow ${externalWorkflowId}`;
+        const active =
+          source.active === true || (detail == null && row.active === true);
         discovered.push(
           inferWorkflowDiscovery({
             externalWorkflowId,
             name,
             active,
-            nodes: row.nodes,
+            nodes: nodesFromWorkflowPayload(source),
           }),
         );
       }
