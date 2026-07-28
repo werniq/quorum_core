@@ -371,6 +371,27 @@ h3.card-title, .card-title {
 .card.compact { padding: var(--space-4); }
 .stack { display: grid; gap: var(--space-4); }
 .stack-sm { display: grid; gap: var(--space-2); }
+.workflow-actions {
+  gap: var(--space-3);
+  min-width: 12rem;
+  max-width: 18rem;
+}
+.workflow-bind-form {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+}
+.workflow-bind-form select,
+.workflow-bind-form button {
+  width: 100%;
+}
+.workflow-inactive-next {
+  margin-top: var(--space-1);
+  gap: var(--space-3);
+}
+.workflow-actions .helper {
+  margin: 0;
+}
 
 /* Contract detail — tighter vertical rhythm without changing global card styles */
 .contract-detail {

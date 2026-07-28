@@ -655,7 +655,7 @@ export function renderWorkflowsPage(input: {
           </form>`;
       const bindForm =
         w.monitoringMethod === "poll"
-          ? `<form method="post" action="/workflows/${escapeHtml(w.id)}/connector" style="display:inline">
+          ? `<form method="post" action="/workflows/${escapeHtml(w.id)}/connector" class="workflow-bind-form">
             <input type="hidden" name="csrf" value="${escapeHtml(input.csrf)}" />
             <select name="connectorId" required aria-label="Connector for ${escapeHtml(w.name)}">${connectorOptions || `<option value="">No connectors</option>`}</select>
             <button type="submit" ${connectors.length === 0 ? "disabled" : ""}>Bind connector</button>
@@ -669,7 +669,7 @@ export function renderWorkflowsPage(input: {
             : "";
       const inactiveNext = w.isActive
         ? ""
-        : `<div class="stack" style="gap:0.35rem;margin-top:0.5rem">
+        : `<div class="stack-sm workflow-inactive-next">
             <p class="helper">Inactive means there is no active contract yet. Push heartbeats return <code>CONTRACT_NOT_ACTIVE</code> (HTTP 409) until you define a contract and activate monitoring. An unknown Quorum workflow id still returns <code>NOT_FOUND</code>.</p>
             <a class="btn btn-secondary" href="/onboarding">Define monitoring &amp; activate</a>
           </div>`;
@@ -680,9 +680,11 @@ export function renderWorkflowsPage(input: {
         <td data-label="Method">${escapeHtml(methodLabel)}</td>
         <td data-label="Status">${w.isActive ? `<span class="badge badge-status-healthy">Active</span>` : `<span class="badge badge-status-paused">Inactive</span>`}</td>
         <td data-label="Actions">
-          ${w.monitoringMethod === "push" ? pushCredential : bindForm}
-          ${bound}
-          ${inactiveNext}
+          <div class="stack-sm workflow-actions">
+            ${w.monitoringMethod === "push" ? pushCredential : bindForm}
+            ${bound}
+            ${inactiveNext}
+          </div>
         </td>
       </tr>`;
     })
