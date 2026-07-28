@@ -406,4 +406,67 @@ describe("n8n polling adapter", () => {
     expect(incident.incident_type).toBe("connector_unavailable");
     expect(incident.summary).not.toContain(API_KEY);
   });
+
+  it("resolves connector_unavailable incidents after polling recovers", async () => {
+    const sqlite = openDb();
+    const seeded = seedPollWorkflow(sqlite);
+    let calls = 0;
+    const adapter = seeded.createAdapter(async () => {
+      calls += 1;
+      if (calls === 1) {
+        return new Response("upstream down", { status: 503 });
+      }
+      return new Response(
+        JSON.stringify({
+          data: [
+            {
+              id: 9,
+              finished: true,
+              status: "success",
+              stoppedAt: "2026-07-18T11:30:00.000Z",
+              workflowId: "wf-ext-1",
+            },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+
+    const failed = await adapter.pollWorkflow({
+      tenantId: seeded.tenant.id,
+      workflowId: seeded.workflowId,
+    });
+    expect(failed.status).toBe("connector_error");
+    expect(
+      (
+        sqlite
+          .prepare(
+            `SELECT status FROM incidents WHERE tenant_id = ? AND incident_type = 'connector_unavailable'`,
+          )
+          .get(seeded.tenant.id) as { status: string }
+      ).status,
+    ).toBe("open");
+
+    const recovered = await adapter.pollWorkflow({
+      tenantId: seeded.tenant.id,
+      workflowId: seeded.workflowId,
+    });
+    expect(recovered.status).toBe("polled");
+    expect(
+      (
+        sqlite
+          .prepare(
+            `SELECT status FROM incidents WHERE tenant_id = ? AND incident_type = 'connector_unavailable'`,
+          )
+          .get(seeded.tenant.id) as { status: string }
+      ).status,
+    ).toBe("resolved");
+    expect(
+      (
+        sqlite
+          .prepare(`SELECT health FROM n8n_connectors WHERE id = ?`)
+          .get(seeded.connector.id) as { health: string }
+      ).health,
+    ).toBe("healthy");
+  });
 });

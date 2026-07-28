@@ -43,6 +43,7 @@ import { SqliteOutcomeContractRepositories } from "../../db/repositories/sqlite-
 import { SqliteReconciliationRepositories } from "../../db/repositories/sqlite-reconciliation-repositories.js";
 import { createReconciliationRunner } from "../../connectors/run-reconciliation.js";
 import { validateN8nConnectorConnectivity } from "../../n8n/n8n-api-client.js";
+import { resolveN8nConnectorUnavailableIncidents } from "../../n8n/resolve-connector-incidents.js";
 import {
   generateOpaqueToken,
   hashToken,
@@ -1015,6 +1016,33 @@ export function registerUiRoutes(
     return reply.redirect("/connectors");
   });
 
+  app.post("/connectors/n8n/:connectorId/delete", async (request, reply) => {
+    const session = requireSession(request, reply);
+    if (
+      !session ||
+      !requireAdmin(session, reply) ||
+      !assertCsrf(request, session, reply)
+    ) {
+      return;
+    }
+    const connectorId = (request.params as { connectorId: string }).connectorId;
+    const tid = tenantId();
+    const nowIso = deps.clock.now().toISOString();
+    const ok = n8nConnectors.deleteConnector(tid, connectorId);
+    if (!ok) {
+      return reply.code(404).type("text/html").send("Connector not found");
+    }
+    opsAudit.recordOpsAudit({
+      tenantId: tid,
+      actorUserId: session.adminUserId,
+      action: "connector.deleted",
+      resourceType: "n8n_connector",
+      resourceId: connectorId,
+      nowIso,
+    });
+    return reply.redirect("/connectors?removed=1");
+  });
+
   app.post("/connectors/n8n/:connectorId/test", async (request, reply) => {
     const session = requireSession(request, reply);
     if (
@@ -1093,6 +1121,14 @@ export function registerUiRoutes(
       success: true,
       errorCode: null,
       errorSummary: null,
+    });
+    resolveN8nConnectorUnavailableIncidents({
+      sqlite: deps.sqlite,
+      alerting,
+      tenantId: tid,
+      connectorId,
+      nowIso,
+      actor: `admin:${session.adminUserId}`,
     });
     opsAudit.recordOpsAudit({
       tenantId: tid,

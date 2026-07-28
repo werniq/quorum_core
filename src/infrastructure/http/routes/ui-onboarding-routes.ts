@@ -910,7 +910,7 @@ export function registerSimplifiedOnboardingRoutes(
             cadenceType: cfg.cadenceType,
             cadenceValue: cfg.cadenceValue,
             intervalMode: cfg.cadenceType === "interval" ? "fixed_rate" : null,
-            scheduleAnchorAt: null,
+            scheduleAnchorAt: cfg.cadenceType === "interval" ? nowIso : null,
             timezone: cfg.timezone ?? "UTC",
             allowedLatenessMinutes: 5,
             maxQuietWindowMinutes:
@@ -925,6 +925,17 @@ export function registerSimplifiedOnboardingRoutes(
             activatedAt: null,
           });
           contractId = created.id;
+        } else if (cfg.cadenceType === "interval") {
+          // Older onboarding drafts may have left fixed_rate without an anchor.
+          deps.sqlite
+            .prepare(
+              `UPDATE workflow_contracts
+               SET interval_mode = COALESCE(interval_mode, 'fixed_rate'),
+                   schedule_anchor_at = COALESCE(schedule_anchor_at, ?),
+                   updated_at = ?
+               WHERE tenant_id = ? AND id = ?`,
+            )
+            .run(nowIso, nowIso, tid, contractId);
         }
 
         if (channelId) {

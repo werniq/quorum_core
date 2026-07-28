@@ -307,13 +307,17 @@ export function registerProductUiRoutes(
       return;
     }
     const tid = deps.tenantId();
-    const tested = (request.query as { tested?: string }).tested;
+    const q = request.query as { tested?: string; removed?: string };
+    const tested = q.tested;
+    const removed = q.removed;
     const flash =
       tested === "ok"
         ? `<p class="ok" role="status">Connector test succeeded.</p>`
         : tested === "fail"
           ? `<p class="err" role="alert">Connector test failed. Check health below.</p>`
-          : "";
+          : removed === "1"
+            ? `<p class="ok" role="status">Connector removed.</p>`
+            : "";
     const rows = deps.sqlite
       .prepare(
         `SELECT id, name, status AS health, provider AS kind, status AS connector_status
@@ -346,18 +350,24 @@ export function registerProductUiRoutes(
               .map((r) => {
                 const actions =
                   r.kind === "n8n"
-                    ? `<form method="post" action="/connectors/n8n/${escapeHtml(r.id)}/test" style="display:inline">
+                    ? `<div class="stack-sm workflow-actions" style="min-width:0;max-width:14rem">
+                      <form method="post" action="/connectors/n8n/${escapeHtml(r.id)}/test">
                         <input type="hidden" name="csrf" value="${escapeHtml(session.csrfToken)}" />
-                        <button type="submit" class="btn-secondary">Test connection</button>
+                        <button type="submit" class="btn-secondary" style="width:100%">Test connection</button>
                       </form>
                       ${
                         r.connector_status === "active"
-                          ? `<form method="post" action="/connectors/n8n/${escapeHtml(r.id)}/disable" style="display:inline">
+                          ? `<form method="post" action="/connectors/n8n/${escapeHtml(r.id)}/disable">
                         <input type="hidden" name="csrf" value="${escapeHtml(session.csrfToken)}" />
-                        <button type="submit" class="btn-ghost">Disable</button>
+                        <button type="submit" class="btn-ghost" style="width:100%">Disable</button>
                       </form>`
                           : ""
-                      }`
+                      }
+                      <form method="post" action="/connectors/n8n/${escapeHtml(r.id)}/delete" onsubmit="return confirm('Remove this n8n connector? Workflows bound to it will be unbound.');">
+                        <input type="hidden" name="csrf" value="${escapeHtml(session.csrfToken)}" />
+                        <button type="submit" class="btn-ghost" style="width:100%">Remove</button>
+                      </form>
+                    </div>`
                     : "";
                 return `<tr>
                   <td data-label="Name">${escapeHtml(r.name)}</td>

@@ -200,6 +200,37 @@ export class SqliteN8nConnectorRepositories {
     return result.changes === 1;
   }
 
+  /**
+   * Permanently removes an n8n connector. Unbinds workflows and deletes
+   * poll checkpoints that reference it.
+   */
+  deleteConnector(tenantId: string, connectorId: string): boolean {
+    const existing = this.getConnector(tenantId, connectorId);
+    if (!existing) {
+      return false;
+    }
+    const run = this.sqlite.transaction(() => {
+      this.sqlite
+        .prepare(
+          `DELETE FROM n8n_poll_checkpoints
+           WHERE tenant_id = ? AND connector_id = ?`,
+        )
+        .run(tenantId, connectorId);
+      this.sqlite
+        .prepare(
+          `UPDATE workflows
+           SET connector_id = NULL, updated_at = ?
+           WHERE tenant_id = ? AND connector_id = ?`,
+        )
+        .run(new Date().toISOString(), tenantId, connectorId);
+      const result = this.sqlite
+        .prepare(`DELETE FROM n8n_connectors WHERE tenant_id = ? AND id = ?`)
+        .run(tenantId, connectorId);
+      return result.changes === 1;
+    });
+    return run();
+  }
+
   updateConnectorHealth(
     tenantId: string,
     connectorId: string,

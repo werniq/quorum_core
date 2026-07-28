@@ -10,6 +10,7 @@ import {
   listN8nExecutions,
   validateN8nConnectorConnectivity,
 } from "./n8n-api-client.js";
+import { resolveN8nConnectorUnavailableIncidents } from "./resolve-connector-incidents.js";
 import type { IngestPolledEvidenceResult } from "../ingestion/ingest-polled-evidence.js";
 import type { createIngestPolledEvidenceHandler } from "../ingestion/ingest-polled-evidence.js";
 import {
@@ -114,6 +115,14 @@ export function createN8nPollingAdapter(deps: {
       success: true,
       errorCode: null,
       errorSummary: null,
+    });
+    resolveN8nConnectorUnavailableIncidents({
+      sqlite: deps.sqlite,
+      alerting,
+      tenantId: input.tenantId,
+      connectorId: input.connectorId,
+      nowIso: checkedAt,
+      actor: "system:n8n-connector-validate",
     });
     return {
       status: "healthy" as const,
@@ -236,6 +245,15 @@ export function createN8nPollingAdapter(deps: {
       success: true,
       errorCode: null,
       errorSummary: null,
+    });
+    resolveN8nConnectorUnavailableIncidents({
+      sqlite: deps.sqlite,
+      alerting,
+      tenantId: input.tenantId,
+      workflowId: input.workflowId,
+      connectorId: connector.id,
+      nowIso: checkedAt,
+      actor: "system:n8n-poll",
     });
 
     const checkpoint = connectors.getCheckpoint(
