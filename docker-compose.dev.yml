@@ -1,0 +1,9 @@
+# Local development: build Quorum from this repository.
+# Default install uses the published image via docker-compose.yml.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build -d
+
+services:
+  quorum:
+    build: .
+    image: ${QUORUM_IMAGE:-quorum:local}

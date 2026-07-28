@@ -102,7 +102,16 @@ function filteredCopy(src, dest) {
 function compose(project, workDir, args, env) {
   return run(
     "docker",
-    ["compose", "-p", project, "-f", "docker-compose.yml", ...args],
+    [
+      "compose",
+      "-p",
+      project,
+      "-f",
+      "docker-compose.yml",
+      "-f",
+      "docker-compose.dev.yml",
+      ...args,
+    ],
     {
       cwd: workDir,
       env: { ...process.env, ...env },
@@ -132,6 +141,8 @@ async function main() {
           project,
           "-f",
           "docker-compose.yml",
+          "-f",
+          "docker-compose.dev.yml",
           "down",
           "-v",
           "--remove-orphans",

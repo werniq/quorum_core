@@ -5,12 +5,24 @@ After [Quick start](../README.md#quick-start-docker), use this page for first-ru
 ## First-time setup
 
 1. Copy `.env.example` to `.env` and set secrets ([environment](environment.md)).
-2. Start Quorum: `docker compose up --build -d`.
+2. Pull and start the published image:
+
+   ```bash
+   docker pull qniw984/quorum:0.1.0-beta.2
+   docker compose up -d
+   ```
+
 3. Open http://127.0.0.1:3000/setup and create the local administrator (when UI auth is on).
 4. Open **Set up monitoring** (`/onboarding`).
 5. Create or select a client, connect n8n, select workflows, confirm expectations, test alerts, **Start monitoring**.
 
 You should not need Quorum workflow IDs, connector IDs, contract IDs, or HMAC secrets for the normal polling path.
+
+To build from this repository instead of pulling:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build -d
+```
 
 ### Auth
 
@@ -41,4 +53,4 @@ Lab defaults disable UI auth and use throwaway secrets. Tear down with `docker c
 - `/protect` redirects to `/onboarding` ([legacy notes](legacy-onboarding.md)).
 - **Connectors**, **Workflows**, and **Alert channels** remain for advanced management.
 
-Workflow discovery and cadence inference: [onboarding-discovery.md](onboarding-discovery.md).
+Workflow discovery and cadence inference: [onboarding-discovery.md](onboarding-discovery.md). Connect n8n (polling and push): [connect-n8n.md](connect-n8n.md).

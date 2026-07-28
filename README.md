@@ -14,15 +14,15 @@ Quorum shows what your n8n workflows are expected to do, whether reported volume
 
 ## Features
 
-- **Contract Catalog** — health, evidence strength, deadlines, and alert status in one place
-- **n8n polling** — import finished executions with a URL + API key (no workflow changes)
-- **Push heartbeats** — signed reports from n8n for richer execution detail
-- **Incidents and alerts** — silent absence, hard failures, volume drift; webhook or SMTP delivery
-- **Simplified onboarding** — connect n8n, select workflows by name, confirm expectations, start monitoring
+- **Contract Catalog** — health, evidence strength, deadlines, and alert status
+- **n8n polling** — URL + API key; no workflow changes
+- **Push heartbeats** — signed reports from n8n for richer detail
+- **Incidents and alerts** — silent absence, hard failures, volume drift; webhook or SMTP
+- **Simplified onboarding** — connect n8n, select workflows, confirm expectations, start monitoring
 
 ## Beta status
 
-Quorum Community is **beta** software for self-hosted design partners. Expect rough edges and the gaps in [limitations](#limitations). **Hosted multi-tenant SaaS is not available** from this repository.
+Quorum Community is **beta** software for self-hosted design partners. Expect rough edges — see [limitations](#limitations). **Hosted multi-tenant SaaS is not available** from this repository.
 
 **Licence:** [Apache-2.0](LICENSE) — Quorum Community only. Quorum Cloud (hosted SaaS) is separate proprietary code outside this tree.
 
@@ -37,29 +37,23 @@ cp .env.example .env
 docker compose up -d
 ```
 
-`docker-compose.yml` defaults to that image. To build from this repo instead: `docker compose up --build -d`.
+Open [http://127.0.0.1:3000/](http://127.0.0.1:3000/), create the admin at `/setup`, then **Set up monitoring**.
 
-Open [http://127.0.0.1:3000/](http://127.0.0.1:3000/), create the admin at `/setup`, then open **Set up monitoring**.
+More detail: [docs/getting-started.md](docs/getting-started.md). Environment: [docs/environment.md](docs/environment.md).
 
-Environment details: [docs/environment.md](docs/environment.md). Lab stack with bundled n8n: `docker compose -f docker-compose.lab.yml up --build` (see [docs/getting-started.md](docs/getting-started.md)).
+### Develop from source (build locally)
 
-## Onboarding
-
-Use **Set up monitoring** (`/onboarding`):
-
-1. Create or select a client
-2. Connect n8n (URL + API key) and test
-3. Select workflows by name
-4. Confirm monitoring expectations
-5. Test alerts → **Start monitoring**
-
-Workflows stay “Waiting for first execution” until evidence arrives. Discovery and cadence details: [docs/onboarding-discovery.md](docs/onboarding-discovery.md).
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build -d
+```
 
 ## Connect n8n
 
-**Polling (recommended):** complete onboarding, or add a connector under **Connectors**, bind it to a workflow, and activate. No n8n workflow edits.
+**Polling (recommended):** in Quorum, open **Set up monitoring**, connect n8n with URL + API key, select workflows, confirm expectations, start monitoring. No n8n workflow edits.
 
-**Push heartbeats:** register a push workflow, issue a credential, activate monitoring, then import [examples/n8n/quorum-signed-heartbeat.json](examples/n8n/quorum-signed-heartbeat.json). Full steps, IDs, and env injection: [docs/push-heartbeats.md](docs/push-heartbeats.md) and [examples/n8n/README.md](examples/n8n/README.md).
+**Push heartbeats:** register a push workflow, issue a credential, activate, then import [examples/n8n/quorum-signed-heartbeat.json](examples/n8n/quorum-signed-heartbeat.json).
+
+Full setup: [docs/connect-n8n.md](docs/connect-n8n.md) · [docs/push-heartbeats.md](docs/push-heartbeats.md) · [examples/n8n/README.md](examples/n8n/README.md).
 
 ## Security and operations
 
@@ -67,26 +61,11 @@ Workflows stay “Waiting for first execution” until evidence arrives. Discove
 - Credentials encrypted under `QUORUM_CREDENTIAL_KEK` — **back up the KEK separately from the database**
 - Health: `GET /healthz`, `/readyz`, `/health/watcher` (uptime checks should use `/health/watcher`)
 
-More: [docs/security.md](docs/security.md) · [docs/operations.md](docs/operations.md) · [docs/incident-api.md](docs/incident-api.md) · [docs/troubleshooting.md](docs/troubleshooting.md)
+More: [docs/security.md](docs/security.md) · [docs/operations.md](docs/operations.md) · [docs/incident-api.md](docs/incident-api.md) · [SECURITY.md](SECURITY.md)
 
 ## Limitations
 
-Heartbeat and volume-band evidence can be self-reported. They do not independently prove destination delivery.
-
-Honest gaps: incomplete triage UI, HubSpot webinar registrations → Zoom webinar registrants outcome path is **Preview** only, volume rules not fully exposed in onboarding, no hosted SaaS / billing in this Community tree. Contract Catalog, push heartbeats, and polling are **Available**. Zapier / Make and general outcome verification for all workflows are **Planned**. Full list: [docs/known-limitations.md](docs/known-limitations.md).
-
-## Documentation
-
-| Topic           | Link                                               |
-| --------------- | -------------------------------------------------- |
-| Getting started | [docs/getting-started.md](docs/getting-started.md) |
-| Environment     | [docs/environment.md](docs/environment.md)         |
-| Push heartbeats | [docs/push-heartbeats.md](docs/push-heartbeats.md) |
-| Incident API    | [docs/incident-api.md](docs/incident-api.md)       |
-| Troubleshooting | [docs/troubleshooting.md](docs/troubleshooting.md) |
-| Architecture    | [docs/architecture.md](docs/architecture.md)       |
-| Contributing    | [CONTRIBUTING.md](CONTRIBUTING.md)                 |
-| Security policy | [SECURITY.md](SECURITY.md)                         |
+Heartbeat and volume-band evidence can be self-reported. They do not independently prove destination delivery. Incomplete triage UI; HubSpot → Zoom outcome path is **Preview** only; no hosted SaaS / billing in this Community tree. Contract Catalog, push heartbeats, and polling are **Available**. Zapier / Make and general outcome verification for all workflows are **Planned**. Full list: [docs/known-limitations.md](docs/known-limitations.md).
 
 ## Development
 
@@ -100,4 +79,4 @@ npm run build
 npm run dev
 ```
 
-Full self-hosted gate: `npm run verify:self-hosted`.
+Full self-hosted gate: `npm run verify:self-hosted`. Docs index: [docs/getting-started.md](docs/getting-started.md).

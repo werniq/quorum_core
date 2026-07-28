@@ -1,7 +1,6 @@
 services:
   quorum:
     image: ${QUORUM_IMAGE:-qniw984/quorum:0.1.0-beta.2}
-    build: .
     ports:
       - "${QUORUM_HOST_PORT:-3000}:3000"
     environment:

@@ -8,9 +8,15 @@ Quorum Community is **beta** software. Security fixes are applied on the default
 
 Please **do not** open a public GitHub issue for security vulnerabilities.
 
-Email a clear description (and a proof of concept if you have one) to the maintainers via the contact listed in the repository profile or release notes. Include:
+**Preferred:** use GitHub private vulnerability reporting:
 
-- Quorum version / commit SHA
+→ [Report a vulnerability](https://github.com/werniq/quorum_core/security/advisories/new)
+
+(If that form is unavailable, enable **Private vulnerability reporting** under the repository **Settings → Security**, or contact the repository owner via their GitHub profile.)
+
+Include:
+
+- Quorum version / commit SHA / Docker image tag (e.g. `qniw984/quorum:0.1.0-beta.2`)
 - Deployment mode (Docker Compose, local `npm`, etc.)
 - Impact and reproduction steps
 

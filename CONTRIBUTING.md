@@ -27,11 +27,13 @@ npm test
 npm run verify:self-hosted
 ```
 
-Docker:
+Docker (build from this repo):
 
 ```bash
-docker compose up --build -d
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build -d
 ```
+
+Published image path: see [README.md](README.md#quick-start-docker).
 
 ## Pull requests
 
