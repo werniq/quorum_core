@@ -3,7 +3,7 @@
 ## Connection and onboarding
 
 - Quorum reached n8n, but the API key was rejected → create or copy an n8n API key and try again.
-- Quorum could not connect → check that n8n is reachable from the Quorum container. In Docker Compose lab, use `http://n8n:5678`, not `localhost`.
+- Quorum could not connect → check that n8n is reachable from the Quorum container. If both run in Docker Compose, use `http://n8n:5678` (not `localhost`).
 - Workflow list empty or discovery failed → refresh the list, or use the collapsed manual workflow ID fallback ([onboarding-discovery.md](onboarding-discovery.md)).
 
 ## Push heartbeats

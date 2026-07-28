@@ -86,7 +86,7 @@ function mapUserFacingAuthFailure(
     return {
       ...result,
       summary:
-        "Quorum could not connect to this address. Check that n8n is reachable from the Quorum container.",
+        "Quorum could not connect to this address. Check that n8n is reachable from the Quorum container. If both run in Docker Compose, use the service URL http://n8n:5678 (not localhost).",
     };
   }
   return result;
