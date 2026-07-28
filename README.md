@@ -4,300 +4,84 @@ Define what each critical workflow should do. Quorum checks whether it ran, whet
 
 Quorum watches n8n workflows against explicit contracts. You define when a workflow should report in, what counts as success or failure, and how strong the evidence needs to be. Quorum opens incidents when reality drifts from that contract and resolves them when reporting recovers.
 
-**Quick links:** [How it works](#how-it-works) · [Quick start](#quick-start-docker) · [Protect a client](#protect-a-client) · [Connect n8n](#connect-n8n) · [Alerts](#alerts) · [Security](#security) · [Backup](#backup-and-upgrades) · [Health](#health-endpoints) · [Development](#development) · [Limitations](#limitations) · [n8n heartbeat example](examples/n8n/) · [Architecture](docs/architecture.md) · [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md)
-
-## The silent-failure problem
-
-n8n can show a green execution while the business outcome is wrong: the workflow ran but sent too few rows, too many rows, or nothing at all. Worse, a workflow can stop running entirely and nothing in n8n tells you the business process is down.
-
-Quorum is for teams running scheduled or event-driven n8n workflows who need a separate check on **whether the process is still happening on time** and **whether reported volume looks sane**. It is a self-hosted Contract Catalog with push heartbeats, optional n8n polling, incidents, and alerts.
+n8n can show a green execution while the business outcome is wrong — or a workflow can stop entirely and nothing tells you the process is down. Quorum is a self-hosted Contract Catalog with polling, push heartbeats, incidents, and alerts.
 
 Open source, zero telemetry, and designed so your workflow data can stay in your infrastructure. Reliability evidence that protects client retainers and supports proactive maintenance reporting.
 
 Quorum shows what your n8n workflows are expected to do, whether reported volume stayed inside declared bands, and alerts you when they fail, stop reporting, or produce an unacceptable result.
 
-Quorum detects:
-
-- **Silent absence** when expected heartbeats or poll imports stop arriving
-- **Hard failures** when a workflow reports failure
-- **Volume drift** when reported item counts fall outside configured bands (Basic evidence only; see limitations)
-- **Stale or missing evidence** relative to the contract deadline
-- **Alert delivery problems** separately from workflow health
-
 [![Quorum product demo](docs/demo/quorum-demo.gif)](docs/demo/quorum-demo.mp4)
 
-## How it works
+## Features
 
-**Contracts** tie a registered workflow to a cadence, evidence level, volume rules (optional), and alert routes. The Contract Catalog is the main surface: health, evidence strength, next deadline, and alert channel status in one place.
-
-**Polling** (easiest) imports finished executions from n8n on a schedule. You add an n8n connector (URL + API key), register the workflow with method **Connect n8n**, and bind the connector in the UI — no workflow changes and no n8n environment variables.
-
-**Push heartbeats** are signed HTTP reports from a step at the end of your n8n workflow for more detailed reporting (status, item counts, failures). Quorum verifies HMAC, timestamp, and idempotency before recording evidence. Configure Quorum URL, Quorum workflow ID, and Key ID in one n8n setup node; store the HMAC secret in an n8n Crypto credential when your version supports it.
-
-**Incidents** open when the watcher finds a breach: silent absence, failure status, volume out of range, and similar contract violations. Each incident has a severity and summary.
-
-**Alerts** deliver incident and resolution events through webhook or SMTP channels you configure. Failed deliveries surface in the catalog banner and on contract cards without changing whether a contract is overdue.
-
-**Recovery** resolves open incidents when valid evidence arrives again (for example after you fix n8n and heartbeats resume).
+- **Contract Catalog** — health, evidence strength, deadlines, and alert status in one place
+- **n8n polling** — import finished executions with a URL + API key (no workflow changes)
+- **Push heartbeats** — signed reports from n8n for richer execution detail
+- **Incidents and alerts** — silent absence, hard failures, volume drift; webhook or SMTP delivery
+- **Simplified onboarding** — connect n8n, select workflows by name, confirm expectations, start monitoring
 
 ## Beta status
 
-Quorum Community is **beta** software for self-hosted design partners. Expect rough edges, incomplete triage UI, and gaps listed below. Hosted multi-tenant SaaS is **not available** from this repository and is not production-ready.
+Quorum Community is **beta** software for self-hosted design partners. Expect rough edges and the gaps in [limitations](#limitations). **Hosted multi-tenant SaaS is not available** from this repository.
 
-**Licence:** [Apache-2.0](LICENSE)
-
-Quorum Community (this repository) is licensed under the Apache License 2.0. Quorum Cloud (hosted SaaS) is separate proprietary code outside this repository — not a fork of this license.
+**Licence:** [Apache-2.0](LICENSE) — Quorum Community only. Quorum Cloud (hosted SaaS) is separate proprietary code outside this tree.
 
 ## Quick start (Docker)
 
-First-time install:
-
 ```bash
 cp .env.example .env
-```
-
-Edit `.env` and set at least:
-
-| Variable                 | Required                     | Notes                                                                                                                                                                                                |
-| ------------------------ | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `QUORUM_CREDENTIAL_KEK`  | Yes                          | Long random secret (min 16 characters). Encrypts push credentials and similar secrets. **Back it up separately from the database** — without it you cannot decrypt stored credentials after restore. |
-| `QUORUM_SETUP_TOKEN`     | When UI auth is on (default) | One-time bootstrap token (min 24 characters). Used only at `/setup`. **Not** the admin password.                                                                                                     |
-| `QUORUM_UI_AUTH_ENABLED` | Defaults to `true`           | Setup token + login. Set `false` for a local open UI without login.                                                                                                                                  |
-| `QUORUM_DEMO_MODE`       | Optional                     | `true` opens the UI without login, but only when `HOST` is localhost (`127.0.0.1` / `localhost` / `::1`). Rejected with `0.0.0.0` — do not enable it in the default Docker compose bind.             |
-| `PUBLIC_BASE_URL`        | Recommended                  | e.g. `http://127.0.0.1:3000`.                                                                                                                                                                        |
-| `QUORUM_HOST_PORT`       | Optional                     | Host port if `3000` is already taken.                                                                                                                                                                |
-
-```bash
+# Set QUORUM_CREDENTIAL_KEK (min 16 chars) and QUORUM_SETUP_TOKEN (min 24 chars when auth is on)
 docker compose up --build -d
 ```
 
-Open [http://127.0.0.1:3000/](http://127.0.0.1:3000/).
+Open [http://127.0.0.1:3000/](http://127.0.0.1:3000/), create the admin at `/setup`, then open **Set up monitoring**.
 
-### First-time setup
+Environment details: [docs/environment.md](docs/environment.md). Lab stack with bundled n8n: `docker compose -f docker-compose.lab.yml up --build` (see [docs/getting-started.md](docs/getting-started.md)).
 
-1. Start Quorum (`docker compose up --build -d`), or for onboarding against a bundled n8n: `docker compose -f docker-compose.lab.yml up --build`.
-2. Create the local administrator at `/setup` (when UI auth is on).
-3. Open **Set up monitoring** (`/onboarding`) — this is the canonical first-run flow.
-4. Create or select a client.
-5. Connect n8n (URL + API key) and test the connection.
-6. Select workflows by name (discovered automatically).
-7. Confirm monitoring expectations (cadence and what to alert on).
-8. Test a notification channel.
-9. Click **Start monitoring**.
+## Onboarding
 
-You should not need to copy Quorum workflow IDs, connector IDs, contract IDs, or HMAC secrets for the normal polling path. Those remain under **Advanced setup** / Workflows for push heartbeats.
+Use **Set up monitoring** (`/onboarding`):
 
-**Auth on (default):** set `QUORUM_SETUP_TOKEN` (≥24 characters), visit `/setup`, create the local admin, then open onboarding.
+1. Create or select a client
+2. Connect n8n (URL + API key) and test
+3. Select workflows by name
+4. Confirm monitoring expectations
+5. Test alerts → **Start monitoring**
 
-The admin **password** is not the setup token. It must be ≥12 characters and must not be an exact match (case-insensitive) of a known default such as `password`, `changeme`, or `quorum123`.
-
-**Open UI:** `QUORUM_UI_AUTH_ENABLED=false`, or `QUORUM_DEMO_MODE=true` on a localhost bind — open `/` without login.
-
-`/protect` redirects to `/onboarding` for compatibility. Connectors, Workflows, and Alert channels remain available as advanced management pages.
-
-## Set up monitoring (onboarding)
-
-Canonical path after Quorum is up: **Set up monitoring** in the sidebar (`/onboarding`).
-
-1. **Client** — who these workflows are for (select or create by name).
-2. **Connect n8n** — URL + API key, test connection, or reuse an existing connection.
-3. **Select workflows** — searchable list from n8n (name, active/inactive, schedule summary). Manual workflow ID entry is a collapsed fallback only.
-4. **Monitoring expectations** — confirm cadence (including values detected from n8n) and alert conditions. Advanced settings (push heartbeats, verification strength, volume bands) stay collapsed.
-5. **Alerts** — reuse or create a webhook channel, send a test, then **Start monitoring**.
-6. **Completion** — per-workflow checklist. Workflows stay “Waiting for first execution” until evidence arrives (not labelled healthy early).
-
-Polling and heartbeats still do **not** independently prove the final downstream business outcome (Basic / execution reporting).
-
-## Advanced setup
-
-Push heartbeats, Quorum/n8n workflow IDs, HMAC credentials, evidence levels, and environment-variable injection are documented below for advanced fleets. They are not required for the normal Connect n8n onboarding path.
-
-### Protect a client (legacy URL)
-
-`/protect` redirects to `/onboarding`. Existing clients, workflows, contracts, connectors, and channels remain usable.
-
-<details>
-<summary>Legacy Protect step notes (redirected)</summary>
-
-The older Protect wizard steps are superseded by onboarding. Prefer **Set up monitoring**.
-
-</details>
-
-## Connect n8n (advanced / management)
-
-- Only use **Register new…** when you need a new Quorum registration.
-
-Two different IDs matter (plus credential fields for push):
-
-| ID                     | Where it comes from                                                                                | Used for                                                                    |
-| ---------------------- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| **n8n workflow ID**    | n8n URL: `…/workflow/{id}`                                                                         | Registration field “n8n workflow ID” / external id                          |
-| **Quorum workflow ID** | Assigned by Quorum (shown on **Workflows**, Protect flash, credential page, URL `/workflows/<id>`) | Push setup node / advanced env `QUORUM_WORKFLOW_ID`                         |
-| **Key ID**             | Quorum “Issue push credential”                                                                     | Push setup node / advanced `QUORUM_KEY_ID`                                  |
-| **HMAC secret**        | Shown once with the credential                                                                     | n8n Crypto credential or Crypto HMAC Secret / advanced `QUORUM_HMAC_SECRET` |
-
-Monitoring method: choose **Connect n8n** (easiest — URL + API key, no workflow changes) unless you need push detail.
-
-You can also register first on **Workflows**, then pick that workflow in Protect. Inactive on **Workflows** means there is no active contract yet — use the next-step hint to define and activate.
-
-### 3. Issue a push credential (push only)
-
-On **Workflows**, for a push workflow, click **Issue push credential**. Quorum shows **Key ID** and **HMAC secret** once. Copy them immediately; the secret is not shown again.
-
-Paste into the n8n **Quorum Setup (edit me)** node and Crypto HMAC / Crypto credential (see [examples/n8n/README.md](examples/n8n/README.md)). Advanced fleets may map the same values to process env: `QUORUM_KEY_ID`, `QUORUM_HMAC_SECRET`, plus `QUORUM_WORKFLOW_ID` (Quorum id, not the n8n URL id).
-
-Credentials alone do **not** activate monitoring. The credential page links next to Protect for contract + activate.
-
-### 4. Define the contract and activate
-
-A registered workflow stays **Inactive** until a contract is defined and monitoring is activated. Until then, push heartbeats return HTTP **409** with `CONTRACT_NOT_ACTIVE` (and a short `message` hint). An unknown Quorum workflow id still returns **404** `NOT_FOUND`.
-
-In Protect (or after registering on Workflows → Protect):
-
-1. Define the contract (name, cadence, confirmations).
-2. Optionally configure and test an alert channel, or skip alert delivery on the Alerts step (Catalog still shows monitoring status with “No alert channel”).
-3. **Activate monitoring**.
-
-After activation the workflow shows **Active**, the first expected deadline appears, and accepted heartbeats can satisfy the contract.
-
-### 5. Wire n8n
-
-**Polling (easiest):** add a connector, register with **Connect n8n**, bind, activate — skip the push example workflow.
-
-**Push (normal path — no n8n restart):**
-
-1. Import [examples/n8n/quorum-signed-heartbeat.json](examples/n8n/quorum-signed-heartbeat.json) (Crypto Hash + Crypto HMAC; no `NODE_FUNCTION_ALLOW_BUILTIN`).
-2. Edit **Quorum Setup (edit me)**: Quorum base URL, Quorum workflow ID, Key ID.
-3. Paste the HMAC secret into the Crypto HMAC **Secret** field, or on n8n ≥ 2.7 attach **Crypto** credentials.
-4. Activate and run (or wait for the schedule). Expect **HTTP 202** and `{ "status": "accepted", ... }`.
-
-**Advanced (Docker/K8s env):** set `QUORUM_WORKFLOW_ID`, `QUORUM_KEY_ID`, `QUORUM_HMAC_SECRET`, `QUORUM_BASE_URL` on the n8n process (and often `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` on n8n 2.x). Details: [examples/n8n/README.md](examples/n8n/README.md).
-
-### 6. What “healthy” means
-
-- **Contract Catalog / contract card — Healthy:** the active contract’s cadence and evidence look satisfied (valid reporting within the expected window; no overdue/warning state for that contract). Basic evidence means Quorum accepted what you reported; it does not prove destination delivery (CRM row, email, etc.).
-- **Client status — protected:** at least one active contract with a tested alert route (coverage notes still warn that other processes may be uncovered). **onboarding** until that bar is met; **paused** if all contracts are paused.
-- **Workflow Active** only means an active contract exists — not that the last run was healthy.
-- **Alert channel failing** is separate: delivery problems show in the catalog banner / cards without rewriting contract overdue state by themselves.
-
-If push heartbeats get `CONTRACT_NOT_ACTIVE`, the workflow is still Inactive. If you get `NOT_FOUND`, check you are using the Quorum workflow ID (not the n8n URL id).
+Workflows stay “Waiting for first execution” until evidence arrives. Discovery and cadence details: [docs/onboarding-discovery.md](docs/onboarding-discovery.md).
 
 ## Connect n8n
 
-### Polling (easiest)
+**Polling (recommended):** complete onboarding, or add a connector under **Connectors**, bind it to a workflow, and activate. No n8n workflow edits.
 
-1. Add an n8n connector under **Connectors** (base URL + API key).
-2. Register the workflow with monitoring method **Connect n8n** (or select that existing registration in Protect).
-3. Bind the connector, define the contract, activate.
+**Push heartbeats:** register a push workflow, issue a credential, activate monitoring, then import [examples/n8n/quorum-signed-heartbeat.json](examples/n8n/quorum-signed-heartbeat.json). Full steps, IDs, and env injection: [docs/push-heartbeats.md](docs/push-heartbeats.md) and [examples/n8n/README.md](examples/n8n/README.md).
 
-No workflow modification and no n8n environment variables. Community self-hosted builds allow LAN `http://` n8n URLs via `networkPolicy: self_hosted_local` in the default runtime.
+## Security and operations
 
-### Push heartbeats
+- No telemetry in self-hosted mode; session cookies and CSRF on HTML forms
+- Credentials encrypted under `QUORUM_CREDENTIAL_KEK` — **back up the KEK separately from the database**
+- Health: `GET /healthz`, `/readyz`, `/health/watcher` (uptime checks should use `/health/watcher`)
 
-Short checklist (same path as [Protect a client](#protect-a-client)):
+More: [docs/security.md](docs/security.md) · [docs/operations.md](docs/operations.md) · [docs/incident-api.md](docs/incident-api.md) · [docs/troubleshooting.md](docs/troubleshooting.md)
 
-1. Register the workflow (Protect or **Workflows**), preferring an existing registration when it already exists.
-2. Issue a push credential; copy Quorum workflow ID, Key ID, and HMAC secret once.
-3. Define the contract and **activate** (Inactive → Active). Heartbeats are `CONTRACT_NOT_ACTIVE` until then.
-4. Import [examples/n8n/quorum-signed-heartbeat.json](examples/n8n/quorum-signed-heartbeat.json) (Crypto Hash + Crypto HMAC; no `NODE_FUNCTION_ALLOW_BUILTIN`).
-5. Edit **Quorum Setup (edit me)** in the n8n UI; put the HMAC secret in a Crypto credential (≥ 2.7) or the Crypto HMAC Secret field. Confirm **HTTP 202** accepted.
+## Limitations
 
-Full n8n setup (including advanced env vars): [examples/n8n/README.md](examples/n8n/README.md).
+Heartbeat and volume-band evidence can be self-reported. They do not independently prove destination delivery.
 
-### Advanced: n8n process environment variables
+Honest gaps: incomplete triage UI, HubSpot webinar registrations → Zoom webinar registrants outcome path is **Preview** only, volume rules not fully exposed in onboarding, no hosted SaaS / billing in this Community tree. Contract Catalog, push heartbeats, and polling are **Available**. Zapier / Make and general outcome verification for all workflows are **Planned**. Full list: [docs/known-limitations.md](docs/known-limitations.md).
 
-Only when you inject secrets via Docker/K8s. Set `QUORUM_WORKFLOW_ID`, `QUORUM_KEY_ID`, `QUORUM_HMAC_SECRET`, `QUORUM_BASE_URL` on the n8n process (and often `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` on n8n 2.x). Not required for the normal polling or UI push paths.
+## Documentation
 
-## Alerts
-
-Create at least one webhook or SMTP channel under **Alert channels** and route it to contracts. Use **Send test** on the channel page. Route failures appear in the catalog banner and on cards; they do not mark a contract as satisfied or overdue.
-
-Webhooks **push** incident change notifications. They are not a pull API for current state. Use the incident JSON API below to retrieve authoritative incident records.
-
-## Incident API (read)
-
-Tenant-scoped, read-only JSON endpoints. The local tenant is resolved server-side (foreign `x-quorum-tenant-id` values are rejected). Responses use camelCase incident records (same shape as acknowledge/resolve) and never include webhook/SMTP delivery attempts or outbox rows.
-
-### List incidents
-
-```http
-GET /api/v1/incidents
-```
-
-| Query          | Description                                                                   |
-| -------------- | ----------------------------------------------------------------------------- |
-| `status`       | One or more of `open`, `acknowledged`, `resolved` (comma-separated)           |
-| `severity`     | `warning` or `critical`                                                       |
-| `workflowId`   | Exact workflow id                                                             |
-| `contractId`   | Matches `workflowId` or `outcomeContractId`                                   |
-| `clientId`     | Exact client id                                                               |
-| `updatedAfter` | ISO-8601; only incidents with `updatedAt` strictly after this value           |
-| `limit`        | Page size (default `50`, max `100`)                                           |
-| `cursor`       | Opaque cursor from a previous `nextCursor` (keyset on `updatedAt`, then `id`) |
-
-Ordering is deterministic: `updatedAt DESC`, then `id DESC`. Invalid filters, limits, or cursors return `400` with `{ "error": "…" }`.
-
-```bash
-curl "http://localhost:3000/api/v1/incidents?status=open,acknowledged&limit=50"
-```
-
-```json
-{
-  "items": [
-    {
-      "id": "…",
-      "tenantId": "…",
-      "status": "open",
-      "severity": "critical",
-      "summary": "…",
-      "updatedAt": "…"
-    }
-  ],
-  "nextCursor": null
-}
-```
-
-### Get one incident
-
-```http
-GET /api/v1/incidents/:incidentId
-```
-
-Returns `{ "incident": { … } }` for incidents visible to the local tenant. Missing or other-tenant ids return `404` `{ "error": "not_found" }` (no existence leak).
-
-```bash
-curl "http://localhost:3000/api/v1/incidents/<incidentId>"
-```
-
-Acknowledge / resolve remain `POST /api/v1/incidents/:incidentId/acknowledge` and `…/resolve`.
-
-## Security
-
-- No telemetry in self-hosted mode; no remote fonts or analytics in the UI.
-- Session cookies and CSRF on HTML forms.
-- Heartbeat HMAC with per-workflow credentials encrypted under `QUORUM_CREDENTIAL_KEK`.
-- JSON APIs resolve the local tenant server-side; foreign tenant headers are rejected.
-- Run `npm run security:deps` for a dependency audit.
-
-More: [docs/security.md](docs/security.md). Network and privacy copy is also at `/network-privacy` in the UI.
-
-## Backup and upgrades
-
-**Backup:** copy the SQLite file from the Docker volume **and** store `QUORUM_CREDENTIAL_KEK` in a separate secret store. Encrypted push credentials and alert configs cannot be recovered without the KEK.
-
-**Upgrade:** backup database and KEK, deploy the new image, confirm `GET /readyz` returns ready, then watch `GET /health/watcher`. A wrong KEK after restore causes decrypt failures; Quorum does not print the key in logs or responses.
-
-Operations detail: [docs/operations.md](docs/operations.md).
-
-## Health endpoints
-
-| Endpoint              | Meaning                                      |
-| --------------------- | -------------------------------------------- |
-| `GET /healthz`        | Process is up                                |
-| `GET /readyz`         | Migrations applied; workers allowed          |
-| `GET /health/watcher` | Watcher tick fresh within `WATCHER_STALE_MS` |
-
-Point external uptime checks at `/health/watcher`, not `/healthz` alone.
+| Topic           | Link                                               |
+| --------------- | -------------------------------------------------- |
+| Getting started | [docs/getting-started.md](docs/getting-started.md) |
+| Environment     | [docs/environment.md](docs/environment.md)         |
+| Push heartbeats | [docs/push-heartbeats.md](docs/push-heartbeats.md) |
+| Incident API    | [docs/incident-api.md](docs/incident-api.md)       |
+| Troubleshooting | [docs/troubleshooting.md](docs/troubleshooting.md) |
+| Architecture    | [docs/architecture.md](docs/architecture.md)       |
+| Contributing    | [CONTRIBUTING.md](CONTRIBUTING.md)                 |
+| Security policy | [SECURITY.md](SECURITY.md)                         |
 
 ## Development
 
@@ -311,46 +95,4 @@ npm run build
 npm run dev
 ```
 
-### Local lab (Quorum + n8n)
-
-For trying the onboarding flow against a real n8n container (separate from production `docker-compose.yml`):
-
-```bash
-docker compose -f docker-compose.lab.yml up --build
-```
-
-| Service | In the browser        | From Quorum onboarding |
-| ------- | --------------------- | ---------------------- |
-| Quorum  | http://127.0.0.1:3000 | —                      |
-| n8n     | http://127.0.0.1:5678 | `http://n8n:5678`      |
-
-1. Open n8n, create the owner account, then **Settings → n8n API** → create an API key.
-2. Open Quorum → **Set up monitoring** (`/onboarding`).
-3. Connect with URL `http://n8n:5678` and the API key (`localhost` will not work from inside the Quorum container).
-
-Lab defaults disable UI auth and use throwaway secrets. Data lives in `quorum-lab-*` volumes. Tear down with `docker compose -f docker-compose.lab.yml down` (add `-v` to wipe volumes). Automated e2e still uses `docker-compose.e2e.yml`.
-
-Full self-hosted verification gate (unit tests, Docker compose smoke, restart persistence, n8n e2e):
-
-```bash
-npm run verify:self-hosted
-```
-
-Architecture: [docs/architecture.md](docs/architecture.md). Release gate: [docs/release-decision.md](docs/release-decision.md). Verification packet: [docs/verification/release-verification.md](docs/verification/release-verification.md).
-
-## Limitations
-
-Heartbeats and poll imports prove that **a run was reported** with the status and counts you send. They do **not** prove that a CRM row arrived, an email was delivered, or that downstream data is complete. Heartbeat and volume-band evidence can be self-reported. They do not independently prove destination delivery. Medium and High evidence add stronger checks where implemented; see the contract detail page.
-
-Other honest limits:
-
-- HubSpot webinar registrations → Zoom webinar registrants is **Preview** only.
-- Volume rules exist in the data model; the Protect wizard does not configure them yet.
-- Incident triage fields exist in the database; full triage UI is incomplete.
-- Real Slack or SMTP delivery requires your credentials and a manual send test.
-- Hosted multi-tenant SaaS, Stripe checkout, and agency billing are **not** in this Community tree (**NO-GO**).
-- Zapier / Make and general outcome verification for all workflows are **Planned**. Contract Catalog, push heartbeats, and polling are **Available**.
-
-Full list: [docs/known-limitations.md](docs/known-limitations.md).
-
-Privacy: [docs/privacy.md](docs/privacy.md).
+Full self-hosted gate: `npm run verify:self-hosted`.
