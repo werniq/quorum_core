@@ -1,24 +1,19 @@
-# Quorum v0.1.0-beta.1
+# Quorum v0.1.0-beta.2
 
-First public **beta** of Quorum Community — self-hosted Contract Catalog for n8n.
+Second public **beta** of Quorum Community — self-hosted Contract Catalog for n8n.
 
-## What Quorum does
+## Highlights since v0.1.0-beta.1
 
-Quorum watches n8n workflows against explicit contracts. You define when a workflow should report in, what counts as success or failure, and how strong the evidence needs to be. Quorum opens incidents when reality drifts from that contract and resolves them when reporting recovers.
-
-It is open source, zero telemetry, and designed so workflow data can stay in your infrastructure.
-
-## Included in this release
-
-- Contract Catalog (health, evidence strength, deadlines, alert status)
-- Simplified onboarding: connect n8n, select workflows by name, confirm expectations, start monitoring
-- n8n API polling (URL + API key, no workflow changes)
-- Push heartbeats (HMAC-signed reports from n8n)
-- Incidents, webhook/SMTP alerts, and a read Incident API
-- SQLite (default) and PostgreSQL migrations
-- Self-hosted Docker Compose install
+- **Remove n8n connectors** from the Connectors page (unbinds workflows, clears poll checkpoints)
+- **Auto-resolve** `connector_unavailable` incidents when Test connection or polling succeeds again (Catalog no longer stays on a stale “unreachable” badge while Connectors shows healthy)
+- **Fixed-rate cadence activation** — onboarding sets `schedule_anchor_at` so “Start monitoring” no longer fails with a missing anchor error
+- **n8n schedule inference** — day/default intervals match how n8n stores Schedule Trigger fields; workflow detail fetch for accurate cadence suggestions
+- Docker Compose URL hint when n8n is unreachable from the Quorum container
+- Workflows bind-actions spacing polish
 
 ## Install
+
+### Build locally (always works)
 
 ```bash
 cp .env.example .env
@@ -26,43 +21,30 @@ cp .env.example .env
 docker compose up --build -d
 ```
 
+### Pre-built image (after Docker Hub publish is configured)
+
+```bash
+export QUORUM_IMAGE=werniq/quorum:0.1.0-beta.2   # or your Docker Hub namespace
+docker compose pull
+docker compose up -d
+```
+
 Open http://127.0.0.1:3000/ → `/setup` → **Set up monitoring**.
 
 Lab stack with bundled n8n: `docker compose -f docker-compose.lab.yml up --build`.
 
-## Tested n8n support
-
-| Bound          | Image / version    |
-| -------------- | ------------------ |
-| Minimum        | `n8nio/n8n:1.95.3` |
-| Current stable | `n8nio/n8n:2.31.4` |
-
-See [examples/n8n/README.md](examples/n8n/README.md).
-
 ## Known limitations
 
-- **Beta** — rough edges; incomplete triage UI.
-- Heartbeat and volume-band evidence can be self-reported. They do not independently prove destination delivery.
-- HubSpot webinar → Zoom registrant outcome path is **Preview** only.
-- Hosted multi-tenant SaaS, Stripe checkout, and agency billing are **not** in this Community repository.
-- Full list: [docs/known-limitations.md](docs/known-limitations.md).
+Same as beta.1 — see [docs/known-limitations.md](docs/known-limitations.md). Hosted SaaS is **not** in this Community repository.
 
-## Upgrade and backup warning
+## Upgrade
 
-Before any upgrade or restore:
-
-1. Back up the SQLite (or Postgres) data volume.
-2. Store `QUORUM_CREDENTIAL_KEK` in a **separate** secret store. Encrypted credentials cannot be recovered without it.
-3. Deploy the new image, confirm `GET /readyz`, then watch `GET /health/watcher`.
-
-Wrong KEK after restore causes decrypt failures; Quorum never prints the key.
+1. Back up the SQLite (or Postgres) data volume and keep `QUORUM_CREDENTIAL_KEK` in a separate secret store.
+2. Deploy the new image/tag, confirm `GET /readyz`, then watch `GET /health/watcher`.
 
 ## Documentation
 
 - [README](README.md)
 - [Getting started](docs/getting-started.md)
 - [Environment](docs/environment.md)
-- [Push heartbeats](docs/push-heartbeats.md)
-- [Incident API](docs/incident-api.md)
-- [Architecture](docs/architecture.md)
-- [Security](docs/security.md) · [Operations](docs/operations.md) · [Troubleshooting](docs/troubleshooting.md)
+- [Troubleshooting](docs/troubleshooting.md)
