@@ -88,7 +88,9 @@ describe("n8n cadence inference", () => {
       nodes: [
         {
           type: "n8n-nodes-base.scheduleTrigger",
-          parameters: { rule: { interval: [{ field: "hours" }] } },
+          parameters: {
+            rule: { interval: [{ field: "cronExpression" }] },
+          },
         },
       ],
     });
@@ -96,6 +98,22 @@ describe("n8n cadence inference", () => {
     expect(discovered.triggerSummary.toLowerCase()).toContain(
       "could not infer",
     );
+  });
+
+  it("applies n8n default of 1 hour when hoursInterval is omitted", () => {
+    const discovered = inferWorkflowDiscovery({
+      externalWorkflowId: "5b",
+      name: "Hourly default",
+      active: true,
+      nodes: [
+        {
+          type: "n8n-nodes-base.scheduleTrigger",
+          parameters: { rule: { interval: [{ field: "hours" }] } },
+        },
+      ],
+    });
+    expect(discovered.triggerSummary).toBe("Every 1 hour");
+    expect(discovered.inferredCadence?.value).toBe("1h");
   });
 
   it("does not invent every-1-minute when interval amount is missing", () => {
@@ -112,8 +130,29 @@ describe("n8n cadence inference", () => {
         },
       ],
     });
-    expect(discovered.inferredCadence).toBeNull();
-    expect(discovered.triggerSummary).not.toMatch(/every 1 minute/i);
+    // n8n omits minutesInterval when it equals the node default (5).
+    expect(discovered.triggerSummary).toBe("Every 5 minutes");
+    expect(discovered.inferredCadence?.value).toBe("5m");
+  });
+
+  it("uses explicit minutesInterval over the n8n default", () => {
+    const discovered = inferWorkflowDiscovery({
+      externalWorkflowId: "6b",
+      name: "One minute",
+      active: true,
+      nodes: [
+        {
+          type: "n8n-nodes-base.scheduleTrigger",
+          parameters: {
+            rule: {
+              interval: [{ field: "minutes", minutesInterval: 1 }],
+            },
+          },
+        },
+      ],
+    });
+    expect(discovered.triggerSummary).toBe("Every 1 minute");
+    expect(discovered.inferredCadence?.value).toBe("1m");
   });
 
   it("infers five-minute schedule", () => {
@@ -134,6 +173,45 @@ describe("n8n cadence inference", () => {
     });
     expect(discovered.triggerSummary).toBe("Every 5 minutes");
     expect(discovered.inferredCadence?.value).toBe("5m");
+  });
+
+  it("infers daily schedule when n8n omits default field days", () => {
+    const discovered = inferWorkflowDiscovery({
+      externalWorkflowId: "8",
+      name: "Daily",
+      active: true,
+      nodes: [
+        {
+          type: "n8n-nodes-base.scheduleTrigger",
+          parameters: {
+            // Default Schedule Trigger: field "days" is often omitted from JSON.
+            rule: { interval: [{ triggerAtHour: 9, triggerAtMinute: 0 }] },
+          },
+        },
+      ],
+    });
+    expect(discovered.triggerSummary).toBe("Every 1 day");
+    expect(discovered.inferredCadence?.value).toBe("1d");
+  });
+
+  it("infers multi-day interval when daysInterval is set", () => {
+    const discovered = inferWorkflowDiscovery({
+      externalWorkflowId: "9",
+      name: "Every 3 days",
+      active: true,
+      nodes: [
+        {
+          type: "n8n-nodes-base.scheduleTrigger",
+          parameters: {
+            rule: {
+              interval: [{ field: "days", daysInterval: 3, triggerAtHour: 8 }],
+            },
+          },
+        },
+      ],
+    });
+    expect(discovered.triggerSummary).toBe("Every 3 days");
+    expect(discovered.inferredCadence?.value).toBe("3d");
   });
 
   it("escapes hostile workflow names for HTML rendering", () => {

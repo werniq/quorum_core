@@ -13,9 +13,11 @@ Quorum’s simplified onboarding discovers workflows through the selected n8n co
 
 ## Unsupported / fallback
 
-- Dynamic expressions or missing interval amounts → ask the user to confirm cadence (Quorum does **not** invent “every 1 minute”).
+- Dynamic expressions Quorum cannot resolve → ask the user to confirm cadence.
+- When n8n omits an interval amount because it equals the Schedule Trigger default (e.g. minutes default **5**, days default **1**), Quorum applies that same default.
+- The Schedule Trigger’s default interval unit is **days**; n8n often omits `field: "days"` from saved JSON. Quorum treats a missing field as days.
 - Discovery API unavailable → collapsed “Enter a workflow ID manually” fallback.
 - Names from n8n are treated as untrusted and HTML-escaped in the UI.
 - After changing a schedule in n8n, save (and publish/activate if your n8n version uses versions), then **Refresh workflow list** in Quorum.
-
+- **Inactive** on the select list means the workflow is inactive **in n8n**, not that Quorum monitoring failed.
 Polling and heartbeats still do not independently prove the final downstream business outcome.

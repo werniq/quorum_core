@@ -181,7 +181,16 @@ async function fetchN8nWorkflowDetail(input: {
   }
   try {
     const parsed = JSON.parse(response.bodyText) as unknown;
-    return asRecord(parsed);
+    const root = asRecord(parsed);
+    if (!root) {
+      return null;
+    }
+    // Some n8n versions wrap the workflow: { data: { ...workflow } }
+    const nested = asRecord(root.data);
+    if (nested && (nested.nodes != null || nested.activeVersion != null)) {
+      return nested;
+    }
+    return root;
   } catch {
     return null;
   }

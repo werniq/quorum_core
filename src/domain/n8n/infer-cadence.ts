@@ -86,23 +86,23 @@ function intervalAmountForField(
   first: Record<string, unknown>,
   field: string,
 ): number | null {
-  const keyed = readNumber(first[`${field}Interval`]);
+  const normalized = field.toLowerCase();
+  const keyed = readNumber(first[`${normalized}Interval`]);
   if (keyed !== null) {
     return keyed;
   }
-  // Fallbacks used by some n8n exports / versions.
-  return (
-    readNumber(first.minutesInterval) ??
-    readNumber(first.hoursInterval) ??
-    readNumber(first.secondsInterval) ??
-    readNumber(first.daysInterval) ??
-    readNumber(first.weeksInterval) ??
-    readNumber(first.monthsInterval) ??
-    readNumber(first.interval) ??
-    readNumber(first.value) ??
-    readNumber(first.amount) ??
-    null
-  );
+  // Prefer the field-specific key only — other *Interval leftovers from a
+  // previous UI selection must not win (e.g. hoursInterval after switching to days).
+  // n8n Schedule Trigger omits keys that still equal the node default.
+  const n8nDefaults: Record<string, number> = {
+    seconds: 30,
+    minutes: 5,
+    hours: 1,
+    days: 1,
+    weeks: 1,
+    months: 1,
+  };
+  return n8nDefaults[normalized] ?? null;
 }
 
 function inferFromScheduleNode(node: RawNode): {
@@ -121,11 +121,13 @@ function inferFromScheduleNode(node: RawNode): {
     undefined;
 
   // n8n interval form: rule.interval[0].field / hoursInterval etc.
+  // Schedule Trigger defaults to field "days"; n8n often omits that key when
+  // unchanged, while minutes/hours are always written explicitly.
   if (Array.isArray(rule.interval) && rule.interval.length > 0) {
     const first = asRecord(rule.interval[0]);
     if (first) {
-      const field = readString(first.field);
-      if (field === "cronExpression") {
+      const field = (readString(first.field) ?? "days").toLowerCase();
+      if (field === "cronexpression") {
         const cron =
           readString(first.expression) ??
           readString(first.cronExpression) ??
@@ -144,7 +146,7 @@ function inferFromScheduleNode(node: RawNode): {
             ambiguous: false,
           };
         }
-      } else if (field) {
+      } else {
         const amount = intervalAmountForField(first, field);
         if (amount !== null) {
           const mapped = unitToInterval(amount, field);
