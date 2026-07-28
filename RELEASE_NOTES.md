@@ -24,7 +24,7 @@ docker compose up --build -d
 ### Pre-built image (after Docker Hub publish is configured)
 
 ```bash
-export QUORUM_IMAGE=werniq/quorum:0.1.0-beta.2   # or your Docker Hub namespace
+export QUORUM_IMAGE=qniw984/quorum:0.1.0-beta.2
 docker compose pull
 docker compose up -d
 ```
