@@ -28,11 +28,16 @@ Quorum Community is **beta** software for self-hosted design partners. Expect ro
 
 ## Quick start (Docker)
 
+Published image: [`qniw984/quorum:0.1.0-beta.2`](https://hub.docker.com/r/qniw984/quorum/tags)
+
 ```bash
+docker pull qniw984/quorum:0.1.0-beta.2
 cp .env.example .env
 # Set QUORUM_CREDENTIAL_KEK (min 16 chars) and QUORUM_SETUP_TOKEN (min 24 chars when auth is on)
-docker compose up --build -d
+docker compose up -d
 ```
+
+`docker-compose.yml` defaults to that image. To build from this repo instead: `docker compose up --build -d`.
 
 Open [http://127.0.0.1:3000/](http://127.0.0.1:3000/), create the admin at `/setup`, then open **Set up monitoring**.
 
