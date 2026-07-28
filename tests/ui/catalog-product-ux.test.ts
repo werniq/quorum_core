@@ -537,7 +537,7 @@ describe("catalog product UX UI acceptance", () => {
     await app.close();
   });
 
-  it("protect wizard routes redirect to unified onboarding", async () => {
+  it("protect POST steps remain available for verification scripts", async () => {
     const sqlite = openDb();
     const clock = new FixedClock(new Date("2026-07-19T10:00:00.000Z"));
     const { sessionId, csrf, core, tenant } = seedAdmin(sqlite, clock);
@@ -562,14 +562,15 @@ describe("catalog product UX UI acceptance", () => {
       },
       payload: `csrf=${encodeURIComponent(csrf)}&clientId=c-local&templateId=custom&businessPurpose=Leads`,
     });
-    expect(step3.statusCode).toBe(302);
-    expect(step3.headers.location).toBe("/onboarding");
+    expect(step3.statusCode).toBe(200);
+    expect(step3.body).toContain('name="clientId"');
+    expect(step3.body).toContain("Leads");
     expect(core.listWorkflows(tenant.id)).toHaveLength(1);
 
     await app.close();
   });
 
-  it("protect wizard Back redirects to unified onboarding", async () => {
+  it("protect wizard Back stays on legacy protect HTML for scripts", async () => {
     const sqlite = openDb();
     const clock = new FixedClock(new Date("2026-07-19T10:00:00.000Z"));
     const { sessionId, csrf } = seedAdmin(sqlite, clock);
@@ -584,8 +585,9 @@ describe("catalog product UX UI acceptance", () => {
       },
       payload: `csrf=${encodeURIComponent(csrf)}&to=2&clientId=c-local&businessPurpose=Leads&templateId=custom`,
     });
-    expect(back.statusCode).toBe(302);
-    expect(back.headers.location).toBe("/onboarding");
+    expect(back.statusCode).toBe(200);
+    expect(back.body).toContain('action="/protect/back"');
+    expect(back.body).toContain("c-local");
 
     await app.close();
   });

@@ -153,64 +153,9 @@ export function registerProductUiRoutes(
     );
   });
 
-  // Unified onboarding lives at /onboarding (Protect redirects for compatibility).
+  // Canonical setup UI is /onboarding. POST /protect/* stays in ui-protect-compat-routes
+  // for verification scripts; GET redirects here.
   app.get("/protect", async (request, reply) => {
-    const session = deps.requireSession(request, reply);
-    if (!session || !requireAdmin(session, reply)) {
-      return;
-    }
-    return reply.redirect("/onboarding");
-  });
-
-  app.post("/protect/back", async (request, reply) => {
-    const session = deps.requireSession(request, reply);
-    if (!session || !requireAdmin(session, reply)) {
-      return;
-    }
-    return reply.redirect("/onboarding");
-  });
-
-  app.post("/protect/client", async (request, reply) => {
-    const session = deps.requireSession(request, reply);
-    if (!session || !requireAdmin(session, reply)) {
-      return;
-    }
-    return reply.redirect("/onboarding");
-  });
-
-  app.post("/protect/process", async (request, reply) => {
-    const session = deps.requireSession(request, reply);
-    if (!session || !requireAdmin(session, reply)) {
-      return;
-    }
-    return reply.redirect("/onboarding");
-  });
-
-  app.post("/protect/workflow", async (request, reply) => {
-    const session = deps.requireSession(request, reply);
-    if (!session || !requireAdmin(session, reply)) {
-      return;
-    }
-    return reply.redirect("/onboarding");
-  });
-
-  app.post("/protect/contract", async (request, reply) => {
-    const session = deps.requireSession(request, reply);
-    if (!session || !requireAdmin(session, reply)) {
-      return;
-    }
-    return reply.redirect("/onboarding");
-  });
-
-  app.post("/protect/alerts", async (request, reply) => {
-    const session = deps.requireSession(request, reply);
-    if (!session || !requireAdmin(session, reply)) {
-      return;
-    }
-    return reply.redirect("/onboarding");
-  });
-
-  app.post("/protect/activate", async (request, reply) => {
     const session = deps.requireSession(request, reply);
     if (!session || !requireAdmin(session, reply)) {
       return;

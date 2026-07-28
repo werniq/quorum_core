@@ -319,10 +319,10 @@ For trying the onboarding flow against a real n8n container (separate from produ
 docker compose -f docker-compose.lab.yml up --build
 ```
 
-| Service | In the browser              | From Quorum onboarding   |
-| ------- | --------------------------- | ------------------------ |
-| Quorum  | http://127.0.0.1:3000       | —                        |
-| n8n     | http://127.0.0.1:5678       | `http://n8n:5678`        |
+| Service | In the browser        | From Quorum onboarding |
+| ------- | --------------------- | ---------------------- |
+| Quorum  | http://127.0.0.1:3000 | —                      |
+| n8n     | http://127.0.0.1:5678 | `http://n8n:5678`      |
 
 1. Open n8n, create the owner account, then **Settings → n8n API** → create an API key.
 2. Open Quorum → **Set up monitoring** (`/onboarding`).

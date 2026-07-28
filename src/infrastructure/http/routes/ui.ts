@@ -27,6 +27,8 @@ import {
   sessionCookieHeader,
 } from "../cookies.js";
 import { registerSimplifiedOnboardingRoutes } from "./ui-onboarding-routes.js";
+import { registerProtectCompatRoutes } from "./ui-protect-compat-routes.js";
+import { registerProductUiRoutes } from "./ui-product-routes.js";
 import {
   renderAlertsPage,
   renderCredentialOncePage,
@@ -45,7 +47,6 @@ import {
   generateOpaqueToken,
   hashToken,
 } from "../../../domain/auth/passwords.js";
-import { registerProductUiRoutes } from "./ui-product-routes.js";
 import {
   validateWorkflowRegistrationInput,
   workflowRegistrationErrorMessage,
@@ -211,6 +212,16 @@ export function registerUiRoutes(
   });
 
   registerProductUiRoutes(app, {
+    env: deps.env,
+    sqlite: deps.sqlite,
+    clock: deps.clock,
+    ...(deps.processOutbox ? { processOutbox: deps.processOutbox } : {}),
+    requireSession,
+    assertCsrf,
+    tenantId,
+  });
+
+  registerProtectCompatRoutes(app, {
     env: deps.env,
     sqlite: deps.sqlite,
     clock: deps.clock,
