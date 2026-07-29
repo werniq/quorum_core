@@ -1,15 +1,15 @@
-# Quorum v0.1.0-beta.3
+# Quorum v0.1.0-beta.4
 
-Third public **beta** of Quorum Community — self-hosted Contract Catalog for n8n.
+Fourth public **beta** of Quorum Community — self-hosted Contract Catalog for n8n.
 
 **Hosted multi-tenant SaaS is not available** from this repository.
 
 ## Docker installation
 
-Published image: [`qniw984/quorum:0.1.0-beta.3`](https://hub.docker.com/r/qniw984/quorum/tags)
+Published image: [`qniw984/quorum:0.1.0-beta.4`](https://hub.docker.com/r/qniw984/quorum/tags)
 
 ```bash
-docker pull qniw984/quorum:0.1.0-beta.3
+docker pull qniw984/quorum:0.1.0-beta.4
 cp .env.example .env
 # Set QUORUM_CREDENTIAL_KEK (min 16 chars) and QUORUM_SETUP_TOKEN (min 24 chars when auth is on)
 docker compose up -d
@@ -54,7 +54,7 @@ Before any upgrade or restore:
 
 1. Back up the SQLite (or Postgres) data volume.
 2. Store `QUORUM_CREDENTIAL_KEK` in a **separate** secret store. Encrypted credentials cannot be recovered without it.
-3. Deploy `qniw984/quorum:0.1.0-beta.3` (or build from this tag), confirm `GET /readyz`, then watch `GET /health/watcher`.
+3. Deploy `qniw984/quorum:0.1.0-beta.4` (or build from this tag), confirm `GET /readyz`, then watch `GET /health/watcher`.
 
 Wrong KEK after restore causes decrypt failures; Quorum never prints the key.
 

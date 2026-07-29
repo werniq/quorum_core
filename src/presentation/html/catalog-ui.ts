@@ -71,27 +71,100 @@ function evidenceBadge(level: string, stale: boolean): string {
     </details>`;
 }
 
-function formatRelativeHint(iso: string | null, label: string): string {
-  if (!iso) return `${label}: —`;
-  return `${label}: ${iso}`;
+const MONTHS_SHORT = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
+
+/** Readable local-style timestamp for catalog cards (UTC clock, en-GB layout). */
+export function formatCatalogTimestamp(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return iso;
+  }
+  const day = date.getUTCDate();
+  const month = MONTHS_SHORT[date.getUTCMonth()]!;
+  const year = date.getUTCFullYear();
+  const hour = String(date.getUTCHours()).padStart(2, "0");
+  const minute = String(date.getUTCMinutes()).padStart(2, "0");
+  return `${day} ${month} ${year}, ${hour}:${minute}`;
+}
+
+function formatTimestampHint(iso: string | null, label: string): string {
+  if (!iso) {
+    return `${escapeHtml(label)}: —`;
+  }
+  const display = formatCatalogTimestamp(iso);
+  return `${escapeHtml(label)}: <time datetime="${escapeHtml(iso)}" title="${escapeHtml(iso)}">${escapeHtml(display)}</time>`;
+}
+
+function formatIntervalPhrase(minutes: number): string {
+  if (minutes % (60 * 24) === 0) {
+    const days = minutes / (60 * 24);
+    return `Every ${days} ${days === 1 ? "day" : "days"}`;
+  }
+  if (minutes % 60 === 0) {
+    const hours = minutes / 60;
+    return `Every ${hours} ${hours === 1 ? "hour" : "hours"}`;
+  }
+  return `Every ${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
+}
+
+function withTimezoneSuffix(base: string, timezone: string | undefined): string {
+  if (!timezone) return base;
+  return `${base} · ${timezone}`;
 }
 
 export function formatExpectation(raw: string): string {
-  const interval = raw.match(/^interval:(\d+)(?:@(.+))?$/i);
+  const interval = raw.match(
+    /^interval:(\d+\s*(?:m|min|minutes|h|hr|hours|d|day|days)?)(?:@(.+))?$/i,
+  );
   if (interval) {
-    const minutes = interval[1]!;
-    const tz = interval[2] ? ` (${interval[2]})` : "";
-    return `Every ${minutes} minutes${tz}`;
+    const amountRaw = interval[1]!.trim();
+    const minutes = /^\d+$/.test(amountRaw)
+      ? Number(amountRaw)
+      : (() => {
+          const match =
+            /^(\d+)\s*(m|min|minutes|h|hr|hours|d|day|days)$/i.exec(amountRaw);
+          if (!match) return null;
+          const amount = Number(match[1]);
+          const unit = match[2]!.toLowerCase();
+          if (unit.startsWith("m")) return amount;
+          if (unit.startsWith("h")) return amount * 60;
+          return amount * 60 * 24;
+        })();
+    if (minutes !== null && Number.isFinite(minutes) && minutes > 0) {
+      return withTimezoneSuffix(formatIntervalPhrase(minutes), interval[2]);
+    }
   }
-  const cron = raw.match(/^cron:(.+)(?:@(.+))?$/i);
+  const cron = raw.match(/^cron:(.+?)(?:@(.+))?$/i);
   if (cron) {
-    const tz = cron[2] ? ` (${cron[2]})` : "";
-    return `Cron ${cron[1]}${tz}`;
+    return withTimezoneSuffix(`Cron ${cron[1]!.trim()}`, cron[2]);
   }
-  const eventDriven = raw.match(/^event_driven:(.+)(?:@(.+))?$/i);
+  const eventDriven = raw.match(/^event_driven:(.+?)(?:@(.+))?$/i);
   if (eventDriven) {
-    const tz = eventDriven[2] ? ` (${eventDriven[2]})` : "";
-    return `Event-driven · quiet window ${eventDriven[1]} min${tz}`;
+    const windowRaw = eventDriven[1]!.trim();
+    const windowMinutes = /^\d+$/.test(windowRaw)
+      ? Number(windowRaw)
+      : null;
+    const windowLabel =
+      windowMinutes !== null && Number.isFinite(windowMinutes)
+        ? `${windowMinutes} ${windowMinutes === 1 ? "minute" : "minutes"}`
+        : `${windowRaw} min`;
+    return withTimezoneSuffix(
+      `Event-driven · quiet window ${windowLabel}`,
+      eventDriven[2],
+    );
   }
   return raw;
 }
@@ -207,7 +280,7 @@ function contractCardActions(row: CatalogRowView): Array<{
     row.health === "unknown" ||
     !row.isActive
   ) {
-    actions.push({ href: detail, label: "View setup" });
+    actions.push({ href: detail, label: "Check heartbeat setup" });
   }
 
   if (
@@ -235,7 +308,17 @@ function contractPrimaryAction(row: CatalogRowView): {
   return contractCardActions(row)[0]!;
 }
 
-function renderContractCard(row: CatalogRowView): string {
+function renderTechnicalDetails(row: CatalogRowView): string {
+  return `<details class="contract-technical">
+      <summary>Technical details</summary>
+      <div class="contract-technical-body">
+        <div>${escapeHtml(formatWatcherHealth(row.watcherHealth))}</div>
+        <div>${escapeHtml(formatConnectorHealth(row.connectorHealth, row.monitoringMethod))}</div>
+      </div>
+    </details>`;
+}
+
+export function renderContractCard(row: CatalogRowView): string {
   const detail =
     row.contractKind === "outcome"
       ? `/catalog/outcome/${row.contractId}`
@@ -276,13 +359,12 @@ function renderContractCard(row: CatalogRowView): string {
     ${silenceMessage}
     <div class="contract-card-meta">
       <div>Expectation: ${escapeHtml(formatExpectation(row.expectedCadenceOrWindow))}</div>
-      <div>${escapeHtml(formatRelativeHint(row.lastAcceptableEvidenceAt, "Last execution"))}</div>
-      <div>${escapeHtml(formatRelativeHint(row.nextDeadlineAt, "Expected next execution"))}</div>
+      <div>${formatTimestampHint(row.lastAcceptableEvidenceAt, "Last execution")}</div>
+      <div>${formatTimestampHint(row.nextDeadlineAt, "Expected next execution")}</div>
       <div>${escapeHtml(formatLateness(row.overdueDurationSeconds))}</div>
       <div>${escapeHtml(formatMonitoringMethod(row.monitoringMethod))}</div>
-      <div>${escapeHtml(formatWatcherHealth(row.watcherHealth))}</div>
-      <div>${escapeHtml(formatConnectorHealth(row.connectorHealth, row.monitoringMethod))}</div>
       ${volume}
+      ${renderTechnicalDetails(row)}
     </div>
     <div class="contract-card-footer">
       <div style="display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center">

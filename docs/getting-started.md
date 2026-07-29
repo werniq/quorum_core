@@ -8,7 +8,7 @@ After [Quick start](../README.md#quick-start-docker), use this page for first-ru
 2. Pull and start the published image:
 
    ```bash
-   docker pull qniw984/quorum:0.1.0-beta.3
+   docker pull qniw984/quorum:0.1.0-beta.4
    docker compose up -d
    ```
 

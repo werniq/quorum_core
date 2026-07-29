@@ -1,6 +1,6 @@
 {
   "name": "quorum",
-  "version": "0.1.0-beta.3",
+  "version": "0.1.0-beta.4",
   "private": true,
   "description": "Self-hosted n8n Contract Catalog — detect silent absence, hard failures, and volume drift.",
   "license": "Apache-2.0",

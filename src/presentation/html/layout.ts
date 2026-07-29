@@ -950,6 +950,39 @@ td form button {
   color: var(--text-secondary);
   font-size: 13px;
 }
+.contract-card-meta time {
+  cursor: help;
+  border-bottom: 1px dotted color-mix(in srgb, var(--text-secondary) 55%, transparent);
+}
+.contract-technical {
+  margin-top: 0.35rem;
+}
+.contract-technical summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 12px;
+  list-style: none;
+}
+.contract-technical summary::-webkit-details-marker {
+  display: none;
+}
+.contract-technical summary::before {
+  content: "▸ ";
+  display: inline-block;
+  transition: transform 120ms ease;
+}
+.contract-technical[open] summary::before {
+  transform: rotate(90deg);
+}
+.contract-technical[open] summary {
+  margin-bottom: 0.25rem;
+  color: var(--text-secondary);
+}
+.contract-technical-body {
+  display: grid;
+  gap: 0.15rem;
+  padding-left: 0.15rem;
+}
 .contract-card-footer {
   display: flex;
   flex-wrap: wrap;
@@ -1061,7 +1094,8 @@ details.evidence summary {
 }
 details.evidence summary:hover { color: var(--text-secondary); }
 details.evidence[open] summary { margin-bottom: var(--space-2); }
-details.evidence > *:not(summary) {
+details.evidence > *:not(summary),
+.contract-technical-body {
   animation: accordion-in 180ms ease-out both;
 }
 @keyframes accordion-in {
@@ -1154,6 +1188,7 @@ code {
   .flash.is-success, .toast.is-success,
   .stepper-item.is-current,
   details.evidence > *:not(summary),
+  .contract-technical-body,
   button.is-busy::after, .btn.is-busy::after {
     animation: none !important;
   }
