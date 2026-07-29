@@ -29,7 +29,14 @@ export type CatalogRowView = {
   overdueDurationSeconds: number | null;
   alertChannelHealth: string;
   connectorHealth: string | null;
-  activeIncident: { severity: string; summary: string } | null;
+  watcherHealth: "ok" | "stale" | "not_evaluated";
+  monitoringMethod: "poll" | "push" | null;
+  activeIncident: {
+    severity: string;
+    summary: string;
+    id?: string;
+    type?: string;
+  } | null;
   contractKind: "workflow" | "outcome";
   sourceCount: number | null;
   destinationCount: number | null;
@@ -99,7 +106,7 @@ const ALERT_HEALTH_LABELS: Record<string, string> = {
 
 const HEALTH_FILTER_LABELS: Record<string, string> = {
   healthy: "Healthy",
-  warning: "Waiting",
+  warning: "No recent execution",
   overdue: "Overdue",
   unknown: "Unknown",
   inactive: "Paused",
@@ -128,33 +135,104 @@ function alertHealthBadge(health: string): string {
   return `<span class="badge ${cls}">${escapeHtml(label)}</span>`;
 }
 
-function contractPrimaryAction(row: CatalogRowView): {
+function formatLateness(seconds: number | null): string {
+  if (seconds === null || !Number.isFinite(seconds) || seconds < 0) {
+    return "How late: —";
+  }
+  if (seconds < 60) {
+    return `How late: ${seconds}s`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) {
+    return `How late: ${minutes}m`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const rem = minutes % 60;
+  return rem === 0 ? `How late: ${hours}h` : `How late: ${hours}h ${rem}m`;
+}
+
+function formatMonitoringMethod(method: string | null): string {
+  if (method === "poll") return "Monitoring: Connect n8n (polling)";
+  if (method === "push") return "Monitoring: Push heartbeats";
+  return "Monitoring: —";
+}
+
+function formatConnectorHealth(health: string | null, method: string | null): string {
+  if (method === "push") {
+    return "Connector: n/a (push)";
+  }
+  if (!health) {
+    return "Connector: not bound";
+  }
+  return `Connector: ${health}`;
+}
+
+function formatWatcherHealth(health: "ok" | "stale" | "not_evaluated"): string {
+  if (health === "ok") return "Watcher: ok";
+  if (health === "stale") return "Watcher: stale";
+  return "Watcher: not evaluated";
+}
+
+function contractCardActions(row: CatalogRowView): Array<{
   href: string;
   label: string;
-} {
+}> {
   const detail =
     row.contractKind === "outcome"
       ? `/catalog/outcome/${row.contractId}`
       : `/catalog/contracts/${row.workflowId}`;
-  if (!row.isActive) {
-    return { href: detail, label: "Review inactive contract" };
+  const actions: Array<{ href: string; label: string }> = [];
+
+  if (row.activeIncident) {
+    actions.push({
+      href: detail,
+      label: "View incident",
+    });
   }
+
+  if (
+    row.monitoringMethod === "poll" &&
+    (row.health === "warning" ||
+      row.health === "overdue" ||
+      row.connectorHealth === "unreachable" ||
+      row.connectorHealth === "auth_failed" ||
+      row.connectorHealth === "misconfigured")
+  ) {
+    actions.push({ href: "/connectors", label: "Check connector" });
+  }
+
+  if (
+    row.health === "warning" ||
+    row.health === "overdue" ||
+    row.health === "unknown" ||
+    !row.isActive
+  ) {
+    actions.push({ href: detail, label: "View setup" });
+  }
+
   if (
     row.alertChannelHealth === "failing" ||
     row.alertChannelHealth === "degraded"
   ) {
-    return { href: "/alerts", label: "Fix alert delivery" };
+    actions.push({ href: "/alerts", label: "Fix alert delivery" });
   }
-  if (row.alertChannelHealth === "none") {
-    return { href: "/alerts", label: "Assign alert channel" };
+
+  if (actions.length === 0) {
+    if (row.alertChannelHealth === "none") {
+      actions.push({ href: "/alerts", label: "Assign alert channel" });
+    } else {
+      actions.push({ href: detail, label: "View contract" });
+    }
   }
-  if (row.activeIncident) {
-    return { href: detail, label: "Open incident" };
-  }
-  if (row.health === "overdue" || row.health === "warning") {
-    return { href: detail, label: "Investigate" };
-  }
-  return { href: detail, label: "View contract" };
+
+  return actions;
+}
+
+function contractPrimaryAction(row: CatalogRowView): {
+  href: string;
+  label: string;
+} {
+  return contractCardActions(row)[0]!;
 }
 
 function renderContractCard(row: CatalogRowView): string {
@@ -162,14 +240,32 @@ function renderContractCard(row: CatalogRowView): string {
     row.contractKind === "outcome"
       ? `/catalog/outcome/${row.contractId}`
       : `/catalog/contracts/${row.workflowId}`;
-  const health = row.activeIncident
-    ? `<span class="badge badge-status-incident"><span class="sr-only">Health: </span>Incident</span>`
-    : statusBadge(row.health);
+  const toneClass =
+    row.health === "overdue" || row.activeIncident
+      ? " is-overdue"
+      : row.health === "warning"
+        ? " is-warning"
+        : "";
+  const health =
+    row.health === "overdue" || row.health === "warning"
+      ? statusBadge(row.health)
+      : row.activeIncident
+        ? `<span class="badge badge-status-incident"><span class="sr-only">Health: </span>Incident</span>`
+        : statusBadge(row.health);
+  const silenceMessage =
+    row.health === "warning" || row.health === "overdue"
+      ? `<p class="contract-card-message">Quorum has not received a new execution within the expected window.</p>`
+      : "";
   const volume = row.volumeSummary
     ? `<div>Reported volume: ${escapeHtml(row.volumeSummary.currentCount)} (${escapeHtml(row.volumeSummary.status)})</div>`
     : "";
-  const action = contractPrimaryAction(row);
-  return `<article class="contract-card">
+  const actions = contractCardActions(row)
+    .map(
+      (action, index) =>
+        `<a class="${index === 0 ? "btn btn-secondary" : "btn btn-ghost"}" href="${escapeHtml(action.href)}">${escapeHtml(action.label)}</a>`,
+    )
+    .join("");
+  return `<article class="contract-card${toneClass}">
     <div class="contract-card-header">
       <div>
         <h3 class="contract-card-title"><a href="${escapeHtml(detail)}">${escapeHtml(row.businessPurposeName)}</a></h3>
@@ -177,10 +273,15 @@ function renderContractCard(row: CatalogRowView): string {
       </div>
       ${health}
     </div>
+    ${silenceMessage}
     <div class="contract-card-meta">
       <div>Expectation: ${escapeHtml(formatExpectation(row.expectedCadenceOrWindow))}</div>
-      <div>${escapeHtml(formatRelativeHint(row.lastAcceptableEvidenceAt, "Last success"))}</div>
-      <div>${escapeHtml(formatRelativeHint(row.nextDeadlineAt, "Next expected"))}</div>
+      <div>${escapeHtml(formatRelativeHint(row.lastAcceptableEvidenceAt, "Last execution"))}</div>
+      <div>${escapeHtml(formatRelativeHint(row.nextDeadlineAt, "Expected next execution"))}</div>
+      <div>${escapeHtml(formatLateness(row.overdueDurationSeconds))}</div>
+      <div>${escapeHtml(formatMonitoringMethod(row.monitoringMethod))}</div>
+      <div>${escapeHtml(formatWatcherHealth(row.watcherHealth))}</div>
+      <div>${escapeHtml(formatConnectorHealth(row.connectorHealth, row.monitoringMethod))}</div>
       ${volume}
     </div>
     <div class="contract-card-footer">
@@ -193,7 +294,7 @@ function renderContractCard(row: CatalogRowView): string {
             : ""
         }
       </div>
-      <a class="btn btn-secondary" href="${escapeHtml(action.href)}">${escapeHtml(action.label)}</a>
+      <div class="contract-card-actions">${actions}</div>
     </div>
   </article>`;
 }

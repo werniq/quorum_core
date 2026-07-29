@@ -896,6 +896,33 @@ td form button {
   box-shadow: var(--shadow-sm);
   transition: border-color 160ms ease, box-shadow 180ms ease, transform 160ms ease;
 }
+.contract-card.is-warning {
+  border-color: #f59e0b;
+  background: linear-gradient(180deg, #fffbeb 0%, var(--background-surface) 48%);
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.12), var(--shadow-sm);
+}
+.contract-card.is-overdue {
+  border-color: #ef4444;
+  background: linear-gradient(180deg, #fef2f2 0%, var(--background-surface) 48%);
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.12), var(--shadow-sm);
+}
+.contract-card-message {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+.contract-card.is-warning .contract-card-message {
+  color: var(--status-warning);
+}
+.contract-card.is-overdue .contract-card-message {
+  color: var(--status-danger);
+}
+.contract-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
 .contract-card:hover {
   border-color: var(--border-strong);
   box-shadow: var(--shadow-md);
@@ -1510,7 +1537,7 @@ export function renderStepper(input: {
 export function statusBadge(health: string): string {
   const map: Record<string, { label: string; cls: string }> = {
     healthy: { label: "Healthy", cls: "badge-status-healthy" },
-    warning: { label: "Waiting", cls: "badge-status-waiting" },
+    warning: { label: "No recent execution", cls: "badge-status-waiting" },
     overdue: { label: "Overdue", cls: "badge-status-overdue" },
     unknown: { label: "Unknown", cls: "badge-status-unknown" },
     inactive: { label: "Paused", cls: "badge-status-paused" },

@@ -2,10 +2,16 @@ import type { Clock } from "../clock.js";
 import { addMinutes } from "./duration.js";
 import {
   evaluateCadenceDeadline,
+  firstMissedOccurrenceAfterSuccess,
   type CadenceContractFields,
 } from "./evaluate-deadline.js";
 
-export type CadenceHealth = "inactive" | "unknown" | "healthy" | "overdue";
+export type CadenceHealth =
+  | "inactive"
+  | "unknown"
+  | "healthy"
+  | "warning"
+  | "overdue";
 
 export interface CadenceEvaluation {
   health: CadenceHealth;
@@ -25,6 +31,10 @@ export interface CadenceEvaluatorInput {
 /**
  * Deterministic cadence evaluation for the watcher.
  * Uses only an injected Clock; late fixed-rate/cron evidence never shifts future slots.
+ *
+ * After a success, overdue is keyed to the *first missed* occurrence after that
+ * success (plus allowed lateness), not the rolling current clock slot — so a
+ * 1-minute interval with 5-minute lateness can still become overdue.
  */
 export function evaluateCadence(
   input: CadenceEvaluatorInput,
@@ -73,32 +83,53 @@ export function evaluateCadence(
     };
   }
 
-  const unknownUntil =
-    lastSuccess === null
-      ? addMinutes(deadlineAt, input.initialGraceMinutes)
-      : deadlineAt;
-
-  if (now.getTime() <= unknownUntil.getTime()) {
+  if (lastSuccess === null) {
+    const unknownUntil = addMinutes(deadlineAt, input.initialGraceMinutes);
+    if (now.getTime() <= unknownUntil.getTime()) {
+      return {
+        health: "unknown",
+        expectedAt,
+        deadlineAt,
+        overdueSince: null,
+        reasonCode: "unknown_awaiting_first_deadline",
+      };
+    }
     return {
-      health: "unknown",
+      health: "overdue",
       expectedAt,
       deadlineAt,
+      overdueSince: unknownUntil,
+      reasonCode: "overdue_never_observed",
+    };
+  }
+
+  const missed = firstMissedOccurrenceAfterSuccess(input.contract, lastSuccess);
+  if (now.getTime() <= missed.expectedOccurrenceAt.getTime()) {
+    // Between a covered slot and the next expected start — still healthy.
+    return {
+      health: "healthy",
+      expectedAt: missed.expectedOccurrenceAt,
+      deadlineAt: missed.deadlineAt,
       overdueSince: null,
-      reasonCode:
-        lastSuccess === null
-          ? "unknown_awaiting_first_deadline"
-          : "unknown_awaiting_occurrence",
+      reasonCode: "healthy_occurrence_satisfied",
+    };
+  }
+
+  if (now.getTime() <= missed.deadlineAt.getTime()) {
+    return {
+      health: "warning",
+      expectedAt: missed.expectedOccurrenceAt,
+      deadlineAt: missed.deadlineAt,
+      overdueSince: null,
+      reasonCode: "warning_no_recent_execution",
     };
   }
 
   return {
     health: "overdue",
-    expectedAt,
-    deadlineAt,
-    overdueSince: unknownUntil,
-    reasonCode:
-      lastSuccess === null
-        ? "overdue_never_observed"
-        : "overdue_missed_deadline",
+    expectedAt: missed.expectedOccurrenceAt,
+    deadlineAt: missed.deadlineAt,
+    overdueSince: missed.deadlineAt,
+    reasonCode: "overdue_missed_deadline",
   };
 }

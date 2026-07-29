@@ -48,10 +48,11 @@ describe("cadence evaluator — cron", () => {
       new FixedClock(new Date("2026-07-18T14:10:00.000Z")),
     );
     expect(result.expectedAt?.toISOString()).toBe("2026-07-18T14:00:00.000Z");
-    expect(result.health).toBe("unknown");
+    expect(result.health).toBe("warning");
+    expect(result.reasonCode).toBe("warning_no_recent_execution");
   });
 
-  it("becomes overdue at deadline and stays healthy one second before with evidence", () => {
+  it("becomes overdue after allowed lateness on a missed cron occurrence", () => {
     const withEvidence = evaluateCadence(
       {
         isActive: true,
@@ -274,6 +275,37 @@ describe("cadence evaluator — fixed-rate interval", () => {
     expect(changed.expectedOccurrenceAt.toISOString()).toBe(
       "2026-07-18T14:15:00.000Z",
     );
+  });
+
+  it("warns then overdues a 1-minute interval even when lateness is longer than the interval", () => {
+    const oneMinute = fixed({
+      cadenceValue: "1",
+      allowedLatenessMinutes: 5,
+      lastAcceptableSuccessAt: new Date("2026-07-18T14:00:00.000Z"),
+    });
+
+    const stillHealthy = evaluateCadence(
+      { isActive: true, initialGraceMinutes: 0, contract: oneMinute },
+      new FixedClock(new Date("2026-07-18T14:00:45.000Z")),
+    );
+    expect(stillHealthy.health).toBe("healthy");
+
+    const warning = evaluateCadence(
+      { isActive: true, initialGraceMinutes: 0, contract: oneMinute },
+      new FixedClock(new Date("2026-07-18T14:03:00.000Z")),
+    );
+    expect(warning.health).toBe("warning");
+    expect(warning.reasonCode).toBe("warning_no_recent_execution");
+    expect(warning.expectedAt?.toISOString()).toBe("2026-07-18T14:01:00.000Z");
+    expect(warning.deadlineAt?.toISOString()).toBe("2026-07-18T14:06:00.000Z");
+
+    const overdue = evaluateCadence(
+      { isActive: true, initialGraceMinutes: 0, contract: oneMinute },
+      new FixedClock(new Date("2026-07-18T14:06:01.000Z")),
+    );
+    expect(overdue.health).toBe("overdue");
+    expect(overdue.reasonCode).toBe("overdue_missed_deadline");
+    expect(overdue.expectedAt?.toISOString()).toBe("2026-07-18T14:01:00.000Z");
   });
 });
 

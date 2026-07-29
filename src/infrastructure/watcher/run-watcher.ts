@@ -280,15 +280,17 @@ export function createWatcher(deps: {
         contract.workflow_id,
         contract.tenant_id,
         contract.workflow_id,
-        evaluation.deadlineAt?.toISOString() ?? null,
+        evaluation.expectedAt?.toISOString() ?? null,
         evaluation.overdueSince?.toISOString() ?? null,
         evaluation.health === "inactive"
           ? "inactive"
           : evaluation.health === "unknown"
             ? "unknown"
-            : evaluation.health === "overdue"
-              ? "overdue"
-              : "healthy",
+            : evaluation.health === "warning"
+              ? "warning"
+              : evaluation.health === "overdue"
+                ? "overdue"
+                : "healthy",
         evaluation.reasonCode,
         JSON.stringify(unverified),
         nowIso,
@@ -308,11 +310,13 @@ export function createWatcher(deps: {
         workflowId: contract.workflow_id,
         incidentType: "silent_absence",
         severity: "critical",
-        summary: `Silent absence: ${evaluation.reasonCode}`,
+        summary:
+          "Quorum has not received a new execution within the expected window.",
         detailsJson: JSON.stringify({
           expectedAt: evaluation.expectedAt?.toISOString() ?? null,
           deadlineAt: evaluation.deadlineAt?.toISOString() ?? null,
           overdueSince: evaluation.overdueSince?.toISOString() ?? null,
+          reasonCode: evaluation.reasonCode,
         }),
         observedAt: nowIso,
       });
@@ -346,7 +350,8 @@ export function createWatcher(deps: {
       }
     } else if (
       evaluation.health === "healthy" ||
-      evaluation.health === "unknown"
+      evaluation.health === "unknown" ||
+      evaluation.health === "warning"
     ) {
       const open = alerting.getUnresolvedIncident(
         contract.tenant_id,

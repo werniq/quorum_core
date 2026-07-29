@@ -274,6 +274,284 @@ describe("watcher", () => {
     const result = healthyWatcher.runTick(tenant.id);
     expect(result.resolvedSilentAbsence).toBe(1);
   });
+
+  it("moves a 1-minute fixed-rate contract Healthy → warning → Overdue → recovered without requiring an alert channel", () => {
+    const sqlite = openDb();
+    const core = new SqliteCoreRepositories(sqlite);
+    const tenant = core.ensureSelfHostedTenant();
+    const workflowId = createId();
+    const contractId = createId();
+    const anchor = "2026-07-18T14:00:00.000Z";
+    core.createWorkflow(tenant.id, {
+      id: workflowId,
+      clientId: null,
+      name: "Poll invoices",
+      externalWorkflowId: createId(),
+      description: null,
+      monitoringMethod: "poll",
+      isActive: true,
+      monitoringStartedAt: anchor,
+    });
+    core.createWorkflowContract(tenant.id, {
+      id: contractId,
+      workflowId,
+      name: "Poll invoices",
+      businessPurpose: "Poll invoices",
+      cadenceType: "interval",
+      cadenceValue: "1",
+      intervalMode: "fixed_rate",
+      scheduleAnchorAt: anchor,
+      timezone: null,
+      allowedLatenessMinutes: 5,
+      maxQuietWindowMinutes: 60,
+      initialGraceMinutes: 0,
+      emptyResultPolicy: "allowed",
+      countLessSuccessAllowed: true,
+      notificationBackoffMinutes: 60,
+      evidenceLevel: "basic",
+      schemaVersion: 1,
+      isActive: true,
+      activatedAt: anchor,
+    });
+    core.upsertWorkflowState(tenant.id, {
+      tenantId: tenant.id,
+      workflowId,
+      lastExecutionAt: anchor,
+      lastNonemptySuccessAt: anchor,
+      lastAcceptableSuccessAt: anchor,
+      lastFailureAt: null,
+      lastExternalExecutionRef: "exec-1",
+      lastStatus: "success",
+      nextExpectedAt: null,
+      overdueSince: null,
+      currentHealth: "healthy",
+      evidenceLevel: "basic",
+      evidenceSummaryCode: "healthy_occurrence_satisfied",
+      unverifiedDimensionsJson: "[]",
+      consecutiveStaleChecks: 0,
+      updatedAt: anchor,
+    });
+
+    const runAt = (iso: string) => {
+      const watcher = createWatcher({
+        sqlite,
+        clock: new FixedClock(new Date(iso)),
+        claimOwner: "watcher-1",
+        claimTtlMs: 55_000,
+        getSchemaReadiness: () => ({ status: "ready", appliedMigrations: [] }),
+      });
+      return watcher.runTick(tenant.id);
+    };
+
+    expect(runAt("2026-07-18T14:00:30.000Z").openedSilentAbsence).toBe(0);
+    expect(
+      (
+        sqlite
+          .prepare(
+            `SELECT current_health AS h FROM workflow_states WHERE workflow_id = ?`,
+          )
+          .get(workflowId) as { h: string }
+      ).h,
+    ).toBe("healthy");
+
+    expect(runAt("2026-07-18T14:03:00.000Z").openedSilentAbsence).toBe(0);
+    expect(
+      (
+        sqlite
+          .prepare(
+            `SELECT current_health AS h, evidence_summary_code AS c FROM workflow_states WHERE workflow_id = ?`,
+          )
+          .get(workflowId) as { h: string; c: string }
+      ).h,
+    ).toBe("warning");
+
+    const overdueTick = runAt("2026-07-18T14:06:01.000Z");
+    expect(overdueTick.openedSilentAbsence).toBe(1);
+    expect(
+      (
+        sqlite
+          .prepare(
+            `SELECT current_health AS h FROM workflow_states WHERE workflow_id = ?`,
+          )
+          .get(workflowId) as { h: string }
+      ).h,
+    ).toBe("overdue");
+    expect(
+      (
+        sqlite
+          .prepare(
+            `SELECT summary FROM incidents
+             WHERE workflow_id = ? AND incident_type = 'silent_absence' AND status = 'open'`,
+          )
+          .get(workflowId) as { summary: string }
+      ).summary,
+    ).toBe(
+      "Quorum has not received a new execution within the expected window.",
+    );
+
+    const catalog = queryContractCatalog({
+      sqlite,
+      clock: new FixedClock(new Date("2026-07-18T14:06:30.000Z")),
+      tenantId: tenant.id,
+      publicBaseUrl: "http://127.0.0.1:3000",
+    });
+    const row = catalog.find((r) => r.workflowId === workflowId);
+    expect(row?.health).toBe("overdue");
+    expect(row?.alertChannelHealth).toBe("none");
+    expect(row?.activeIncident?.type).toBe("silent_absence");
+
+    sqlite
+      .prepare(
+        `UPDATE workflow_states
+         SET last_acceptable_success_at = ?, last_status = 'success'
+         WHERE workflow_id = ?`,
+      )
+      .run("2026-07-18T14:07:00.000Z", workflowId);
+    const recovered = runAt("2026-07-18T14:07:15.000Z");
+    expect(recovered.resolvedSilentAbsence).toBe(1);
+    expect(
+      (
+        sqlite
+          .prepare(
+            `SELECT current_health AS h FROM workflow_states WHERE workflow_id = ?`,
+          )
+          .get(workflowId) as { h: string }
+      ).h,
+    ).toBe("healthy");
+    expect(
+      (
+        sqlite
+          .prepare(
+            `SELECT status FROM incidents WHERE workflow_id = ? AND incident_type = 'silent_absence'`,
+          )
+          .get(workflowId) as { status: string }
+      ).status,
+    ).toBe("resolved");
+  });
+
+  it("opens silent_absence on overdue even when an alert channel is routed", async () => {
+    const sqlite = openDb();
+    const core = new SqliteCoreRepositories(sqlite);
+    const alerting = new SqliteAlertingRepositories(sqlite);
+    const tenant = core.ensureSelfHostedTenant();
+    const workflowId = createId();
+    const anchor = "2026-07-18T14:00:00.000Z";
+    core.createWorkflow(tenant.id, {
+      id: workflowId,
+      clientId: null,
+      name: "Poll with alerts",
+      externalWorkflowId: createId(),
+      description: null,
+      monitoringMethod: "poll",
+      isActive: true,
+      monitoringStartedAt: anchor,
+    });
+    const contractId = createId();
+    core.createWorkflowContract(tenant.id, {
+      id: contractId,
+      workflowId,
+      name: "Poll with alerts",
+      businessPurpose: "Poll with alerts",
+      cadenceType: "interval",
+      cadenceValue: "1",
+      intervalMode: "fixed_rate",
+      scheduleAnchorAt: anchor,
+      timezone: null,
+      allowedLatenessMinutes: 5,
+      maxQuietWindowMinutes: 60,
+      initialGraceMinutes: 0,
+      emptyResultPolicy: "allowed",
+      countLessSuccessAllowed: true,
+      notificationBackoffMinutes: 60,
+      evidenceLevel: "basic",
+      schemaVersion: 1,
+      isActive: true,
+      activatedAt: anchor,
+    });
+    core.upsertWorkflowState(tenant.id, {
+      tenantId: tenant.id,
+      workflowId,
+      lastExecutionAt: anchor,
+      lastNonemptySuccessAt: anchor,
+      lastAcceptableSuccessAt: anchor,
+      lastFailureAt: null,
+      lastExternalExecutionRef: "exec-1",
+      lastStatus: "success",
+      nextExpectedAt: null,
+      overdueSince: null,
+      currentHealth: "healthy",
+      evidenceLevel: "basic",
+      evidenceSummaryCode: null,
+      unverifiedDimensionsJson: "[]",
+      consecutiveStaleChecks: 0,
+      updatedAt: anchor,
+    });
+    const channelId = createId();
+    alerting.createAlertChannel(tenant.id, {
+      id: channelId,
+      name: "Ops",
+      type: "webhook",
+      encryptedConfig: encryptCredentialSecret(
+        JSON.stringify({ url: "https://hooks.example/quorum" }),
+        KEK,
+      ),
+      isActive: true,
+    });
+    alerting.routeContractToChannel(tenant.id, {
+      contractKind: "workflow",
+      contractId,
+      alertChannelId: channelId,
+    });
+
+    const watcher = createWatcher({
+      sqlite,
+      clock: new FixedClock(new Date("2026-07-18T14:06:01.000Z")),
+      claimOwner: "watcher-1",
+      claimTtlMs: 55_000,
+      getSchemaReadiness: () => ({ status: "ready", appliedMigrations: [] }),
+    });
+    expect(watcher.runTick(tenant.id).openedSilentAbsence).toBe(1);
+
+    const processor = createOutboxProcessor({
+      sqlite,
+      clock: new FixedClock(new Date("2026-07-18T14:06:30.000Z")),
+      kek: KEK,
+      claimOwner: "outbox-1",
+      claimTtlMs: 30_000,
+      maxAttempts: 3,
+      retryBaseMs: 1_000,
+      deliveryTimeoutMs: 1_000,
+      publicBaseUrl: "http://127.0.0.1:3000",
+      edition: "self_hosted",
+      getSchemaReadiness: () => ({ status: "ready", appliedMigrations: [] }),
+      providers: {
+        deliverWebhook: async () => ({
+          ok: true,
+          externalMessageId: "msg-1",
+          externalThreadId: "thread-1",
+          responseStatusCode: 200,
+        }),
+        deliverSmtp: async () => ({
+          ok: false,
+          errorCode: "unused",
+          errorMessage: "unused",
+          responseStatusCode: null,
+        }),
+      },
+    });
+    const batch = await processor.processBatch();
+    expect(batch.delivered).toBe(1);
+
+    const catalog = queryContractCatalog({
+      sqlite,
+      clock: new FixedClock(new Date("2026-07-18T14:06:30.000Z")),
+      tenantId: tenant.id,
+      publicBaseUrl: "http://127.0.0.1:3000",
+    });
+    expect(catalog.find((r) => r.workflowId === workflowId)?.health).toBe(
+      "overdue",
+    );
+  });
 });
 
 describe("alert delivery and catalog", () => {

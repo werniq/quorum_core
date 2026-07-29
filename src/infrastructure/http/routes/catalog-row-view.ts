@@ -17,10 +17,14 @@ export function toCatalogRowView(row: CatalogContractRow): CatalogRowView {
     overdueDurationSeconds: row.overdueDurationSeconds,
     alertChannelHealth: row.alertChannelHealth,
     connectorHealth: row.connectorHealth,
+    watcherHealth: row.watcherHealth,
+    monitoringMethod: row.monitoringMethod,
     activeIncident: row.activeIncident
       ? {
           severity: row.activeIncident.severity,
           summary: row.activeIncident.summary,
+          id: row.activeIncident.id,
+          type: row.activeIncident.type,
         }
       : null,
     contractKind: row.contractKind,

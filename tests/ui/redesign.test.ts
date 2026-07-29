@@ -80,6 +80,7 @@ describe("UI redesign copy and primitives", () => {
 
   it("separates health and evidence badges with text labels", () => {
     expect(statusBadge("healthy")).toContain("Healthy");
+    expect(statusBadge("warning")).toContain("No recent execution");
     expect(statusBadge("overdue")).toContain("Overdue");
     expect(evidenceBadge("basic")).toContain("Basic evidence");
     expect(evidenceBadge("high", true)).toContain("stale");

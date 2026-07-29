@@ -188,3 +188,109 @@ export function successCoversOccurrence(
   }
   return true;
 }
+
+/**
+ * First expected occurrence after `lastSuccess` that still needs evidence,
+ * with its lateness deadline. Used so fixed-rate / cron evaluation does not
+ * roll the overdue gate forward with the current clock slot when lateness
+ * is longer than the interval.
+ */
+export function firstMissedOccurrenceAfterSuccess(
+  contract: CadenceContractFields,
+  lastSuccess: Date,
+): { expectedOccurrenceAt: Date; deadlineAt: Date } {
+  switch (contract.cadenceType) {
+    case "interval":
+      return firstMissedIntervalAfterSuccess(contract, lastSuccess);
+    case "cron":
+      return firstMissedCronAfterSuccess(contract, lastSuccess);
+    case "event_driven": {
+      if (
+        contract.maxQuietWindowMinutes === null ||
+        contract.maxQuietWindowMinutes <= 0
+      ) {
+        throw new CadenceEvaluationError(
+          "Event-driven cadence requires a positive max quiet window.",
+        );
+      }
+      return {
+        expectedOccurrenceAt: lastSuccess,
+        deadlineAt: addMinutes(lastSuccess, contract.maxQuietWindowMinutes),
+      };
+    }
+    default: {
+      const _exhaustive: never = contract.cadenceType;
+      throw new CadenceEvaluationError(`Unsupported cadence: ${_exhaustive}`);
+    }
+  }
+}
+
+function firstMissedIntervalAfterSuccess(
+  contract: CadenceContractFields,
+  lastSuccess: Date,
+): { expectedOccurrenceAt: Date; deadlineAt: Date } {
+  if (!contract.intervalMode) {
+    throw new CadenceEvaluationError(
+      "Interval cadence requires an explicit interval_mode.",
+    );
+  }
+  const intervalMinutes = parsePositiveDurationMinutes(contract.cadenceValue);
+  if (intervalMinutes === null) {
+    throw new CadenceEvaluationError(
+      "Interval cadence requires a positive duration.",
+    );
+  }
+
+  if (contract.intervalMode === "since_last_success") {
+    const expectedOccurrenceAt = addMinutes(lastSuccess, intervalMinutes);
+    return {
+      expectedOccurrenceAt,
+      deadlineAt: addMinutes(
+        expectedOccurrenceAt,
+        contract.allowedLatenessMinutes,
+      ),
+    };
+  }
+
+  if (!contract.scheduleAnchorAt) {
+    throw new CadenceEvaluationError(
+      "Fixed-rate interval requires schedule_anchor_at.",
+    );
+  }
+  const anchor = contract.scheduleAnchorAt;
+  const intervalMs = intervalMinutes * 60_000;
+  const elapsedMs = lastSuccess.getTime() - anchor.getTime();
+  const coveredN = elapsedMs < 0 ? -1 : Math.floor(elapsedMs / intervalMs);
+  const firstMissedN = coveredN + 1;
+  const expectedOccurrenceAt = new Date(
+    anchor.getTime() + firstMissedN * intervalMs,
+  );
+  return {
+    expectedOccurrenceAt,
+    deadlineAt: addMinutes(
+      expectedOccurrenceAt,
+      contract.allowedLatenessMinutes,
+    ),
+  };
+}
+
+function firstMissedCronAfterSuccess(
+  contract: CadenceContractFields,
+  lastSuccess: Date,
+): { expectedOccurrenceAt: Date; deadlineAt: Date } {
+  if (!contract.timezone) {
+    throw new CadenceEvaluationError("Cron cadence requires a timezone.");
+  }
+  const expression = CronExpressionParser.parse(contract.cadenceValue, {
+    currentDate: lastSuccess,
+    tz: contract.timezone,
+  });
+  const expectedOccurrenceAt = expression.next().toDate();
+  return {
+    expectedOccurrenceAt,
+    deadlineAt: addMinutes(
+      expectedOccurrenceAt,
+      contract.allowedLatenessMinutes,
+    ),
+  };
+}

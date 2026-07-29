@@ -1,15 +1,15 @@
-# Quorum v0.1.0-beta.2
+# Quorum v0.1.0-beta.3
 
-Second public **beta** of Quorum Community — self-hosted Contract Catalog for n8n.
+Third public **beta** of Quorum Community — self-hosted Contract Catalog for n8n.
 
 **Hosted multi-tenant SaaS is not available** from this repository.
 
 ## Docker installation
 
-Published image: [`qniw984/quorum:0.1.0-beta.2`](https://hub.docker.com/r/qniw984/quorum/tags)
+Published image: [`qniw984/quorum:0.1.0-beta.3`](https://hub.docker.com/r/qniw984/quorum/tags)
 
 ```bash
-docker pull qniw984/quorum:0.1.0-beta.2
+docker pull qniw984/quorum:0.1.0-beta.3
 cp .env.example .env
 # Set QUORUM_CREDENTIAL_KEK (min 16 chars) and QUORUM_SETUP_TOKEN (min 24 chars when auth is on)
 docker compose up -d
@@ -28,10 +28,12 @@ Lab stack with bundled n8n: `docker compose -f docker-compose.lab.yml up --build
 ## Included features
 
 - Contract Catalog (health, evidence strength, deadlines, alert status)
+- Clear silence path on contract cards: **No recent execution** (warning) → **Overdue** + `silent_absence`, then recover to Healthy when executions resume (alert channel not required)
 - Simplified onboarding: connect n8n, select workflows by name, confirm expectations, start monitoring
 - n8n API polling (URL + API key, no workflow changes)
 - Push heartbeats (HMAC-signed reports from n8n)
 - Incidents, webhook/SMTP alerts, and a read Incident API
+- Soft-remove workflows, clients, and alert channels from the UI
 - Remove n8n connectors from the UI; auto-resolve stale connector-unreachable incidents when connectivity recovers
 - Fixed-rate cadence activation with `schedule_anchor_at`
 - SQLite (default) and PostgreSQL migrations
@@ -52,7 +54,7 @@ Before any upgrade or restore:
 
 1. Back up the SQLite (or Postgres) data volume.
 2. Store `QUORUM_CREDENTIAL_KEK` in a **separate** secret store. Encrypted credentials cannot be recovered without it.
-3. Deploy `qniw984/quorum:0.1.0-beta.2` (or build from this tag), confirm `GET /readyz`, then watch `GET /health/watcher`.
+3. Deploy `qniw984/quorum:0.1.0-beta.3` (or build from this tag), confirm `GET /readyz`, then watch `GET /health/watcher`.
 
 Wrong KEK after restore causes decrypt failures; Quorum never prints the key.
 

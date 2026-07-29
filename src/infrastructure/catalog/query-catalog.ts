@@ -38,7 +38,10 @@ export interface CatalogContractRow {
     summary: string;
   } | null;
   connectorHealth: string | null;
+  /** Derived from last watcher write to workflow_states.updated_at. */
+  watcherHealth: "ok" | "stale" | "not_evaluated";
   alertChannelHealth: AlertChannelHealthState | "none";
+  monitoringMethod: "poll" | "push" | null;
   detailUrl: string;
   isActive: boolean;
   sourceCount: number | null;
@@ -90,12 +93,14 @@ export function queryContractCatalog(input: {
          w.client_id,
          w.is_active AS workflow_active,
          w.connector_id,
+         w.monitoring_method,
          cl.name AS client_name,
          s.current_health,
          s.last_acceptable_success_at,
          s.next_expected_at,
          s.overdue_since,
-         s.evidence_level AS state_evidence_level
+         s.evidence_level AS state_evidence_level,
+         s.updated_at AS state_updated_at
        FROM workflow_contracts c
        JOIN workflows w ON w.id = c.workflow_id AND w.tenant_id = c.tenant_id
        LEFT JOIN clients cl ON cl.id = w.client_id AND cl.tenant_id = c.tenant_id
@@ -144,15 +149,26 @@ export function queryContractCatalog(input: {
     const overdueSince = row.overdue_since
       ? new Date(String(row.overdue_since))
       : null;
-    const overdueDurationSeconds =
-      overdueSince && health === "overdue"
-        ? Math.max(
-            0,
-            Math.floor(
-              (input.clock.now().getTime() - overdueSince.getTime()) / 1000,
-            ),
-          )
-        : null;
+    const nextExpected = row.next_expected_at
+      ? new Date(String(row.next_expected_at))
+      : null;
+    const nowMs = input.clock.now().getTime();
+    let overdueDurationSeconds: number | null = null;
+    if (health === "overdue" && overdueSince) {
+      overdueDurationSeconds = Math.max(
+        0,
+        Math.floor((nowMs - overdueSince.getTime()) / 1000),
+      );
+    } else if (
+      (health === "warning" || health === "overdue") &&
+      nextExpected &&
+      nowMs > nextExpected.getTime()
+    ) {
+      overdueDurationSeconds = Math.max(
+        0,
+        Math.floor((nowMs - nextExpected.getTime()) / 1000),
+      );
+    }
 
     const incident = input.sqlite
       .prepare(
@@ -229,7 +245,15 @@ export function queryContractCatalog(input: {
           }
         : null,
       connectorHealth,
+      watcherHealth: deriveWatcherHealth(
+        row.state_updated_at ? String(row.state_updated_at) : null,
+        input.clock,
+      ),
       alertChannelHealth,
+      monitoringMethod:
+        row.monitoring_method === "poll" || row.monitoring_method === "push"
+          ? row.monitoring_method
+          : null,
       detailUrl: `${input.publicBaseUrl.replace(/\/+$/, "")}/catalog/contracts/${workflowId}`,
       isActive: Boolean(row.contract_active) && Boolean(row.workflow_active),
       sourceCount: null,
@@ -441,7 +465,9 @@ function queryOutcomeCatalogRows(input: {
       connectorHealth: connectorStale
         ? `${sourceStatus}/${destStatus}`
         : "healthy",
+      watcherHealth: "ok",
       alertChannelHealth,
+      monitoringMethod: null,
       detailUrl: `${input.publicBaseUrl.replace(/\/+$/, "")}/catalog/outcome/${contractId}`,
       isActive: Boolean(row.is_active),
       sourceCount: latest ? Number(latest.source_count) : null,
@@ -492,6 +518,26 @@ function deriveHealth(row: Record<string, unknown>): ContractHealth {
     return health;
   }
   return "unknown";
+}
+
+/** Matches default WATCHER_STALE_MS (3 minutes) for catalog card display. */
+const WATCHER_STALE_MS = 180_000;
+
+function deriveWatcherHealth(
+  stateUpdatedAt: string | null,
+  clock: Clock,
+): "ok" | "stale" | "not_evaluated" {
+  if (!stateUpdatedAt) {
+    return "not_evaluated";
+  }
+  const updatedMs = Date.parse(stateUpdatedAt);
+  if (!Number.isFinite(updatedMs)) {
+    return "not_evaluated";
+  }
+  if (clock.now().getTime() - updatedMs > WATCHER_STALE_MS) {
+    return "stale";
+  }
+  return "ok";
 }
 
 function worstAlertChannelHealth(
