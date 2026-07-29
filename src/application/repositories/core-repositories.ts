@@ -137,6 +137,16 @@ export interface CoreRepositories {
     protectionStartedAt: string | null,
     nowIso: string,
   ): ClientRecord;
+  /**
+   * Soft-removes a workflow: deactivates contracts, unbinds connector,
+   * revokes credentials, and hides it from the workflows list.
+   * History (heartbeats/incidents) is retained.
+   */
+  removeWorkflow(tenantId: string, workflowId: string, nowIso: string): boolean;
+  /**
+   * Soft-removes a client (archived) and soft-removes its workflows.
+   */
+  removeClient(tenantId: string, clientId: string, nowIso: string): boolean;
   createWorkflow(
     tenantId: string,
     input: Omit<

@@ -19,6 +19,9 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+/** Marker stored in workflows.description when soft-removed from the UI. */
+export const WORKFLOW_REMOVED_MARKER = "__quorum_removed__";
+
 export class SqliteCoreRepositories implements CoreRepositories {
   constructor(private readonly sqlite: Database.Database) {}
 
@@ -147,6 +150,112 @@ export class SqliteCoreRepositories implements CoreRepositories {
       throw new Error("client_not_found");
     }
     return updated;
+  }
+
+  removeWorkflow(
+    tenantId: string,
+    workflowId: string,
+    nowIso: string,
+  ): boolean {
+    this.assertTenantExists(tenantId);
+    const existing = this.getWorkflow(tenantId, workflowId);
+    if (!existing) {
+      return false;
+    }
+    if (existing.description === WORKFLOW_REMOVED_MARKER) {
+      return true;
+    }
+
+    const run = this.sqlite.transaction(() => {
+      this.sqlite
+        .prepare(
+          `UPDATE workflow_contracts
+           SET is_active = 0, updated_at = ?
+           WHERE tenant_id = ? AND workflow_id = ? AND is_active = 1`,
+        )
+        .run(nowIso, tenantId, workflowId);
+
+      const contractIds = this.sqlite
+        .prepare(
+          `SELECT id FROM workflow_contracts
+           WHERE tenant_id = ? AND workflow_id = ?`,
+        )
+        .all(tenantId, workflowId) as Array<{ id: string }>;
+      for (const row of contractIds) {
+        this.sqlite
+          .prepare(
+            `DELETE FROM contract_alert_channels
+             WHERE tenant_id = ? AND contract_kind = 'workflow' AND contract_id = ?`,
+          )
+          .run(tenantId, row.id);
+      }
+
+      this.sqlite
+        .prepare(
+          `UPDATE workflow_credentials
+           SET status = 'revoked', revoked_at = ?
+           WHERE tenant_id = ? AND workflow_id = ? AND status = 'active'`,
+        )
+        .run(nowIso, tenantId, workflowId);
+
+      this.sqlite
+        .prepare(
+          `DELETE FROM n8n_poll_checkpoints
+           WHERE tenant_id = ? AND workflow_id = ?`,
+        )
+        .run(tenantId, workflowId);
+      this.sqlite
+        .prepare(
+          `DELETE FROM n8n_poll_claims
+           WHERE tenant_id = ? AND workflow_id = ?`,
+        )
+        .run(tenantId, workflowId);
+      this.sqlite
+        .prepare(
+          `DELETE FROM watcher_contract_claims
+           WHERE tenant_id = ? AND workflow_id = ?`,
+        )
+        .run(tenantId, workflowId);
+
+      const result = this.sqlite
+        .prepare(
+          `UPDATE workflows
+           SET is_active = 0,
+               connector_id = NULL,
+               description = ?,
+               updated_at = ?
+           WHERE tenant_id = ? AND id = ?`,
+        )
+        .run(WORKFLOW_REMOVED_MARKER, nowIso, tenantId, workflowId);
+      return result.changes === 1;
+    });
+    return run();
+  }
+
+  removeClient(tenantId: string, clientId: string, nowIso: string): boolean {
+    this.assertTenantExists(tenantId);
+    const existing = this.getClient(tenantId, clientId);
+    if (!existing) {
+      return false;
+    }
+    if (existing.status === "archived") {
+      return true;
+    }
+
+    const run = this.sqlite.transaction(() => {
+      const workflows = this.sqlite
+        .prepare(
+          `SELECT id FROM workflows
+           WHERE tenant_id = ? AND client_id = ?`,
+        )
+        .all(tenantId, clientId) as Array<{ id: string }>;
+      for (const row of workflows) {
+        this.removeWorkflow(tenantId, row.id, nowIso);
+      }
+      this.updateClientStatus(tenantId, clientId, "archived", null, nowIso);
+      return true;
+    });
+    return run();
   }
 
   createWorkflow(

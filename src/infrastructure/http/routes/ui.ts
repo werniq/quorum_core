@@ -368,22 +368,30 @@ export function registerUiRoutes(
     const tid = tenantId();
     const query = request.query as {
       registered?: string;
+      removed?: string;
       error?: string;
     };
     const flash =
       query.registered === "1"
         ? "Workflow registered. Copy the Quorum workflow ID from the table for push setup (not the n8n workflow ID). For Connect n8n, bind a connector next. Inactive means no active contract yet — push heartbeats then return CONTRACT_NOT_ACTIVE."
-        : query.error === "duplicate"
-          ? "A workflow with this n8n workflow ID is already registered for this organization. Use a different ID, or open the existing workflow below."
-          : query.error === "validation"
-            ? "Workflow name and n8n workflow ID are required."
-            : null;
+        : query.removed === "1"
+          ? "Workflow removed. Monitoring is stopped; historical evidence is kept."
+          : query.error === "duplicate"
+            ? "A workflow with this n8n workflow ID is already registered for this organization. Use a different ID, or open the existing workflow below."
+            : query.error === "validation"
+              ? "Workflow name and n8n workflow ID are required."
+              : null;
     const flashTone =
-      query.registered === "1" ? ("success" as const) : ("error" as const);
+      query.registered === "1" || query.removed === "1"
+        ? ("success" as const)
+        : ("error" as const);
     const workflows = deps.sqlite
       .prepare(
         `SELECT id, name, external_workflow_id, monitoring_method, is_active, connector_id
-         FROM workflows WHERE tenant_id = ? ORDER BY created_at DESC`,
+         FROM workflows
+         WHERE tenant_id = ?
+           AND IFNULL(description, '') != '__quorum_removed__'
+         ORDER BY created_at DESC`,
       )
       .all(tid) as Array<{
       id: string;
@@ -417,6 +425,33 @@ export function registerUiRoutes(
         })),
       }),
     );
+  });
+
+  app.post("/workflows/:workflowId/delete", async (request, reply) => {
+    const session = requireSession(request, reply);
+    if (
+      !session ||
+      !requireAdmin(session, reply) ||
+      !assertCsrf(request, session, reply)
+    ) {
+      return;
+    }
+    const workflowId = (request.params as { workflowId: string }).workflowId;
+    const tid = tenantId();
+    const nowIso = deps.clock.now().toISOString();
+    const ok = core.removeWorkflow(tid, workflowId, nowIso);
+    if (!ok) {
+      return reply.code(404).type("text/html").send("Workflow not found");
+    }
+    opsAudit.recordOpsAudit({
+      tenantId: tid,
+      actorUserId: session.adminUserId,
+      action: "workflow.removed",
+      resourceType: "workflow",
+      resourceId: workflowId,
+      nowIso,
+    });
+    return reply.redirect("/workflows?removed=1");
   });
 
   app.post("/workflows/:workflowId/connector", async (request, reply) => {
@@ -473,7 +508,10 @@ export function registerUiRoutes(
       const workflows = deps.sqlite
         .prepare(
           `SELECT id, name, external_workflow_id, monitoring_method, is_active, connector_id
-           FROM workflows WHERE tenant_id = ? ORDER BY created_at DESC`,
+           FROM workflows
+           WHERE tenant_id = ?
+             AND IFNULL(description, '') != '__quorum_removed__'
+           ORDER BY created_at DESC`,
         )
         .all(tid) as Array<{
         id: string;
@@ -748,6 +786,7 @@ export function registerUiRoutes(
       return;
     }
     const tid = tenantId();
+    const removed = (request.query as { removed?: string }).removed;
     const channels = deps.sqlite
       .prepare(
         `SELECT c.id, c.name, c.type, COALESCE(s.current_health, 'unknown') AS health
@@ -755,6 +794,7 @@ export function registerUiRoutes(
          LEFT JOIN alert_channel_states s
            ON s.tenant_id = c.tenant_id AND s.alert_channel_id = c.id
          WHERE c.tenant_id = ?
+           AND c.is_active = 1
          ORDER BY c.created_at DESC`,
       )
       .all(tid) as Array<{
@@ -767,6 +807,7 @@ export function registerUiRoutes(
       renderAlertsPage({
         ...pageShell,
         csrf: session.csrfToken,
+        flash: removed === "1" ? "Alert channel removed." : null,
         channels,
       }),
     );
@@ -905,7 +946,34 @@ export function registerUiRoutes(
       resourceId: channelId,
       nowIso,
     });
-    return reply.redirect("/alerts");
+    return reply.redirect("/alerts?removed=1");
+  });
+
+  app.post("/clients/:clientId/delete", async (request, reply) => {
+    const session = requireSession(request, reply);
+    if (
+      !session ||
+      !requireAdmin(session, reply) ||
+      !assertCsrf(request, session, reply)
+    ) {
+      return;
+    }
+    const clientId = (request.params as { clientId: string }).clientId;
+    const tid = tenantId();
+    const nowIso = deps.clock.now().toISOString();
+    const ok = core.removeClient(tid, clientId, nowIso);
+    if (!ok) {
+      return reply.code(404).type("text/html").send("Client not found");
+    }
+    opsAudit.recordOpsAudit({
+      tenantId: tid,
+      actorUserId: session.adminUserId,
+      action: "client.removed",
+      resourceType: "client",
+      resourceId: clientId,
+      nowIso,
+    });
+    return reply.redirect("/clients?removed=1");
   });
 
   app.post("/connectors/n8n", async (request, reply) => {

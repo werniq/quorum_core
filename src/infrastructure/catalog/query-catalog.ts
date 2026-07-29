@@ -103,6 +103,7 @@ export function queryContractCatalog(input: {
        WHERE c.tenant_id = ?
          AND c.contract_type = 'heartbeat'
          AND (c.is_active = 1 OR c.is_active = 0)
+         AND IFNULL(w.description, '') != '__quorum_removed__'
          ${clientFilter}`,
     )
     .all(...params) as Array<Record<string, unknown>>;

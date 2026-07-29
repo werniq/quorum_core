@@ -169,36 +169,50 @@ export function registerProductUiRoutes(
       return;
     }
     const tid = deps.tenantId();
+    const removed = (request.query as { removed?: string }).removed;
+    const flash =
+      removed === "1"
+        ? `<p class="ok" role="status">Client removed. Related workflows were stopped; historical evidence is kept.</p>`
+        : "";
     const catalog = loadCatalogViews(tid);
-    const clients = core.listClients(tid).map((c) => {
-      const rows = catalog.filter((r) => r.clientId === c.id);
-      const activeWithAlert = rows.filter(
-        (r) =>
-          r.isActive &&
-          (r.alertChannelHealth === "healthy" ||
-            r.alertChannelHealth === "degraded"),
-      ).length;
-      const status =
-        c.status === "archived"
-          ? "archived"
-          : deriveClientProtectionStatus({
-              hasAnyContract: rows.length > 0,
-              activeContractsWithTestedAlert: activeWithAlert,
-              allContractsPaused:
-                rows.length > 0 && rows.every((r) => !r.isActive),
-              archived: false,
-            });
-      const coverage = summarizeClientCoverage(rows, status);
-      return {
-        id: c.id,
-        name: c.name,
-        status: coverage.status,
-        coverageNote: coverage.coverageNote,
-      };
-    });
-    return reply
-      .type("text/html")
-      .send(renderClientsPage({ ...pageShell, role: session.role, clients }));
+    const clients = core
+      .listClients(tid)
+      .filter((c) => c.status !== "archived")
+      .map((c) => {
+        const rows = catalog.filter((r) => r.clientId === c.id);
+        const activeWithAlert = rows.filter(
+          (r) =>
+            r.isActive &&
+            (r.alertChannelHealth === "healthy" ||
+              r.alertChannelHealth === "degraded"),
+        ).length;
+        const status =
+          c.status === "archived"
+            ? "archived"
+            : deriveClientProtectionStatus({
+                hasAnyContract: rows.length > 0,
+                activeContractsWithTestedAlert: activeWithAlert,
+                allContractsPaused:
+                  rows.length > 0 && rows.every((r) => !r.isActive),
+                archived: false,
+              });
+        const coverage = summarizeClientCoverage(rows, status);
+        return {
+          id: c.id,
+          name: c.name,
+          status: coverage.status,
+          coverageNote: coverage.coverageNote,
+        };
+      });
+    return reply.type("text/html").send(
+      renderClientsPage({
+        ...pageShell,
+        role: session.role,
+        csrf: session.csrfToken,
+        flash,
+        clients,
+      }),
+    );
   });
 
   app.get("/clients/:clientId", async (request, reply) => {

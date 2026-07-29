@@ -278,6 +278,84 @@ describe("core schema repositories", () => {
     });
   });
 
+  it("soft-removes workflows and archives clients without deleting history rows", () => {
+    const { sqlite, repos } = openRepos();
+    const now = new Date().toISOString();
+    const tenant = repos.ensureSelfHostedTenant();
+    const clientId = createId();
+    const workflowId = createId();
+    repos.createClient(tenant.id, {
+      id: clientId,
+      name: "Acme",
+      slug: "acme",
+      status: "protected",
+      protectionStartedAt: now,
+    });
+    repos.createWorkflow(tenant.id, {
+      id: workflowId,
+      clientId,
+      name: "Invoices",
+      externalWorkflowId: "wf-ext",
+      description: null,
+      monitoringMethod: "poll",
+      isActive: true,
+      monitoringStartedAt: now,
+    });
+    repos.createWorkflowContract(tenant.id, {
+      id: createId(),
+      workflowId,
+      name: "Invoices heartbeat",
+      businessPurpose: "Invoices",
+      cadenceType: "interval",
+      cadenceValue: "15m",
+      intervalMode: "fixed_rate",
+      scheduleAnchorAt: now,
+      timezone: "UTC",
+      allowedLatenessMinutes: 5,
+      maxQuietWindowMinutes: 60,
+      initialGraceMinutes: 0,
+      emptyResultPolicy: "allowed",
+      countLessSuccessAllowed: true,
+      notificationBackoffMinutes: 240,
+      evidenceLevel: "basic",
+      schemaVersion: 1,
+      isActive: true,
+      activatedAt: now,
+    });
+
+    expect(repos.removeWorkflow(tenant.id, workflowId, now)).toBe(true);
+    expect(repos.getWorkflow(tenant.id, workflowId)?.isActive).toBe(false);
+    expect(repos.getWorkflow(tenant.id, workflowId)?.description).toBe(
+      "__quorum_removed__",
+    );
+    expect(
+      (
+        sqlite
+          .prepare(
+            `SELECT is_active AS a FROM workflow_contracts WHERE workflow_id = ?`,
+          )
+          .get(workflowId) as { a: number }
+      ).a,
+    ).toBe(0);
+
+    const otherWorkflow = createId();
+    repos.createWorkflow(tenant.id, {
+      id: otherWorkflow,
+      clientId,
+      name: "Payroll",
+      externalWorkflowId: "wf-pay",
+      description: null,
+      monitoringMethod: "poll",
+      isActive: true,
+      monitoringStartedAt: now,
+    });
+    expect(repos.removeClient(tenant.id, clientId, now)).toBe(true);
+    expect(repos.getClient(tenant.id, clientId)?.status).toBe("archived");
+    expect(repos.getWorkflow(tenant.id, otherWorkflow)?.description).toBe(
+      "__quorum_removed__",
+    );
+  });
+
   it("includes core schema migrations through credentials and heartbeat state", () => {
     const tags = listMigrationTags("sqlite");
     expect(tags).toEqual(

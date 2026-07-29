@@ -591,6 +591,8 @@ export function renderProtectClientPage(input: {
 export function renderClientsPage(input: {
   demoMode?: boolean;
   role: "admin" | "operator" | "viewer";
+  csrf?: string;
+  flash?: string;
   clients: Array<{
     id: string;
     name: string;
@@ -598,12 +600,21 @@ export function renderClientsPage(input: {
     coverageNote: string;
   }>;
 }): string {
+  const canMutate = input.role !== "viewer" && Boolean(input.csrf);
   const rows = input.clients
     .map(
       (c) => `<tr>
         <td data-label="Client"><a href="/clients/${escapeHtml(c.id)}">${escapeHtml(c.name)}</a></td>
         <td data-label="Status">${escapeHtml(c.status)}</td>
         <td data-label="Coverage" class="helper">${escapeHtml(c.coverageNote)}</td>
+        <td data-label="Actions">${
+          canMutate
+            ? `<form method="post" action="/clients/${escapeHtml(c.id)}/delete" onsubmit="return confirm('Remove this client? Its workflows will stop monitoring. Historical evidence is kept.');">
+          <input type="hidden" name="csrf" value="${escapeHtml(input.csrf!)}" />
+          <button type="submit" class="btn-ghost">Remove</button>
+        </form>`
+            : ""
+        }</td>
       </tr>`,
     )
     .join("");
@@ -617,6 +628,7 @@ export function renderClientsPage(input: {
     body: `
       <h1 class="page-title">Clients</h1>
       <p class="page-subtitle">Protection status does not mean every process is covered.</p>
+      ${input.flash ?? ""}
       ${
         input.role !== "viewer"
           ? `<p style="margin-bottom:1.25rem"><a class="btn" href="/onboarding">Set up monitoring</a></p>`
@@ -626,7 +638,7 @@ export function renderClientsPage(input: {
         input.clients.length === 0
           ? `<div class="empty-state"><h2>No clients yet</h2><p>Define the first business process that should always work.</p></div>`
           : `<div class="card table-wrap" style="padding:0"><table class="responsive-cards">
-        <thead><tr><th>Client</th><th>Status</th><th>Coverage</th></tr></thead>
+        <thead><tr><th>Client</th><th>Status</th><th>Coverage</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table></div>`
       }

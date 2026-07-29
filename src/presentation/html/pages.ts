@@ -673,6 +673,10 @@ export function renderWorkflowsPage(input: {
             <p class="helper">Inactive means there is no active contract yet. Push heartbeats return <code>CONTRACT_NOT_ACTIVE</code> (HTTP 409) until you define a contract and activate monitoring. An unknown Quorum workflow id still returns <code>NOT_FOUND</code>.</p>
             <a class="btn btn-secondary" href="/onboarding">Define monitoring &amp; activate</a>
           </div>`;
+      const removeForm = `<form method="post" action="/workflows/${escapeHtml(w.id)}/delete" onsubmit="return confirm('Remove this workflow from Quorum? Monitoring will stop. Historical evidence is kept.');">
+            <input type="hidden" name="csrf" value="${escapeHtml(input.csrf)}" />
+            <button type="submit" class="btn-ghost">Remove</button>
+          </form>`;
       return `<tr>
         <td data-label="Name"><strong>${escapeHtml(w.name)}</strong></td>
         <td data-label="n8n ID"><code>${escapeHtml(w.externalWorkflowId)}</code></td>
@@ -684,6 +688,7 @@ export function renderWorkflowsPage(input: {
             ${w.monitoringMethod === "push" ? pushCredential : bindForm}
             ${bound}
             ${inactiveNext}
+            ${removeForm}
           </div>
         </td>
       </tr>`;
@@ -758,6 +763,7 @@ export function renderWorkflowsPage(input: {
 export function renderAlertsPage(input: {
   demoMode?: boolean;
   csrf: string;
+  flash?: string | null;
   channels: Array<{
     id: string;
     name: string;
@@ -772,10 +778,16 @@ export function renderAlertsPage(input: {
         <td data-label="Type">${escapeHtml(c.type)}</td>
         <td data-label="Health" class="channel-${escapeHtml(c.health)}">${escapeHtml(c.health)}</td>
         <td data-label="Actions">
-          <form method="post" action="/alerts/${escapeHtml(c.id)}/test" style="display:inline">
-            <input type="hidden" name="csrf" value="${escapeHtml(input.csrf)}" />
-            <button type="submit" class="btn-secondary">Send test alert</button>
-          </form>
+          <div class="stack-sm workflow-actions">
+            <form method="post" action="/alerts/${escapeHtml(c.id)}/test">
+              <input type="hidden" name="csrf" value="${escapeHtml(input.csrf)}" />
+              <button type="submit" class="btn-secondary">Send test alert</button>
+            </form>
+            <form method="post" action="/alerts/${escapeHtml(c.id)}/disable" onsubmit="return confirm('Remove this alert channel? Incidents will no longer be delivered here.');">
+              <input type="hidden" name="csrf" value="${escapeHtml(input.csrf)}" />
+              <button type="submit" class="btn-ghost">Remove</button>
+            </form>
+          </div>
         </td>
       </tr>`,
     )
@@ -790,6 +802,7 @@ export function renderAlertsPage(input: {
     body: `
       <h1 class="page-title">Alert channels</h1>
       <p class="page-subtitle">Deliver incident notifications to your team.</p>
+      ${input.flash ? `<p class="ok" role="status">${escapeHtml(input.flash)}</p>` : ""}
       <form method="post" action="/alerts" class="card stack">
         <input type="hidden" name="csrf" value="${escapeHtml(input.csrf)}" />
         <h2 class="card-title">Create webhook channel</h2>
