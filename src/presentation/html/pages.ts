@@ -651,7 +651,7 @@ export function renderWorkflowsPage(input: {
         w.monitoringMethod === "poll" ? "Connect n8n" : "Push heartbeats";
       const pushCredential = `<form method="post" action="/workflows/${escapeHtml(w.id)}/credentials" style="display:inline">
             <input type="hidden" name="csrf" value="${escapeHtml(input.csrf)}" />
-            <button type="submit" class="btn-secondary">Issue push credential</button>
+            <button type="submit" class="btn-secondary">Issue push credential (needed for push heartbeats)</button>
           </form>`;
       const bindForm =
         w.monitoringMethod === "poll"
