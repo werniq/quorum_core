@@ -296,12 +296,31 @@ select:focus-visible, textarea:focus-visible, summary:focus-visible,
   font-size: 13px;
 }
 .topbar-spacer { flex: 1; }
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
 .topbar-status {
   font-size: 12px;
   color: var(--text-muted);
   background: var(--background-muted);
   border-radius: 999px;
   padding: 0.2rem 0.6rem;
+}
+.topbar-github {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-decoration: none;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  padding: 0.2rem 0.6rem;
+}
+.topbar-github:hover,
+.topbar-github:focus-visible {
+  color: var(--text-primary);
+  outline: none;
 }
 .app-content {
   flex: 1;
@@ -1342,7 +1361,10 @@ export function layout(input: {
         <button type="button" class="menu-toggle" id="menu-toggle" aria-label="Open navigation" aria-expanded="false" aria-controls="app-sidebar">☰</button>
         <h1 class="topbar-title">${escapeHtml(pageTitle)}</h1>
         <span class="topbar-spacer"></span>
-        <span class="topbar-status" title="Self-hosted edition">Self-hosted</span>
+        <div class="topbar-actions">
+          <span class="topbar-status" title="Self-hosted edition">Self-hosted</span>
+          <a class="topbar-github" href="https://github.com/werniq/quorum_core" target="_blank" rel="noopener noreferrer" title="Quorum Community on GitHub">GitHub</a>
+        </div>
       </header>
       ${demoBanner}
       ${banner}
