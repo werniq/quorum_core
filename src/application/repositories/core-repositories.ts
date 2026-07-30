@@ -102,8 +102,11 @@ export interface HeartbeatEventRecord {
 export interface WorkflowStateRecord {
   tenantId: string;
   workflowId: string;
+  /** last_report_at — latest valid heartbeat of any status */
   lastExecutionAt: string | null;
+  /** last_non_empty_success_at — success with items > 0 */
   lastNonemptySuccessAt: string | null;
+  /** last_success_at — latest status=success heartbeat */
   lastAcceptableSuccessAt: string | null;
   lastFailureAt: string | null;
   lastExternalExecutionRef: string | null;

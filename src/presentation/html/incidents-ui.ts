@@ -1,9 +1,4 @@
-import {
-  escapeHtml,
-  layout,
-  primaryNav,
-  statusBadge,
-} from "./layout.js";
+import { escapeHtml, layout, primaryNav, statusBadge } from "./layout.js";
 import { formatCatalogTimestamp } from "./catalog-ui.js";
 import {
   buildN8nWorkflowEditorUrl,
@@ -41,10 +36,7 @@ function formatLateness(seconds: number | null): string {
   return formatDurationSeconds(seconds);
 }
 
-function latenessSeconds(
-  row: IncidentListRow,
-  nowMs: number,
-): number | null {
+function latenessSeconds(row: IncidentListRow, nowMs: number): number | null {
   const anchor = row.overdueSince ?? row.nextExpectedAt;
   if (!anchor) return null;
   const at = Date.parse(anchor);
@@ -241,8 +233,7 @@ export function renderHardFailureIncidentCard(
   csrf: string,
 ): string {
   const details = parseHardFailureDetails(row.detailsJson);
-  const tone =
-    row.status === "resolved" ? " is-healthy" : " is-overdue";
+  const tone = row.status === "resolved" ? " is-healthy" : " is-overdue";
   const badge =
     row.status === "resolved"
       ? statusBadge("healthy")
@@ -307,29 +298,58 @@ export function renderIncidentsBody(input: {
     return `<div class="empty-state"><h2>No open incidents</h2><p>Define contracts proactively. Do not wait for failures.</p><a class="btn" href="/catalog">Open Contract Catalog</a></div>`;
   }
 
-  const silent = input.rows.filter((r) => r.incidentType === "silent_absence");
-  const hard = input.rows.filter((r) => r.incidentType === "hard_failure");
-  const other = input.rows.filter(
+  const isOpen = (r: IncidentListRow) =>
+    r.status === "open" || r.status === "acknowledged";
+
+  const openRows = input.rows.filter(isOpen);
+  const resolvedHard = input.rows.filter(
+    (r) => r.incidentType === "hard_failure" && r.status === "resolved",
+  );
+
+  const silent = openRows.filter((r) => r.incidentType === "silent_absence");
+  const hardOpen = openRows.filter((r) => r.incidentType === "hard_failure");
+  const otherOpen = openRows.filter(
     (r) =>
       r.incidentType !== "silent_absence" && r.incidentType !== "hard_failure",
   );
 
-  const cards = [
+  const openCards = [
     ...silent.map((r) => renderSilentAbsenceIncidentCard(r, input.nowMs)),
-    ...hard.map((r) => renderHardFailureIncidentCard(r, input.csrf)),
+    ...hardOpen.map((r) => renderHardFailureIncidentCard(r, input.csrf)),
   ];
 
-  const cardsHtml =
-    cards.length > 0 ? `<div class="contract-grid">${cards.join("")}</div>` : "";
+  const openCardsHtml =
+    openCards.length > 0
+      ? `<div class="contract-grid">${openCards.join("")}</div>`
+      : "";
 
   const otherHtml =
-    other.length > 0
-      ? `<div class="card table-wrap" style="padding:0;margin-top:var(--space-4)"><table class="responsive-cards"><thead><tr><th>Severity</th><th>Status</th><th>Summary</th><th>Opened</th></tr></thead><tbody>${other
+    otherOpen.length > 0
+      ? `<div class="card table-wrap" style="padding:0;margin-top:var(--space-4)"><table class="responsive-cards"><thead><tr><th>Severity</th><th>Status</th><th>Summary</th><th>Opened</th></tr></thead><tbody>${otherOpen
           .map(renderGenericIncidentRow)
           .join("")}</tbody></table></div>`
       : "";
 
-  return `${cardsHtml}${otherHtml}`;
+  const historyHtml =
+    resolvedHard.length > 0
+      ? `<section style="margin-top:var(--space-6)">
+          <h2 class="section-title">Resolved hard failures</h2>
+          <p class="helper">Recent recoveries from the last 24 hours.</p>
+          <div class="contract-grid">${resolvedHard
+            .map((r) => renderHardFailureIncidentCard(r, input.csrf))
+            .join("")}</div>
+        </section>`
+      : "";
+
+  if (
+    openCards.length === 0 &&
+    otherOpen.length === 0 &&
+    resolvedHard.length > 0
+  ) {
+    return `${historyHtml}`;
+  }
+
+  return `${openCardsHtml}${otherHtml}${historyHtml}`;
 }
 
 export function renderIncidentsPage(input: {

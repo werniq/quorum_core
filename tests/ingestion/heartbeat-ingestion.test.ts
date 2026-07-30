@@ -611,9 +611,9 @@ describe("secure heartbeat ingestion", () => {
     expect(resolved.summary).toContain("recovered");
     expect(resolved.resolved_at).toBeTruthy();
     expect(JSON.parse(resolved.details_json).recoveredAt).toBeTruthy();
-    expect(JSON.parse(resolved.details_json).durationSeconds).toBeGreaterThanOrEqual(
-      0,
-    );
+    expect(
+      JSON.parse(resolved.details_json).durationSeconds,
+    ).toBeGreaterThanOrEqual(0);
 
     const outbox = sqlite
       .prepare(
@@ -722,9 +722,7 @@ describe("secure heartbeat ingestion", () => {
     ).toMatchObject({ status: "accepted" });
 
     const silence = sqlite
-      .prepare(
-        `SELECT status FROM incidents WHERE id = ?`,
-      )
+      .prepare(`SELECT status FROM incidents WHERE id = ?`)
       .get(silenceId) as { status: string };
     expect(silence.status).toBe("resolved");
 

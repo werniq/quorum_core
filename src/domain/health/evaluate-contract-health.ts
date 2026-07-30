@@ -121,6 +121,22 @@ export function evaluateContractHealth(
     };
   }
 
+  // Empty-result reports satisfy cadence; policy violations are incidents.
+  if (
+    latest?.status === "empty_result" &&
+    (classification === "warning_empty" || classification === "unacceptable")
+  ) {
+    return {
+      health: "healthy",
+      evidenceLevel,
+      unverifiedDimensions,
+      deadlineAt: deadline.deadlineAt,
+      unknownUntilAt,
+      reasonCode:
+        classification === "warning_empty" ? "warning_empty_result" : "healthy",
+    };
+  }
+
   if (classification === "unacceptable") {
     return {
       health: "overdue",

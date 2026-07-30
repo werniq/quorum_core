@@ -30,6 +30,9 @@ export type CatalogRowView = {
   lastReportStatus: string | null;
   lastExternalExecutionRef: string | null;
   consecutiveFailures: number | null;
+  lastNonEmptySuccessAt: string | null;
+  lastItemsProcessed: number | null;
+  emptyResultPolicy: "warning" | "failure" | null;
   nextDeadlineAt: string | null;
   overdueDurationSeconds: number | null;
   alertChannelHealth: string;
@@ -125,7 +128,10 @@ function formatIntervalPhrase(minutes: number): string {
   return `Every ${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
 }
 
-function withTimezoneSuffix(base: string, timezone: string | undefined): string {
+function withTimezoneSuffix(
+  base: string,
+  timezone: string | undefined,
+): string {
   if (!timezone) return base;
   return `${base} · ${timezone}`;
 }
@@ -139,8 +145,9 @@ export function formatExpectation(raw: string): string {
     const minutes = /^\d+$/.test(amountRaw)
       ? Number(amountRaw)
       : (() => {
-          const match =
-            /^(\d+)\s*(m|min|minutes|h|hr|hours|d|day|days)$/i.exec(amountRaw);
+          const match = /^(\d+)\s*(m|min|minutes|h|hr|hours|d|day|days)$/i.exec(
+            amountRaw,
+          );
           if (!match) return null;
           const amount = Number(match[1]);
           const unit = match[2]!.toLowerCase();
@@ -159,9 +166,7 @@ export function formatExpectation(raw: string): string {
   const eventDriven = raw.match(/^event_driven:(.+?)(?:@(.+))?$/i);
   if (eventDriven) {
     const windowRaw = eventDriven[1]!.trim();
-    const windowMinutes = /^\d+$/.test(windowRaw)
-      ? Number(windowRaw)
-      : null;
+    const windowMinutes = /^\d+$/.test(windowRaw) ? Number(windowRaw) : null;
     const windowLabel =
       windowMinutes !== null && Number.isFinite(windowMinutes)
         ? `${windowMinutes} ${windowMinutes === 1 ? "minute" : "minutes"}`
@@ -235,9 +240,12 @@ function formatMonitoringMethod(method: string | null): string {
   return "Monitoring: —";
 }
 
-function formatConnectorHealth(health: string | null, method: string | null): string {
+function formatConnectorHealth(
+  health: string | null,
+  method: string | null,
+): string {
   if (method === "push") {
-    return "Connector: n/a (push)";
+    return "Connector: Not applicable";
   }
   if (!health) {
     return "Connector: not bound";
@@ -306,13 +314,6 @@ function contractCardActions(row: CatalogRowView): Array<{
   return actions;
 }
 
-function contractPrimaryAction(row: CatalogRowView): {
-  href: string;
-  label: string;
-} {
-  return contractCardActions(row)[0]!;
-}
-
 function renderTechnicalDetails(row: CatalogRowView): string {
   return `<details class="contract-technical">
       <summary>Technical details</summary>
@@ -335,8 +336,12 @@ function isFailureReported(row: CatalogRowView): boolean {
   return row.activeIncident?.type === "hard_failure";
 }
 
+function isEmptyResultReported(row: CatalogRowView): boolean {
+  return row.activeIncident?.type === "empty_result";
+}
+
 function isSilenceAttention(row: CatalogRowView): boolean {
-  if (isFailureReported(row)) {
+  if (isFailureReported(row) || isEmptyResultReported(row)) {
     return false;
   }
   return row.health === "warning" || row.health === "overdue";
@@ -348,10 +353,16 @@ export function renderContractCard(row: CatalogRowView): string {
       ? `/catalog/outcome/${row.contractId}`
       : `/catalog/contracts/${row.workflowId}`;
   const failureReported = isFailureReported(row);
+  const emptyReported = isEmptyResultReported(row);
   const silenceAttention = isSilenceAttention(row);
+  const emptyLabel =
+    row.emptyResultPolicy === "failure" ? "Contract violation" : "Empty result";
   const toneClass =
-    silenceAttention || failureReported || row.activeIncident
-      ? failureReported || row.health === "overdue" || row.activeIncident
+    silenceAttention || failureReported || emptyReported || row.activeIncident
+      ? failureReported ||
+        emptyReported ||
+        row.health === "overdue" ||
+        row.activeIncident
         ? " is-overdue"
         : " is-warning"
       : row.health === "healthy"
@@ -359,11 +370,13 @@ export function renderContractCard(row: CatalogRowView): string {
         : "";
   const health = failureReported
     ? `<span class="badge badge-status-incident"><span class="sr-only">Health: </span>Failure reported</span>`
-    : silenceAttention
-      ? statusBadge(row.health)
-      : row.activeIncident
-        ? `<span class="badge badge-status-incident"><span class="sr-only">Health: </span>Incident</span>`
-        : statusBadge(row.health);
+    : emptyReported
+      ? `<span class="badge badge-status-incident"><span class="sr-only">Health: </span>${escapeHtml(emptyLabel)}</span>`
+      : silenceAttention
+        ? statusBadge(row.health)
+        : row.activeIncident
+          ? `<span class="badge badge-status-incident"><span class="sr-only">Health: </span>Incident</span>`
+          : statusBadge(row.health);
   const silenceMessage = silenceAttention
     ? row.health === "warning"
       ? `<p class="contract-card-message">Quorum has not received a new execution within the expected window.</p>
@@ -371,7 +384,9 @@ export function renderContractCard(row: CatalogRowView): string {
       : `<p class="contract-card-message">${escapeHtml(SILENT_ABSENCE_MESSAGE)}</p>`
     : failureReported
       ? `<p class="contract-card-message">A valid failure heartbeat arrived. Quorum is tracking consecutive failed executions until a successful report arrives.</p>`
-      : "";
+      : emptyReported
+        ? `<p class="contract-card-message">A valid heartbeat arrived with 0 items. Reporting is present; the empty-result policy opened an incident.</p>`
+        : "";
   const volume = row.volumeSummary
     ? `<div>Reported volume: ${escapeHtml(row.volumeSummary.currentCount)} (${escapeHtml(row.volumeSummary.status)})</div>`
     : "";
@@ -389,8 +404,24 @@ export function renderContractCard(row: CatalogRowView): string {
       )}</div>
       <div>External execution ref: ${escapeHtml(
         row.lastExternalExecutionRef ?? "—",
-      )}</div>`
-    : `<div>${formatTimestampHint(row.lastAcceptableEvidenceAt, "Last execution")}</div>
+      )}</div>
+      <div>${formatTimestampHint(row.nextDeadlineAt, "Expected next execution")}</div>`
+    : emptyReported
+      ? `<div>${formatTimestampHint(row.lastReportAt, "Last report")}${
+          row.lastReportStatus
+            ? ` · ${escapeHtml(formatReportStatus(row.lastReportStatus))}`
+            : ""
+        } · ${escapeHtml(
+          row.lastItemsProcessed === null
+            ? "0 items"
+            : `${row.lastItemsProcessed} item${row.lastItemsProcessed === 1 ? "" : "s"}`,
+        )}</div>
+      <div>${formatTimestampHint(row.lastNonEmptySuccessAt, "Last non-empty success")}</div>
+      <div>External execution ref: ${escapeHtml(
+        row.lastExternalExecutionRef ?? "—",
+      )}</div>
+      <div>${formatTimestampHint(row.nextDeadlineAt, "Expected next execution")}</div>`
+      : `<div>${formatTimestampHint(row.lastAcceptableEvidenceAt, "Last execution")}</div>
       <div>${formatTimestampHint(row.nextDeadlineAt, "Expected next execution")}</div>
       <div>${escapeHtml(formatLateness(row.overdueDurationSeconds))}</div>`;
   const actions = contractCardActions(row)
@@ -420,7 +451,7 @@ export function renderContractCard(row: CatalogRowView): string {
         ${evidenceBadge(row.evidenceLevel, row.evidenceStale)}
         ${alertHealthBadge(row.alertChannelHealth)}
         ${
-          row.activeIncident && !failureReported
+          row.activeIncident && !failureReported && !emptyReported
             ? `<span class="badge badge-status-incident">${escapeHtml(row.activeIncident.summary)}</span>`
             : ""
         }
@@ -966,11 +997,7 @@ export function renderWorkflowContractDetailPage(input: {
     : `<span class="badge badge-status-paused">Inactive</span>`;
   const timelineItems = input.recentEvents.length
     ? input.recentEvents
-        .map((e) =>
-          detailListItem(
-            `<span>${escapeHtml(e.label)}</span>`,
-          ),
-        )
+        .map((e) => detailListItem(`<span>${escapeHtml(e.label)}</span>`))
         .join("")
     : `<li class="detail-list-item helper">No meaningful transitions yet.</li>`;
   const incidentItems = input.incidents.length

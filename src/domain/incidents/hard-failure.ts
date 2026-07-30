@@ -39,9 +39,13 @@ export function parseHardFailureDetails(
       latestFailureAt: parsed.latestFailureAt,
       consecutiveFailures: parsed.consecutiveFailures,
       latestStatus:
-        typeof parsed.latestStatus === "string" ? parsed.latestStatus : "failure",
+        typeof parsed.latestStatus === "string"
+          ? parsed.latestStatus
+          : "failure",
       itemsProcessed:
-        typeof parsed.itemsProcessed === "number" ? parsed.itemsProcessed : null,
+        typeof parsed.itemsProcessed === "number"
+          ? parsed.itemsProcessed
+          : null,
       externalExecutionRef:
         typeof parsed.externalExecutionRef === "string"
           ? parsed.externalExecutionRef
@@ -110,7 +114,9 @@ function itemsPhrase(count: number | null): string {
   return `${count} item${count === 1 ? "" : "s"}`;
 }
 
-export function formatDurationSeconds(seconds: number | null | undefined): string {
+export function formatDurationSeconds(
+  seconds: number | null | undefined,
+): string {
   if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) {
     return "—";
   }

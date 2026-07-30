@@ -32,6 +32,9 @@ export interface CatalogContractRow {
   lastReportStatus: string | null;
   lastExternalExecutionRef: string | null;
   consecutiveFailures: number | null;
+  lastNonEmptySuccessAt: string | null;
+  lastItemsProcessed: number | null;
+  emptyResultPolicy: "warning" | "failure" | null;
   nextDeadlineAt: string | null;
   overdueDurationSeconds: number | null;
   activeIncident: {
@@ -94,6 +97,7 @@ export function queryContractCatalog(input: {
          c.timezone,
          c.is_active AS contract_active,
          c.evidence_level,
+         c.empty_result_policy,
          w.client_id,
          w.is_active AS workflow_active,
          w.connector_id,
@@ -102,6 +106,7 @@ export function queryContractCatalog(input: {
          s.current_health,
          s.last_acceptable_success_at,
          s.last_execution_at,
+         s.last_nonempty_success_at,
          s.last_status,
          s.last_external_execution_ref,
          s.next_expected_at,
@@ -123,7 +128,11 @@ export function queryContractCatalog(input: {
   const mapped: CatalogContractRow[] = rows.map((row) => {
     const workflowId = String(row.workflow_id);
     let connectorHealth: string | null = null;
-    if (row.connector_id) {
+    const monitoringMethod =
+      row.monitoring_method === "poll" || row.monitoring_method === "push"
+        ? row.monitoring_method
+        : null;
+    if (row.connector_id && monitoringMethod !== "push") {
       const connector = input.sqlite
         .prepare(
           `SELECT health FROM n8n_connectors WHERE tenant_id = ? AND id = ?`,
@@ -146,9 +155,10 @@ export function queryContractCatalog(input: {
       recordLevelReconciliationImplemented: false,
       recordLevelReconciliationFresh: false,
       connectorStaleOrUnavailable:
-        connectorHealth === "unreachable" ||
-        connectorHealth === "auth_failed" ||
-        connectorHealth === "misconfigured",
+        monitoringMethod !== "push" &&
+        (connectorHealth === "unreachable" ||
+          connectorHealth === "auth_failed" ||
+          connectorHealth === "misconfigured"),
     });
     const evidenceLevel = resolved.level;
     const unverified = resolved.unverifiedDimensions;
@@ -185,8 +195,9 @@ export function queryContractCatalog(input: {
          ORDER BY
            CASE incident_type
              WHEN 'hard_failure' THEN 0
-             WHEN 'silent_absence' THEN 1
-             ELSE 2
+             WHEN 'empty_result' THEN 1
+             WHEN 'silent_absence' THEN 2
+             ELSE 3
            END,
            CASE severity WHEN 'critical' THEN 0 ELSE 1 END,
            opened_at ASC
@@ -204,6 +215,7 @@ export function queryContractCatalog(input: {
       | undefined;
 
     let consecutiveFailures: number | null = null;
+    let emptyResultPolicy: "warning" | "failure" | null = null;
     if (incident?.incident_type === "hard_failure" && incident.details_json) {
       try {
         const parsed = JSON.parse(incident.details_json) as {
@@ -216,6 +228,25 @@ export function queryContractCatalog(input: {
         consecutiveFailures = null;
       }
     }
+    if (incident?.incident_type === "empty_result") {
+      const policy = String(row.empty_result_policy ?? "");
+      emptyResultPolicy =
+        policy === "failure" || policy === "warning" ? policy : "warning";
+      if (incident.details_json) {
+        try {
+          const parsed = JSON.parse(incident.details_json) as {
+            policy?: string;
+          };
+          if (parsed.policy === "failure" || parsed.policy === "warning") {
+            emptyResultPolicy = parsed.policy;
+          }
+        } catch {
+          // keep contract policy
+        }
+      }
+    }
+
+    const lastItemsProcessed = row.last_status === "empty_result" ? 0 : null;
     const alertChannelHealth = worstAlertChannelHealth(
       input.sqlite,
       input.tenantId,
@@ -265,6 +296,11 @@ export function queryContractCatalog(input: {
         ? String(row.last_external_execution_ref)
         : null,
       consecutiveFailures,
+      lastNonEmptySuccessAt: row.last_nonempty_success_at
+        ? String(row.last_nonempty_success_at)
+        : null,
+      lastItemsProcessed,
+      emptyResultPolicy,
       nextDeadlineAt: row.next_expected_at
         ? String(row.next_expected_at)
         : null,
@@ -284,10 +320,7 @@ export function queryContractCatalog(input: {
         input.clock,
       ),
       alertChannelHealth,
-      monitoringMethod:
-        row.monitoring_method === "poll" || row.monitoring_method === "push"
-          ? row.monitoring_method
-          : null,
+      monitoringMethod,
       detailUrl: `${input.publicBaseUrl.replace(/\/+$/, "")}/catalog/contracts/${workflowId}`,
       isActive: Boolean(row.contract_active) && Boolean(row.workflow_active),
       sourceCount: null,
@@ -489,6 +522,9 @@ function queryOutcomeCatalogRows(input: {
       lastReportStatus: null,
       lastExternalExecutionRef: null,
       consecutiveFailures: null,
+      lastNonEmptySuccessAt: null,
+      lastItemsProcessed: null,
+      emptyResultPolicy: null,
       nextDeadlineAt: null,
       overdueDurationSeconds: oldestMissingAgeSeconds,
       activeIncident: incident

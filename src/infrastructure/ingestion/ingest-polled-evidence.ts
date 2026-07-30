@@ -9,10 +9,8 @@ import { sanitizeHeartbeatMetadata } from "../../domain/evidence/heartbeat-metad
 import { unverifiedDimensionsForEvidenceLevel } from "../../domain/evidence/unverified-dimensions.js";
 import {
   buildHardFailureDetails,
-  formatHardFailureRecoverySummary,
   formatHardFailureSummary,
   parseHardFailureDetails,
-  withHardFailureRecovery,
 } from "../../domain/incidents/hard-failure.js";
 import { createId } from "../../domain/ids.js";
 import { SqliteAlertingRepositories } from "../db/repositories/sqlite-alerting-repositories.js";
@@ -20,6 +18,12 @@ import {
   assertProcessingAllowed,
   type SchemaReadinessState,
 } from "../../application/schema-readiness.js";
+import {
+  computeNextExpectedIso,
+  openOrUpdateEmptyResultIncident,
+  resolveOpenIncidentsOfTypes,
+  upsertWorkflowStateAfterHeartbeat,
+} from "./apply-heartbeat-state.js";
 
 export interface PolledEvidenceCommand {
   tenantId: string;
@@ -175,62 +179,36 @@ export function createIngestPolledEvidenceHandler(deps: {
         | undefined;
 
       const unverified = unverifiedDimensionsForEvidenceLevel("basic");
-      const currentHealth =
-        evidenceClass === "warning_empty" ? "warning" : "healthy";
+      const nextExpectedAt = computeNextExpectedIso({
+        contract,
+        lastReportAt: executedAt,
+        clock: deps.clock,
+      });
 
-      deps.sqlite
-        .prepare(
-          `INSERT INTO workflow_states (
-             tenant_id, workflow_id, last_execution_at, last_nonempty_success_at,
-             last_acceptable_success_at, last_failure_at, last_external_execution_ref,
-             last_status, next_expected_at, overdue_since, current_health, evidence_level,
-             evidence_summary_code, unverified_dimensions_json, consecutive_stale_checks,
-             updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, 'basic', ?, ?, 0, ?)
-           ON CONFLICT(tenant_id, workflow_id) DO UPDATE SET
-             last_execution_at = excluded.last_execution_at,
-             last_nonempty_success_at = excluded.last_nonempty_success_at,
-             last_acceptable_success_at = excluded.last_acceptable_success_at,
-             last_failure_at = excluded.last_failure_at,
-             last_external_execution_ref = excluded.last_external_execution_ref,
-             last_status = excluded.last_status,
-             overdue_since = NULL,
-             current_health = excluded.current_health,
-             evidence_level = 'basic',
-             evidence_summary_code = excluded.evidence_summary_code,
-             unverified_dimensions_json = excluded.unverified_dimensions_json,
-             consecutive_stale_checks = 0,
-             updated_at = excluded.updated_at`,
-        )
-        .run(
-          command.tenantId,
-          command.workflowId,
-          executedAt,
-          command.evidenceStatus === "success" &&
-            (command.itemsProcessed ?? 0) > 0
-            ? executedAt
-            : (previous?.last_nonempty_success_at ?? null),
-          acceptable
-            ? executedAt
-            : (previous?.last_acceptable_success_at ?? null),
-          command.evidenceStatus === "failure"
-            ? executedAt
-            : (previous?.last_failure_at ?? null),
-          command.externalExecutionRef,
-          command.evidenceStatus,
-          currentHealth,
-          "heartbeat_basic_polled",
-          JSON.stringify(unverified),
-          receivedAt,
-        );
-
-      resolveSilentAbsenceIncident(
-        alerting,
-        command.tenantId,
-        command.workflowId,
+      upsertWorkflowStateAfterHeartbeat({
+        sqlite: deps.sqlite,
+        tenantId: command.tenantId,
+        workflowId: command.workflowId,
+        executedAt,
         receivedAt,
-        "system:ingest-polled",
-      );
+        evidenceStatus: command.evidenceStatus,
+        itemsProcessed: command.itemsProcessed,
+        externalExecutionRef: command.externalExecutionRef,
+        previous,
+        nextExpectedAt,
+        evidenceSummaryCode: "heartbeat_basic_polled",
+        unverifiedJson: JSON.stringify(unverified),
+      });
+
+      resolveOpenIncidentsOfTypes({
+        alerting,
+        sqlite: deps.sqlite,
+        tenantId: command.tenantId,
+        workflowId: command.workflowId,
+        at: receivedAt,
+        actor: "system:ingest-polled",
+        types: ["silent_absence"],
+      });
 
       if (command.evidenceStatus === "failure") {
         const workflowMeta = deps.sqlite
@@ -280,93 +258,59 @@ export function createIngestPolledEvidenceHandler(deps: {
           });
         }
       } else if (command.evidenceStatus === "empty_result") {
+        resolveOpenIncidentsOfTypes({
+          alerting,
+          sqlite: deps.sqlite,
+          tenantId: command.tenantId,
+          workflowId: command.workflowId,
+          at: receivedAt,
+          actor: "system:ingest-polled",
+          types: ["hard_failure"],
+        });
         if (emptyPolicy === "warning" || emptyPolicy === "failure") {
-          const beforeEmpty = alerting.getUnresolvedIncident(
-            command.tenantId,
-            "workflow",
-            command.workflowId,
-            "empty_result",
-          );
-          const incident = alerting.openOrObserveIncident(command.tenantId, {
-            id: createId(),
-            contractKind: "workflow",
+          openOrUpdateEmptyResultIncident({
+            alerting,
+            sqlite: deps.sqlite,
+            tenantId: command.tenantId,
             workflowId: command.workflowId,
-            incidentType: "empty_result",
-            severity: emptyPolicy === "warning" ? "warning" : "critical",
-            summary: "Polled n8n execution reported empty result",
-            observedAt: receivedAt,
+            receivedAt,
+            executedAt,
+            policy: emptyPolicy,
+            itemsProcessed: command.itemsProcessed ?? 0,
+            externalExecutionRef: command.externalExecutionRef,
+            lastNonEmptySuccessAt:
+              (previous?.last_nonempty_success_at as string | null) ?? null,
+            enqueueOpened: (incidentId) => {
+              alerting.enqueueOutbox(command.tenantId, {
+                id: createId(),
+                incidentId,
+                eventType: "opened",
+                payloadJson: JSON.stringify({ incidentId }),
+                availableAt: receivedAt,
+              });
+            },
           });
-          if (!beforeEmpty) {
-            alerting.enqueueOutbox(command.tenantId, {
-              id: createId(),
-              incidentId: incident.id,
-              eventType: "opened",
-              payloadJson: JSON.stringify({ incidentId: incident.id }),
-              availableAt: receivedAt,
-            });
-          }
+        } else {
+          resolveOpenIncidentsOfTypes({
+            alerting,
+            sqlite: deps.sqlite,
+            tenantId: command.tenantId,
+            workflowId: command.workflowId,
+            at: receivedAt,
+            actor: "system:ingest-polled",
+            types: ["empty_result"],
+          });
         }
       } else if (acceptable) {
-        const openIncidents = deps.sqlite
-          .prepare(
-            `SELECT id, incident_type, details_json, opened_at FROM incidents
-             WHERE tenant_id = ? AND workflow_id = ?
-               AND status IN ('open', 'acknowledged')
-               AND incident_type IN ('hard_failure', 'empty_result')`,
-          )
-          .all(command.tenantId, command.workflowId) as Array<{
-          id: string;
-          incident_type: string;
-          details_json: string | null;
-          opened_at: string;
-        }>;
-        for (const row of openIncidents) {
-          if (row.incident_type === "hard_failure") {
-            const existing =
-              parseHardFailureDetails(row.details_json) ??
-              buildHardFailureDetails({
-                existing: null,
-                workflowName: "Workflow",
-                monitoringMethod: "poll",
-                observedAt: row.opened_at,
-                latestStatus: "failure",
-                itemsProcessed: null,
-                externalExecutionRef: null,
-              });
-            const recovered = withHardFailureRecovery(existing, receivedAt);
-            deps.sqlite
-              .prepare(
-                `UPDATE incidents
-                 SET summary = ?, details_json = ?, updated_at = ?
-                 WHERE tenant_id = ? AND id = ?`,
-              )
-              .run(
-                formatHardFailureRecoverySummary(recovered),
-                JSON.stringify(recovered),
-                receivedAt,
-                command.tenantId,
-                row.id,
-              );
-          }
-          alerting.resolveIncident(command.tenantId, row.id, {
-            actor: "system:ingest-polled",
-            at: receivedAt,
-            resolutionNote:
-              row.incident_type === "hard_failure"
-                ? `Recovered at ${receivedAt}`
-                : null,
-          });
-          alerting.enqueueOutbox(command.tenantId, {
-            id: createId(),
-            incidentId: row.id,
-            eventType: "resolved",
-            payloadJson: JSON.stringify({
-              incidentId: row.id,
-              incidentType: row.incident_type,
-            }),
-            availableAt: receivedAt,
-          });
-        }
+        resolveOpenIncidentsOfTypes({
+          alerting,
+          sqlite: deps.sqlite,
+          tenantId: command.tenantId,
+          workflowId: command.workflowId,
+          at: receivedAt,
+          actor: "system:ingest-polled",
+          types: ["hard_failure", "empty_result"],
+        });
       }
     });
 
@@ -397,37 +341,4 @@ export function createIngestPolledEvidenceHandler(deps: {
 
     return { status: "accepted", eventId, idempotentReplay: false };
   };
-}
-
-function resolveSilentAbsenceIncident(
-  alerting: SqliteAlertingRepositories,
-  tenantId: string,
-  workflowId: string,
-  at: string,
-  actor: string,
-): void {
-  const open = alerting.getUnresolvedIncident(
-    tenantId,
-    "workflow",
-    workflowId,
-    "silent_absence",
-  );
-  if (!open) {
-    return;
-  }
-  alerting.resolveIncident(tenantId, open.id, {
-    actor,
-    at,
-    resolutionNote: "Reporting resumed",
-  });
-  alerting.enqueueOutbox(tenantId, {
-    id: createId(),
-    incidentId: open.id,
-    eventType: "resolved",
-    payloadJson: JSON.stringify({
-      incidentId: open.id,
-      incidentType: "silent_absence",
-    }),
-    availableAt: at,
-  });
 }

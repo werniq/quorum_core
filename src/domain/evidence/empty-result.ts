@@ -9,9 +9,12 @@ export type EmptyResultClassification =
 
 /**
  * Empty results are contract-specific:
- * - allowed — zero items is acceptable
- * - warning — cadence satisfied but a warning incident opens
- * - failure — zero items is unacceptable and does not satisfy the contract
+ * - allowed — zero items is acceptable success for the contract
+ * - warning — cadence/reporting satisfied; warning empty_result incident opens
+ * - failure — cadence/reporting satisfied; critical empty_result incident opens
+ *
+ * Any valid empty-result heartbeat still counts as a received execution for
+ * silence / cadence. Policy only drives incidents, not absence.
  */
 export function classifyHeartbeatEvidence(
   status: HeartbeatEvidenceStatus,
@@ -34,6 +37,11 @@ export function classifyHeartbeatEvidence(
   }
 }
 
+/**
+ * Whether the report satisfies the *outcome* contract (not merely reporting).
+ * Empty with warning/failure policy does not count as outcome success, but
+ * still satisfies cadence via last_report / last_execution_at.
+ */
 export function isAcceptableSuccess(
   classification: EmptyResultClassification,
 ): boolean {
@@ -41,4 +49,9 @@ export function isAcceptableSuccess(
     classification === "acceptable_success" ||
     classification === "warning_empty"
   );
+}
+
+/** Outcome-level success only (status=success after classification). */
+export function isOutcomeSuccess(status: HeartbeatEvidenceStatus): boolean {
+  return status === "success";
 }

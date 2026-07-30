@@ -17,7 +17,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage:cadence": "vitest run --coverage tests/domain/cadence-evaluator.test.ts tests/domain/cadence-deadline.test.ts",
-    "test:cov": "vitest run --coverage tests/domain/cadence-evaluator.test.ts tests/domain/cadence-deadline.test.ts tests/domain/reliability-health.test.ts tests/domain/evidence-level-policy.test.ts tests/domain/release-gate-coverage.test.ts",
+    "test:cov": "vitest run --coverage tests/domain/cadence-evaluator.test.ts tests/domain/cadence-deadline.test.ts tests/domain/reliability-health.test.ts tests/domain/evidence-level-policy.test.ts tests/domain/release-gate-coverage.test.ts tests/domain/empty-result-and-deadline.test.ts",
     "test:repository": "vitest run tests/repositories",
     "test:migrations": "vitest run tests/migrations",
     "test:security": "vitest run tests/security tests/release",

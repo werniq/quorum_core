@@ -78,27 +78,7 @@ describe("evaluateContractHealth", () => {
     expect(afterGrace.reasonCode).toBe("overdue_never_observed");
   });
 
-  it("returns warning for empty_result when policy is warning and cadence is met", () => {
-    const lastSuccess = new Date("2026-07-10T10:00:00.000Z");
-    const result = evaluateContractHealth(
-      {
-        isActive: true,
-        evidenceLevel: "basic",
-        emptyResultPolicy: "warning",
-        initialGraceMinutes: 0,
-        cadence: eventCadence({
-          lastEvidenceAt: lastSuccess,
-          monitoringStartedAt: new Date("2026-07-10T08:00:00.000Z"),
-        }),
-        latestEvidence: { status: "empty_result", at: lastSuccess },
-      },
-      new FixedClock(new Date("2026-07-10T10:20:00.000Z")),
-    );
-    expect(result.health).toBe("warning");
-    expect(result.evidenceLevel).toBe("basic");
-  });
-
-  it("marks unacceptable empty_result as overdue while reporting is present", () => {
+  it("keeps empty_result cadence-healthy when policy is failure (incident is separate)", () => {
     const at = new Date("2026-07-10T08:05:00.000Z");
     const result = evaluateContractHealth(
       {
@@ -117,12 +97,32 @@ describe("evaluateContractHealth", () => {
       },
       new FixedClock(new Date("2026-07-10T08:30:00.000Z")),
     );
-    expect(result.health).toBe("overdue");
-    expect(result.reasonCode).toBe("overdue_unacceptable_evidence");
+    expect(result.health).toBe("healthy");
     expect(result.evidenceLevel).toBe("basic");
     expect(result.unverifiedDimensions).toContain(
       "destination_delivery_not_checked",
     );
+  });
+
+  it("returns healthy for empty_result when policy is warning and cadence is met", () => {
+    const lastSuccess = new Date("2026-07-10T10:00:00.000Z");
+    const result = evaluateContractHealth(
+      {
+        isActive: true,
+        evidenceLevel: "basic",
+        emptyResultPolicy: "warning",
+        initialGraceMinutes: 0,
+        cadence: eventCadence({
+          lastEvidenceAt: lastSuccess,
+          monitoringStartedAt: new Date("2026-07-10T08:00:00.000Z"),
+        }),
+        latestEvidence: { status: "empty_result", at: lastSuccess },
+      },
+      new FixedClock(new Date("2026-07-10T10:20:00.000Z")),
+    );
+    expect(result.health).toBe("healthy");
+    expect(result.reasonCode).toBe("warning_empty_result");
+    expect(result.evidenceLevel).toBe("basic");
   });
 
   it("returns healthy when an acceptable success is within the quiet window", () => {

@@ -6,9 +6,7 @@ import {
   type CatalogRowView,
 } from "../../src/presentation/html/catalog-ui.js";
 
-function baseRow(
-  overrides: Partial<CatalogRowView> = {},
-): CatalogRowView {
+function baseRow(overrides: Partial<CatalogRowView> = {}): CatalogRowView {
   return {
     contractId: "contract-1",
     workflowId: "workflow-1",
@@ -24,6 +22,9 @@ function baseRow(
     lastReportStatus: "success",
     lastExternalExecutionRef: null,
     consecutiveFailures: null,
+    lastNonEmptySuccessAt: "2026-07-29T20:16:00.000Z",
+    lastItemsProcessed: 8,
+    emptyResultPolicy: null,
     nextDeadlineAt: "2026-07-29T20:17:00.000Z",
     overdueDurationSeconds: 120,
     alertChannelHealth: "none",
@@ -87,10 +88,10 @@ describe("catalog card polish formatting", () => {
     expect(pushHtml).toContain('class="contract-technical"');
     expect(pushHtml).toContain("<summary>Technical details</summary>");
     expect(pushHtml).toContain("Watcher: ok");
-    expect(pushHtml).toContain("Connector: n/a (push)");
+    expect(pushHtml).toContain("Connector: Not applicable");
     expect(pushHtml).toContain("Monitoring: Push heartbeats");
     expect(pushHtml).toMatch(
-      /contract-technical-body">[\s\S]*Watcher: ok[\s\S]*Connector: n\/a \(push\)/,
+      /contract-technical-body">[\s\S]*Watcher: ok[\s\S]*Connector: Not applicable/,
     );
     expect(pushHtml.indexOf("Technical details")).toBeLessThan(
       pushHtml.indexOf("Watcher: ok"),
@@ -155,5 +156,51 @@ describe("catalog card polish formatting", () => {
     expect(html).toContain("External execution ref: n8n-exec-9");
     expect(html).not.toContain(">Overdue<");
     expect(html).not.toContain("Quorum has not received a new execution");
+  });
+
+  it("shows Empty result / Contract violation without silence copy", () => {
+    const warningHtml = renderContractCard(
+      baseRow({
+        health: "healthy",
+        lastReportAt: "2026-07-29T20:16:00.000Z",
+        lastReportStatus: "empty_result",
+        lastItemsProcessed: 0,
+        lastNonEmptySuccessAt: "2026-07-29T19:00:00.000Z",
+        emptyResultPolicy: "warning",
+        overdueDurationSeconds: null,
+        activeIncident: {
+          severity: "warning",
+          summary: "Invoice sync: empty result",
+          id: "inc-empty",
+          type: "empty_result",
+        },
+      }),
+    );
+    expect(warningHtml).toContain("Empty result");
+    expect(warningHtml).toContain("0 items");
+    expect(warningHtml).toContain("Last non-empty success");
+    expect(warningHtml).not.toContain("No recent execution");
+    expect(warningHtml).not.toContain(
+      "Quorum has not received a new execution",
+    );
+
+    const violationHtml = renderContractCard(
+      baseRow({
+        health: "healthy",
+        lastReportAt: "2026-07-29T20:16:00.000Z",
+        lastReportStatus: "empty_result",
+        lastItemsProcessed: 0,
+        lastNonEmptySuccessAt: "2026-07-29T19:00:00.000Z",
+        emptyResultPolicy: "failure",
+        overdueDurationSeconds: null,
+        activeIncident: {
+          severity: "critical",
+          summary: "Invoice sync: contract violation",
+          id: "inc-empty-2",
+          type: "empty_result",
+        },
+      }),
+    );
+    expect(violationHtml).toContain("Contract violation");
   });
 });

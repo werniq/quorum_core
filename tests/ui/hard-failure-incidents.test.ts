@@ -62,10 +62,12 @@ describe("hard-failure domain helpers", () => {
     );
     expect(recovered.durationSeconds).toBe(600);
     expect(formatHardFailureRecoverySummary(recovered)).toContain("recovered");
-    expect(formatHardFailureRecoverySummary(recovered)).toContain("duration 10m");
-    expect(parseHardFailureDetails(JSON.stringify(recovered))?.recoveredAt).toBe(
-      "2026-07-30T17:10:00.000Z",
+    expect(formatHardFailureRecoverySummary(recovered)).toContain(
+      "duration 10m",
     );
+    expect(
+      parseHardFailureDetails(JSON.stringify(recovered))?.recoveredAt,
+    ).toBe("2026-07-30T17:10:00.000Z");
   });
 });
 
