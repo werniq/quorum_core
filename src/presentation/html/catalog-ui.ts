@@ -925,7 +925,7 @@ export function renderWorkflowContractDetailPage(input: {
     ? input.recentEvents
         .map((e) =>
           detailListItem(
-            `<time datetime="${escapeHtml(e.at)}">${escapeHtml(e.at)}</time><span>${escapeHtml(e.label)}</span>`,
+            `<span>${escapeHtml(e.label)}</span>`,
           ),
         )
         .join("")

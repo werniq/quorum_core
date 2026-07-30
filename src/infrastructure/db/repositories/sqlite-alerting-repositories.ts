@@ -82,14 +82,25 @@ export class SqliteAlertingRepositories implements AlertingRepositories {
       this.sqlite
         .prepare(
           `UPDATE incidents
-           SET last_observed_at = ?, details_json = COALESCE(?, details_json), updated_at = ?
+           SET last_observed_at = ?,
+               details_json = COALESCE(?, details_json),
+               summary = COALESCE(?, summary),
+               updated_at = ?
            WHERE tenant_id = ? AND id = ?`,
         )
-        .run(observedAt, detailsJson, observedAt, tenantId, existing.id);
+        .run(
+          observedAt,
+          detailsJson,
+          input.summary,
+          observedAt,
+          tenantId,
+          existing.id,
+        );
       return {
         ...existing,
         lastObservedAt: observedAt,
         detailsJson: detailsJson ?? existing.detailsJson,
+        summary: input.summary || existing.summary,
         updatedAt: observedAt,
       };
     }

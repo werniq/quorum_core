@@ -25,6 +25,13 @@ import {
   assertProcessingAllowed,
   type SchemaReadinessState,
 } from "../../application/schema-readiness.js";
+import {
+  buildHardFailureDetails,
+  formatHardFailureRecoverySummary,
+  formatHardFailureSummary,
+  parseHardFailureDetails,
+  withHardFailureRecovery,
+} from "../../domain/incidents/hard-failure.js";
 
 export type IngestHeartbeatResult =
   | { status: "accepted"; eventId: string; idempotentReplay: boolean }
@@ -395,44 +402,75 @@ export function createIngestHeartbeatHandler(deps: {
         );
 
       if (classified.evidenceStatus === "failure") {
+        const workflowMeta = deps.sqlite
+          .prepare(
+            `SELECT name, monitoring_method FROM workflows
+             WHERE tenant_id = ? AND id = ?`,
+          )
+          .get(tenantId, command.workflowId) as
+          | { name: string; monitoring_method: string }
+          | undefined;
+        const before = alerting.getUnresolvedIncident(
+          tenantId,
+          "workflow",
+          command.workflowId,
+          "hard_failure",
+        );
+        const existingDetails = parseHardFailureDetails(before?.detailsJson);
+        const details = buildHardFailureDetails({
+          existing: existingDetails,
+          workflowName: workflowMeta?.name ?? "Workflow",
+          monitoringMethod:
+            workflowMeta?.monitoring_method === "poll" ||
+            workflowMeta?.monitoring_method === "push"
+              ? workflowMeta.monitoring_method
+              : null,
+          observedAt: executedAt,
+          latestStatus: "failure",
+          itemsProcessed: classified.itemsProcessed,
+          externalExecutionRef: classified.externalExecutionRef,
+        });
         const incident = alerting.openOrObserveIncident(tenantId, {
           id: createId(),
           contractKind: "workflow",
           workflowId: command.workflowId,
           incidentType: "hard_failure",
           severity: "critical",
-          summary: "Heartbeat reported hard failure",
+          summary: formatHardFailureSummary(details),
+          detailsJson: JSON.stringify(details),
           observedAt: receivedAt,
         });
-        enqueueOpened(alerting, tenantId, incident.id, receivedAt);
+        if (!before) {
+          enqueueOpened(alerting, tenantId, incident.id, receivedAt);
+        }
       } else if (classified.evidenceStatus === "empty_result") {
-        if (emptyPolicy === "warning") {
+        if (emptyPolicy === "warning" || emptyPolicy === "failure") {
+          const beforeEmpty = alerting.getUnresolvedIncident(
+            tenantId,
+            "workflow",
+            command.workflowId,
+            "empty_result",
+          );
           const incident = alerting.openOrObserveIncident(tenantId, {
             id: createId(),
             contractKind: "workflow",
             workflowId: command.workflowId,
             incidentType: "empty_result",
-            severity: "warning",
-            summary: "Heartbeat reported empty result",
+            severity: emptyPolicy === "warning" ? "warning" : "critical",
+            summary:
+              emptyPolicy === "warning"
+                ? "Heartbeat reported empty result"
+                : "Heartbeat empty result violates contract",
             observedAt: receivedAt,
           });
-          enqueueOpened(alerting, tenantId, incident.id, receivedAt);
-        } else if (emptyPolicy === "failure") {
-          const incident = alerting.openOrObserveIncident(tenantId, {
-            id: createId(),
-            contractKind: "workflow",
-            workflowId: command.workflowId,
-            incidentType: "empty_result",
-            severity: "critical",
-            summary: "Heartbeat empty result violates contract",
-            observedAt: receivedAt,
-          });
-          enqueueOpened(alerting, tenantId, incident.id, receivedAt);
+          if (!beforeEmpty) {
+            enqueueOpened(alerting, tenantId, incident.id, receivedAt);
+          }
         }
       } else if (acceptable) {
         const openIncidents = deps.sqlite
           .prepare(
-            `SELECT id, incident_type FROM incidents
+            `SELECT id, incident_type, details_json, opened_at FROM incidents
              WHERE tenant_id = ? AND workflow_id = ?
                AND status IN ('open', 'acknowledged')
                AND incident_type IN ('hard_failure', 'empty_result', 'silent_absence')`,
@@ -440,12 +478,45 @@ export function createIngestHeartbeatHandler(deps: {
           .all(tenantId, command.workflowId) as Array<{
           id: string;
           incident_type: string;
+          details_json: string | null;
+          opened_at: string;
         }>;
 
         for (const row of openIncidents) {
+          if (row.incident_type === "hard_failure") {
+            const existing =
+              parseHardFailureDetails(row.details_json) ??
+              buildHardFailureDetails({
+                existing: null,
+                workflowName: "Workflow",
+                monitoringMethod: null,
+                observedAt: row.opened_at,
+                latestStatus: "failure",
+                itemsProcessed: null,
+                externalExecutionRef: null,
+              });
+            const recovered = withHardFailureRecovery(existing, receivedAt);
+            deps.sqlite
+              .prepare(
+                `UPDATE incidents
+                 SET summary = ?, details_json = ?, updated_at = ?
+                 WHERE tenant_id = ? AND id = ?`,
+              )
+              .run(
+                formatHardFailureRecoverySummary(recovered),
+                JSON.stringify(recovered),
+                receivedAt,
+                tenantId,
+                row.id,
+              );
+          }
           alerting.resolveIncident(tenantId, row.id, {
             actor: "system:ingest-heartbeat",
             at: receivedAt,
+            resolutionNote:
+              row.incident_type === "hard_failure"
+                ? `Recovered at ${receivedAt}`
+                : null,
           });
           alerting.enqueueOutbox(tenantId, {
             id: createId(),

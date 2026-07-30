@@ -9,6 +9,11 @@ import {
   buildN8nWorkflowEditorUrl,
   SILENT_ABSENCE_MESSAGE,
 } from "../../domain/n8n/workflow-editor-url.js";
+import {
+  formatDurationSeconds,
+  parseHardFailureDetails,
+  type HardFailureDetails,
+} from "../../domain/incidents/hard-failure.js";
 
 export type IncidentListRow = {
   id: string;
@@ -16,6 +21,8 @@ export type IncidentListRow = {
   status: string;
   summary: string;
   openedAt: string;
+  resolvedAt: string | null;
+  detailsJson: string | null;
   incidentType: string;
   workflowId: string | null;
   workflowName: string | null;
@@ -31,16 +38,7 @@ function formatLateness(seconds: number | null): string {
   if (seconds === null || !Number.isFinite(seconds) || seconds < 0) {
     return "—";
   }
-  if (seconds < 60) {
-    return `${seconds}s`;
-  }
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) {
-    return `${minutes}m`;
-  }
-  const hours = Math.floor(minutes / 60);
-  const rem = minutes % 60;
-  return rem === 0 ? `${hours}h` : `${hours}h ${rem}m`;
+  return formatDurationSeconds(seconds);
 }
 
 function latenessSeconds(
@@ -68,13 +66,33 @@ function monitoringLabel(method: "poll" | "push" | null): string {
   return "—";
 }
 
-export function silentAbsenceActions(row: IncidentListRow): Array<{
-  href: string;
+type IncidentAction = {
+  href?: string;
   label: string;
   external?: boolean;
-}> {
-  const actions: Array<{ href: string; label: string; external?: boolean }> =
-    [];
+  form?: { action: string; csrf: string };
+};
+
+function renderActions(actions: IncidentAction[]): string {
+  return actions
+    .map((action, index) => {
+      const cls = index === 0 ? "btn btn-secondary" : "btn btn-ghost";
+      if (action.form) {
+        return `<form method="post" action="${escapeHtml(action.form.action)}" style="display:inline">
+          <input type="hidden" name="csrf" value="${escapeHtml(action.form.csrf)}" />
+          <button type="submit" class="${cls}">${escapeHtml(action.label)}</button>
+        </form>`;
+      }
+      const external = action.external
+        ? ` target="_blank" rel="noopener noreferrer"`
+        : "";
+      return `<a class="${cls}" href="${escapeHtml(action.href ?? "#")}"${external}>${escapeHtml(action.label)}</a>`;
+    })
+    .join("");
+}
+
+export function silentAbsenceActions(row: IncidentListRow): IncidentAction[] {
+  const actions: IncidentAction[] = [];
   const n8nUrl = buildN8nWorkflowEditorUrl({
     baseUrl: row.connectorBaseUrl,
     externalWorkflowId: row.externalWorkflowId,
@@ -95,8 +113,50 @@ export function silentAbsenceActions(row: IncidentListRow): Array<{
     actions.push({ href: "/connectors", label: "Check connector" });
     actions.push({ href: contractHref, label: "View contract" });
   } else {
-    // push (and unknown): heartbeat setup is the primary Quorum action
     actions.push({ href: contractHref, label: "Check heartbeat setup" });
+    actions.push({ href: contractHref, label: "View contract" });
+  }
+
+  return actions;
+}
+
+export function hardFailureActions(
+  row: IncidentListRow,
+  csrf: string,
+): IncidentAction[] {
+  const actions: IncidentAction[] = [];
+  const n8nUrl = buildN8nWorkflowEditorUrl({
+    baseUrl: row.connectorBaseUrl,
+    externalWorkflowId: row.externalWorkflowId,
+  });
+  if (n8nUrl) {
+    actions.push({
+      href: n8nUrl,
+      label: "Open workflow in n8n",
+      external: true,
+    });
+  }
+
+  const contractHref = row.workflowId
+    ? `/catalog/contracts/${row.workflowId}`
+    : "/catalog";
+  actions.push({
+    href: `${contractHref}#sec-timeline`,
+    label: "View latest report",
+  });
+
+  if (row.status === "open" || row.status === "acknowledged") {
+    if (row.status === "open") {
+      actions.push({
+        label: "Acknowledge incident",
+        form: {
+          action: `/incidents/${row.id}/acknowledge`,
+          csrf,
+        },
+      });
+    }
+    actions.push({ href: contractHref, label: "View contract" });
+  } else {
     actions.push({ href: contractHref, label: "View contract" });
   }
 
@@ -111,16 +171,6 @@ export function renderSilentAbsenceIncidentCard(
     ? `/catalog/contracts/${row.workflowId}`
     : "/catalog";
   const late = formatLateness(latenessSeconds(row, nowMs));
-  const actions = silentAbsenceActions(row)
-    .map((action, index) => {
-      const cls = index === 0 ? "btn btn-secondary" : "btn btn-ghost";
-      const external = action.external
-        ? ` target="_blank" rel="noopener noreferrer"`
-        : "";
-      return `<a class="${cls}" href="${escapeHtml(action.href)}"${external}>${escapeHtml(action.label)}</a>`;
-    })
-    .join("");
-
   return `<article class="contract-card is-overdue incident-card" data-incident-type="silent_absence">
     <div class="contract-card-header">
       <div>
@@ -139,7 +189,85 @@ export function renderSilentAbsenceIncidentCard(
       <div>Contract: <a href="${escapeHtml(contractHref)}">Open in Quorum</a></div>
     </div>
     <div class="contract-card-footer">
-      <div class="contract-card-actions">${actions}</div>
+      <div class="contract-card-actions">${renderActions(silentAbsenceActions(row))}</div>
+    </div>
+  </article>`;
+}
+
+function hardFailureMeta(
+  row: IncidentListRow,
+  details: HardFailureDetails | null,
+): string {
+  const method = monitoringLabel(
+    details?.monitoringMethod ?? row.monitoringMethod,
+  );
+  const items =
+    details?.itemsProcessed === null || details?.itemsProcessed === undefined
+      ? "—"
+      : String(details.itemsProcessed);
+  const recovery =
+    row.status === "resolved" && details?.recoveredAt
+      ? `<div>${formatTimestamp(details.recoveredAt, "Recovered")}</div>
+      <div>Incident duration: ${escapeHtml(formatDurationSeconds(details.durationSeconds ?? null))}</div>`
+      : "";
+  return `<div class="contract-card-meta">
+      <div>Workflow: ${escapeHtml(details?.workflowName ?? row.workflowName ?? "—")}</div>
+      <div>${formatTimestamp(details?.firstFailureAt ?? row.openedAt, "First failure")}</div>
+      <div>${formatTimestamp(details?.latestFailureAt ?? null, "Latest failure")}</div>
+      <div>Consecutive failures: ${escapeHtml(String(details?.consecutiveFailures ?? "—"))}</div>
+      <div>Monitoring: ${escapeHtml(method)}</div>
+      <div>Latest status: ${escapeHtml(details?.latestStatus ?? "failure")}</div>
+      <div>Items processed: ${escapeHtml(items)}</div>
+      <div>External execution ref: ${escapeHtml(details?.externalExecutionRef ?? "—")}</div>
+      ${
+        buildN8nWorkflowEditorUrl({
+          baseUrl: row.connectorBaseUrl,
+          externalWorkflowId: row.externalWorkflowId,
+        })
+          ? `<div>n8n workflow: <a href="${escapeHtml(
+              buildN8nWorkflowEditorUrl({
+                baseUrl: row.connectorBaseUrl,
+                externalWorkflowId: row.externalWorkflowId,
+              })!,
+            )}" target="_blank" rel="noopener noreferrer">Open in n8n</a></div>`
+          : ""
+      }
+      ${recovery}
+    </div>`;
+}
+
+export function renderHardFailureIncidentCard(
+  row: IncidentListRow,
+  csrf: string,
+): string {
+  const details = parseHardFailureDetails(row.detailsJson);
+  const tone =
+    row.status === "resolved" ? " is-healthy" : " is-overdue";
+  const badge =
+    row.status === "resolved"
+      ? statusBadge("healthy")
+      : `<span class="badge badge-status-incident"><span class="sr-only">Health: </span>Hard failure</span>`;
+  const message =
+    row.status === "resolved"
+      ? escapeHtml(row.summary)
+      : escapeHtml(
+          details
+            ? `${details.workflowName} reported a hard failure. Quorum is tracking consecutive failed executions until a successful heartbeat arrives.`
+            : row.summary,
+        );
+
+  return `<article class="contract-card${tone} incident-card" data-incident-type="hard_failure">
+    <div class="contract-card-header">
+      <div>
+        <h3 class="contract-card-title">${escapeHtml(details?.workflowName ?? row.workflowName ?? "Workflow")}</h3>
+        <div class="helper">${escapeHtml(row.severity)} · ${escapeHtml(row.status)} · opened ${escapeHtml(formatCatalogTimestamp(row.openedAt))}</div>
+      </div>
+      ${badge}
+    </div>
+    <p class="contract-card-message">${message}</p>
+    ${hardFailureMeta(row, details)}
+    <div class="contract-card-footer">
+      <div class="contract-card-actions">${renderActions(hardFailureActions(row, csrf))}</div>
     </div>
   </article>`;
 }
@@ -156,6 +284,7 @@ function renderGenericIncidentRow(row: IncidentListRow): string {
 export function renderIncidentsBody(input: {
   rows: IncidentListRow[];
   nowMs: number;
+  csrf: string;
   attentionCount: number;
   warningCount: number;
   overdueCount: number;
@@ -179,14 +308,19 @@ export function renderIncidentsBody(input: {
   }
 
   const silent = input.rows.filter((r) => r.incidentType === "silent_absence");
-  const other = input.rows.filter((r) => r.incidentType !== "silent_absence");
+  const hard = input.rows.filter((r) => r.incidentType === "hard_failure");
+  const other = input.rows.filter(
+    (r) =>
+      r.incidentType !== "silent_absence" && r.incidentType !== "hard_failure",
+  );
 
-  const silentHtml =
-    silent.length > 0
-      ? `<div class="contract-grid">${silent
-          .map((r) => renderSilentAbsenceIncidentCard(r, input.nowMs))
-          .join("")}</div>`
-      : "";
+  const cards = [
+    ...silent.map((r) => renderSilentAbsenceIncidentCard(r, input.nowMs)),
+    ...hard.map((r) => renderHardFailureIncidentCard(r, input.csrf)),
+  ];
+
+  const cardsHtml =
+    cards.length > 0 ? `<div class="contract-grid">${cards.join("")}</div>` : "";
 
   const otherHtml =
     other.length > 0
@@ -195,18 +329,23 @@ export function renderIncidentsBody(input: {
           .join("")}</tbody></table></div>`
       : "";
 
-  return `${silentHtml}${otherHtml}`;
+  return `${cardsHtml}${otherHtml}`;
 }
 
 export function renderIncidentsPage(input: {
   demoMode?: boolean;
   role: "admin" | "operator" | "viewer";
+  csrf: string;
   rows: IncidentListRow[];
   nowMs: number;
   attentionCount: number;
   warningCount: number;
   overdueCount: number;
+  flash?: string | null;
 }): string {
+  const flash = input.flash
+    ? `<div class="flash is-success" role="status">${escapeHtml(input.flash)}</div>`
+    : "";
   return layout({
     demoMode: input.demoMode === true,
     title: "Incidents",
@@ -222,6 +361,7 @@ export function renderIncidentsPage(input: {
     body: `
       <h1 class="page-title">Incidents</h1>
       <p class="page-subtitle">Operational issues that need acknowledgement or resolution.</p>
+      ${flash}
       ${renderIncidentsBody(input)}
     `,
   });

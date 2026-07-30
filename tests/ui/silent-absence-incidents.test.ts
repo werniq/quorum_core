@@ -19,6 +19,8 @@ function baseIncident(
     status: "open",
     summary: SILENT_ABSENCE_MESSAGE,
     openedAt: "2026-07-30T14:00:00.000Z",
+    resolvedAt: null,
+    detailsJson: null,
     incidentType: "silent_absence",
     workflowId: "wf-1",
     workflowName: "Invoice sync",

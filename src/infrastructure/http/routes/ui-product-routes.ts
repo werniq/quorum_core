@@ -34,6 +34,8 @@ import {
 import { renderIncidentsPage } from "../../../presentation/html/incidents-ui.js";
 import type { IncidentListRow } from "../../../presentation/html/incidents-ui.js";
 import { SILENT_ABSENCE_MESSAGE } from "../../../domain/n8n/workflow-editor-url.js";
+import { formatHeartbeatHistoryRow } from "../../../domain/incidents/hard-failure.js";
+import { createId } from "../../../domain/ids.js";
 import { toCatalogRowView } from "./catalog-row-view.js";
 import type { createOutboxProcessor } from "../../alerting/process-outbox.js";
 
@@ -265,6 +267,9 @@ export function registerProductUiRoutes(
       return;
     }
     const tid = deps.tenantId();
+    const resolvedAfter = new Date(
+      deps.clock.now().getTime() - 24 * 60 * 60_000,
+    ).toISOString();
     const rawRows = deps.sqlite
       .prepare(
         `SELECT
@@ -273,6 +278,8 @@ export function registerProductUiRoutes(
            i.status,
            i.summary,
            i.opened_at,
+           i.resolved_at,
+           i.details_json,
            i.incident_type,
            i.workflow_id,
            w.name AS workflow_name,
@@ -289,16 +296,29 @@ export function registerProductUiRoutes(
            ON s.workflow_id = i.workflow_id AND s.tenant_id = i.tenant_id
          LEFT JOIN n8n_connectors nc
            ON nc.id = w.connector_id AND nc.tenant_id = w.tenant_id
-         WHERE i.tenant_id = ? AND i.status IN ('open', 'acknowledged')
-         ORDER BY i.opened_at DESC
+         WHERE i.tenant_id = ?
+           AND (
+             i.status IN ('open', 'acknowledged')
+             OR (
+               i.incident_type = 'hard_failure'
+               AND i.status = 'resolved'
+               AND i.resolved_at IS NOT NULL
+               AND i.resolved_at >= ?
+             )
+           )
+         ORDER BY
+           CASE i.status WHEN 'open' THEN 0 WHEN 'acknowledged' THEN 1 ELSE 2 END,
+           i.opened_at DESC
          LIMIT 100`,
       )
-      .all(tid) as Array<{
+      .all(tid, resolvedAfter) as Array<{
       id: string;
       severity: string;
       status: string;
       summary: string;
       opened_at: string;
+      resolved_at: string | null;
+      details_json: string | null;
       incident_type: string;
       workflow_id: string | null;
       workflow_name: string | null;
@@ -319,6 +339,8 @@ export function registerProductUiRoutes(
           ? SILENT_ABSENCE_MESSAGE
           : r.summary,
       openedAt: r.opened_at,
+      resolvedAt: r.resolved_at,
+      detailsJson: r.details_json,
       incidentType: r.incident_type,
       workflowId: r.workflow_id,
       workflowName: r.workflow_name,
@@ -353,18 +375,52 @@ export function registerProductUiRoutes(
     const warningCount = Number(attention?.warning_count ?? 0);
     const overdueCount = Number(attention?.overdue_count ?? 0);
     const attentionCount = warningCount + overdueCount;
+    const flash =
+      (request.query as { acknowledged?: string }).acknowledged === "1"
+        ? "Incident acknowledged."
+        : null;
 
     return reply.type("text/html").send(
       renderIncidentsPage({
         ...pageShell,
         role: session.role,
+        csrf: session.csrfToken,
         rows,
         nowMs: deps.clock.now().getTime(),
         attentionCount,
         warningCount,
         overdueCount,
+        flash,
       }),
     );
+  });
+
+  app.post("/incidents/:incidentId/acknowledge", async (request, reply) => {
+    const session = deps.requireSession(request, reply);
+    if (!session || !requireAdmin(session, reply)) {
+      return;
+    }
+    if (!deps.assertCsrf(request, session, reply)) {
+      return;
+    }
+    const incidentId = (request.params as { incidentId: string }).incidentId;
+    const tid = deps.tenantId();
+    try {
+      alerting.acknowledgeIncident(tid, incidentId, {
+        actor: session.adminUserId,
+        at: deps.clock.now().toISOString(),
+      });
+      alerting.enqueueOutbox(tid, {
+        id: createId(),
+        incidentId,
+        eventType: "acknowledged",
+        payloadJson: JSON.stringify({ incidentId }),
+        availableAt: deps.clock.now().toISOString(),
+      });
+    } catch {
+      return reply.redirect("/incidents");
+    }
+    return reply.redirect("/incidents?acknowledged=1");
   });
 
   app.get("/reports", async (request, reply) => {
@@ -535,11 +591,16 @@ export function registerProductUiRoutes(
       .all(tid, row.contractId) as Array<{ name: string; health: string }>;
     const events = deps.sqlite
       .prepare(
-        `SELECT received_at AS at, status AS label FROM heartbeat_events
+        `SELECT received_at AS at, status, items_processed
+         FROM heartbeat_events
          WHERE tenant_id = ? AND workflow_id = ?
          ORDER BY received_at DESC LIMIT 8`,
       )
-      .all(tid, workflowId) as Array<{ at: string; label: string }>;
+      .all(tid, workflowId) as Array<{
+      at: string;
+      status: string;
+      items_processed: number | null;
+    }>;
 
     const volume = queryVolumeCatalogSummary({
       sqlite: deps.sqlite,
@@ -573,7 +634,11 @@ export function registerProductUiRoutes(
         channels,
         recentEvents: events.map((e) => ({
           at: e.at,
-          label: e.label,
+          label: formatHeartbeatHistoryRow({
+            at: e.at,
+            status: e.status,
+            itemsProcessed: e.items_processed,
+          }),
         })),
         volume: volume
           ? {

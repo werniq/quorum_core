@@ -487,6 +487,8 @@ describe("secure heartbeat ingestion", () => {
         schemaVersion: 1,
         executedAt: "2026-07-18T08:00:00Z",
         status: "failure",
+        itemsProcessed: 0,
+        externalExecutionRef: "n8n-fail-1",
       },
     });
     expect(
@@ -502,12 +504,61 @@ describe("secure heartbeat ingestion", () => {
       }),
     ).toMatchObject({ status: "accepted" });
 
-    const open = sqlite
+    const failure2 = signedRequest({
+      workflowId,
+      keyId,
+      idempotencyKey: "fail-2",
+      body: {
+        schemaVersion: 1,
+        executedAt: "2026-07-18T08:00:30Z",
+        status: "failure",
+        itemsProcessed: 0,
+        externalExecutionRef: "n8n-fail-2",
+      },
+    });
+    expect(
+      ingest({
+        workflowId,
+        method: "POST",
+        path: failure2.path,
+        keyId,
+        timestampSeconds: failure2.timestampSeconds,
+        idempotencyKey: "fail-2",
+        signatureHex: failure2.signature,
+        rawBody: failure2.rawBody,
+      }),
+    ).toMatchObject({ status: "accepted" });
+
+    const openRows = sqlite
       .prepare(
-        `SELECT status, incident_type FROM incidents WHERE workflow_id = ?`,
+        `SELECT status, incident_type, summary, details_json FROM incidents WHERE workflow_id = ?`,
       )
-      .get(workflowId) as { status: string; incident_type: string };
-    expect(open).toEqual({ status: "open", incident_type: "hard_failure" });
+      .all(workflowId) as Array<{
+      status: string;
+      incident_type: string;
+      summary: string;
+      details_json: string;
+    }>;
+    expect(openRows).toHaveLength(1);
+    expect(openRows[0]).toMatchObject({
+      status: "open",
+      incident_type: "hard_failure",
+    });
+    expect(openRows[0]!.summary).toContain("2 consecutive");
+    expect(openRows[0]!.summary).not.toContain(
+      "Heartbeat reported hard failure",
+    );
+    expect(JSON.parse(openRows[0]!.details_json).consecutiveFailures).toBe(2);
+    expect(JSON.parse(openRows[0]!.details_json).externalExecutionRef).toBe(
+      "n8n-fail-2",
+    );
+
+    const openedOutbox = sqlite
+      .prepare(
+        `SELECT COUNT(*) AS c FROM notification_outbox WHERE event_type = 'opened'`,
+      )
+      .get() as { c: number };
+    expect(openedOutbox.c).toBe(1);
 
     const success = signedRequest({
       workflowId,
@@ -535,17 +586,28 @@ describe("secure heartbeat ingestion", () => {
 
     const resolved = sqlite
       .prepare(
-        `SELECT status FROM incidents WHERE workflow_id = ? AND incident_type = 'hard_failure'`,
+        `SELECT status, summary, details_json, resolved_at FROM incidents WHERE workflow_id = ? AND incident_type = 'hard_failure'`,
       )
-      .get(workflowId) as { status: string };
+      .get(workflowId) as {
+      status: string;
+      summary: string;
+      details_json: string;
+      resolved_at: string;
+    };
     expect(resolved.status).toBe("resolved");
+    expect(resolved.summary).toContain("recovered");
+    expect(resolved.resolved_at).toBeTruthy();
+    expect(JSON.parse(resolved.details_json).recoveredAt).toBeTruthy();
+    expect(JSON.parse(resolved.details_json).durationSeconds).toBeGreaterThanOrEqual(
+      0,
+    );
 
     const outbox = sqlite
       .prepare(
         `SELECT COUNT(*) AS c FROM notification_outbox WHERE event_type IN ('opened', 'resolved')`,
       )
       .get() as { c: number };
-    expect(outbox.c).toBeGreaterThanOrEqual(2);
+    expect(outbox.c).toBe(2);
   });
 
   it("rejects revoked credentials", () => {

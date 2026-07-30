@@ -7,6 +7,13 @@ import {
 } from "../../domain/evidence/empty-result.js";
 import { sanitizeHeartbeatMetadata } from "../../domain/evidence/heartbeat-metadata.js";
 import { unverifiedDimensionsForEvidenceLevel } from "../../domain/evidence/unverified-dimensions.js";
+import {
+  buildHardFailureDetails,
+  formatHardFailureRecoverySummary,
+  formatHardFailureSummary,
+  parseHardFailureDetails,
+  withHardFailureRecovery,
+} from "../../domain/incidents/hard-failure.js";
 import { createId } from "../../domain/ids.js";
 import { SqliteAlertingRepositories } from "../db/repositories/sqlite-alerting-repositories.js";
 import {
@@ -223,24 +230,60 @@ export function createIngestPolledEvidenceHandler(deps: {
         );
 
       if (command.evidenceStatus === "failure") {
+        const workflowMeta = deps.sqlite
+          .prepare(
+            `SELECT name, monitoring_method FROM workflows
+             WHERE tenant_id = ? AND id = ?`,
+          )
+          .get(command.tenantId, command.workflowId) as
+          | { name: string; monitoring_method: string }
+          | undefined;
+        const before = alerting.getUnresolvedIncident(
+          command.tenantId,
+          "workflow",
+          command.workflowId,
+          "hard_failure",
+        );
+        const details = buildHardFailureDetails({
+          existing: parseHardFailureDetails(before?.detailsJson),
+          workflowName: workflowMeta?.name ?? "Workflow",
+          monitoringMethod:
+            workflowMeta?.monitoring_method === "poll" ||
+            workflowMeta?.monitoring_method === "push"
+              ? workflowMeta.monitoring_method
+              : "poll",
+          observedAt: executedAt,
+          latestStatus: "failure",
+          itemsProcessed: command.itemsProcessed,
+          externalExecutionRef: command.externalExecutionRef,
+        });
         const incident = alerting.openOrObserveIncident(command.tenantId, {
           id: createId(),
           contractKind: "workflow",
           workflowId: command.workflowId,
           incidentType: "hard_failure",
           severity: "critical",
-          summary: "Polled n8n execution reported failure",
+          summary: formatHardFailureSummary(details),
+          detailsJson: JSON.stringify(details),
           observedAt: receivedAt,
         });
-        alerting.enqueueOutbox(command.tenantId, {
-          id: createId(),
-          incidentId: incident.id,
-          eventType: "opened",
-          payloadJson: JSON.stringify({ incidentId: incident.id }),
-          availableAt: receivedAt,
-        });
+        if (!before) {
+          alerting.enqueueOutbox(command.tenantId, {
+            id: createId(),
+            incidentId: incident.id,
+            eventType: "opened",
+            payloadJson: JSON.stringify({ incidentId: incident.id }),
+            availableAt: receivedAt,
+          });
+        }
       } else if (command.evidenceStatus === "empty_result") {
         if (emptyPolicy === "warning" || emptyPolicy === "failure") {
+          const beforeEmpty = alerting.getUnresolvedIncident(
+            command.tenantId,
+            "workflow",
+            command.workflowId,
+            "empty_result",
+          );
           const incident = alerting.openOrObserveIncident(command.tenantId, {
             id: createId(),
             contractKind: "workflow",
@@ -250,18 +293,20 @@ export function createIngestPolledEvidenceHandler(deps: {
             summary: "Polled n8n execution reported empty result",
             observedAt: receivedAt,
           });
-          alerting.enqueueOutbox(command.tenantId, {
-            id: createId(),
-            incidentId: incident.id,
-            eventType: "opened",
-            payloadJson: JSON.stringify({ incidentId: incident.id }),
-            availableAt: receivedAt,
-          });
+          if (!beforeEmpty) {
+            alerting.enqueueOutbox(command.tenantId, {
+              id: createId(),
+              incidentId: incident.id,
+              eventType: "opened",
+              payloadJson: JSON.stringify({ incidentId: incident.id }),
+              availableAt: receivedAt,
+            });
+          }
         }
       } else if (acceptable) {
         const openIncidents = deps.sqlite
           .prepare(
-            `SELECT id, incident_type FROM incidents
+            `SELECT id, incident_type, details_json, opened_at FROM incidents
              WHERE tenant_id = ? AND workflow_id = ?
                AND status IN ('open', 'acknowledged')
                AND incident_type IN ('hard_failure', 'empty_result', 'silent_absence')`,
@@ -269,15 +314,45 @@ export function createIngestPolledEvidenceHandler(deps: {
           .all(command.tenantId, command.workflowId) as Array<{
           id: string;
           incident_type: string;
+          details_json: string | null;
+          opened_at: string;
         }>;
         for (const row of openIncidents) {
-          deps.sqlite
-            .prepare(
-              `UPDATE incidents
-               SET status = 'resolved', resolved_at = ?, updated_at = ?
-               WHERE tenant_id = ? AND id = ?`,
-            )
-            .run(receivedAt, receivedAt, command.tenantId, row.id);
+          if (row.incident_type === "hard_failure") {
+            const existing =
+              parseHardFailureDetails(row.details_json) ??
+              buildHardFailureDetails({
+                existing: null,
+                workflowName: "Workflow",
+                monitoringMethod: "poll",
+                observedAt: row.opened_at,
+                latestStatus: "failure",
+                itemsProcessed: null,
+                externalExecutionRef: null,
+              });
+            const recovered = withHardFailureRecovery(existing, receivedAt);
+            deps.sqlite
+              .prepare(
+                `UPDATE incidents
+                 SET summary = ?, details_json = ?, updated_at = ?
+                 WHERE tenant_id = ? AND id = ?`,
+              )
+              .run(
+                formatHardFailureRecoverySummary(recovered),
+                JSON.stringify(recovered),
+                receivedAt,
+                command.tenantId,
+                row.id,
+              );
+          }
+          alerting.resolveIncident(command.tenantId, row.id, {
+            actor: "system:ingest-polled",
+            at: receivedAt,
+            resolutionNote:
+              row.incident_type === "hard_failure"
+                ? `Recovered at ${receivedAt}`
+                : null,
+          });
           alerting.enqueueOutbox(command.tenantId, {
             id: createId(),
             incidentId: row.id,
