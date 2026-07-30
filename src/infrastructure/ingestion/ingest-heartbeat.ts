@@ -347,12 +347,10 @@ export function createIngestHeartbeatHandler(deps: {
 
       const unverified = unverifiedDimensionsForEvidenceLevel("basic");
       const lastStatus = classified.evidenceStatus;
+      // Any accepted heartbeat clears silence. Failure/empty are tracked as
+      // separate incidents — do not mark the contract Overdue for reporting.
       const currentHealth =
-        evidenceClass === "warning_empty"
-          ? "warning"
-          : evidenceClass === "unacceptable"
-            ? "overdue"
-            : "healthy";
+        evidenceClass === "warning_empty" ? "warning" : "healthy";
 
       deps.sqlite
         .prepare(
@@ -362,7 +360,7 @@ export function createIngestHeartbeatHandler(deps: {
              last_status, next_expected_at, overdue_since, current_health, evidence_level,
              evidence_summary_code, unverified_dimensions_json, consecutive_stale_checks,
              updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, 'basic', ?, ?, 0, ?)
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, 'basic', ?, ?, 0, ?)
            ON CONFLICT(tenant_id, workflow_id) DO UPDATE SET
              last_execution_at = excluded.last_execution_at,
              last_nonempty_success_at = excluded.last_nonempty_success_at,
@@ -370,7 +368,7 @@ export function createIngestHeartbeatHandler(deps: {
              last_failure_at = excluded.last_failure_at,
              last_external_execution_ref = excluded.last_external_execution_ref,
              last_status = excluded.last_status,
-             overdue_since = excluded.overdue_since,
+             overdue_since = NULL,
              current_health = excluded.current_health,
              evidence_level = 'basic',
              evidence_summary_code = excluded.evidence_summary_code,
@@ -394,12 +392,20 @@ export function createIngestHeartbeatHandler(deps: {
             : (previous?.last_failure_at ?? null),
           classified.externalExecutionRef,
           lastStatus,
-          currentHealth === "overdue" ? executedAt : null,
           currentHealth,
           "heartbeat_basic",
           JSON.stringify(unverified),
           receivedAt,
         );
+
+      // Reporting is present — resolve silence regardless of success/failure.
+      resolveSilentAbsenceIncident(
+        alerting,
+        tenantId,
+        command.workflowId,
+        receivedAt,
+        "system:ingest-heartbeat",
+      );
 
       if (classified.evidenceStatus === "failure") {
         const workflowMeta = deps.sqlite
@@ -473,7 +479,7 @@ export function createIngestHeartbeatHandler(deps: {
             `SELECT id, incident_type, details_json, opened_at FROM incidents
              WHERE tenant_id = ? AND workflow_id = ?
                AND status IN ('open', 'acknowledged')
-               AND incident_type IN ('hard_failure', 'empty_result', 'silent_absence')`,
+               AND incident_type IN ('hard_failure', 'empty_result')`,
           )
           .all(tenantId, command.workflowId) as Array<{
           id: string;
@@ -664,6 +670,39 @@ function enqueueOpened(
     incidentId,
     eventType: "opened",
     payloadJson: JSON.stringify({ incidentId }),
+    availableAt: at,
+  });
+}
+
+function resolveSilentAbsenceIncident(
+  alerting: SqliteAlertingRepositories,
+  tenantId: string,
+  workflowId: string,
+  at: string,
+  actor: string,
+): void {
+  const open = alerting.getUnresolvedIncident(
+    tenantId,
+    "workflow",
+    workflowId,
+    "silent_absence",
+  );
+  if (!open) {
+    return;
+  }
+  alerting.resolveIncident(tenantId, open.id, {
+    actor,
+    at,
+    resolutionNote: "Reporting resumed",
+  });
+  alerting.enqueueOutbox(tenantId, {
+    id: createId(),
+    incidentId: open.id,
+    eventType: "resolved",
+    payloadJson: JSON.stringify({
+      incidentId: open.id,
+      incidentType: "silent_absence",
+    }),
     availableAt: at,
   });
 }

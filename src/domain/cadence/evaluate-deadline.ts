@@ -13,8 +13,11 @@ export interface CadenceContractFields {
   maxQuietWindowMinutes: number | null;
   /** When monitoring/contract observation began (activation or monitoring start). */
   monitoringStartedAt: Date;
-  /** Last evidence that satisfied the contract (not merely any heartbeat). */
-  lastAcceptableSuccessAt: Date | null;
+  /**
+   * Last heartbeat of any status (success, failure, or empty).
+   * Used for silence / reporting presence — not only acceptable success.
+   */
+  lastEvidenceAt: Date | null;
 }
 
 export interface DeadlineEvaluation {
@@ -73,7 +76,7 @@ function evaluateCronDeadline(
   return {
     expectedOccurrenceAt: previous,
     deadlineAt,
-    isFirstEvidenceWindow: contract.lastAcceptableSuccessAt === null,
+    isFirstEvidenceWindow: contract.lastEvidenceAt === null,
   };
 }
 
@@ -111,14 +114,14 @@ function evaluateIntervalDeadline(
         expectedOccurrenceAt,
         contract.allowedLatenessMinutes,
       ),
-      isFirstEvidenceWindow:
-        contract.lastAcceptableSuccessAt === null && n === 0,
+      isFirstEvidenceWindow: contract.lastEvidenceAt === null && n === 0,
     };
   }
 
   // since_last_success — must be explicit; never silently selected.
-  const origin =
-    contract.lastAcceptableSuccessAt ?? contract.monitoringStartedAt;
+  // Origin is last reporting evidence (any status), so failure heartbeats
+  // reset the quiet/interval timer and clear silence.
+  const origin = contract.lastEvidenceAt ?? contract.monitoringStartedAt;
   const expectedOccurrenceAt = addMinutes(origin, intervalMinutes);
   return {
     expectedOccurrenceAt,
@@ -126,7 +129,7 @@ function evaluateIntervalDeadline(
       expectedOccurrenceAt,
       contract.allowedLatenessMinutes,
     ),
-    isFirstEvidenceWindow: contract.lastAcceptableSuccessAt === null,
+    isFirstEvidenceWindow: contract.lastEvidenceAt === null,
   };
 }
 
@@ -144,8 +147,8 @@ function evaluateEventDrivenDeadline(
     );
   }
 
-  if (contract.lastAcceptableSuccessAt) {
-    const expectedOccurrenceAt = contract.lastAcceptableSuccessAt;
+  if (contract.lastEvidenceAt) {
+    const expectedOccurrenceAt = contract.lastEvidenceAt;
     return {
       expectedOccurrenceAt,
       deadlineAt: addMinutes(
@@ -190,20 +193,20 @@ export function successCoversOccurrence(
 }
 
 /**
- * First expected occurrence after `lastSuccess` that still needs evidence,
+ * First expected occurrence after `lastEvidence` that still needs a report,
  * with its lateness deadline. Used so fixed-rate / cron evaluation does not
  * roll the overdue gate forward with the current clock slot when lateness
  * is longer than the interval.
  */
 export function firstMissedOccurrenceAfterSuccess(
   contract: CadenceContractFields,
-  lastSuccess: Date,
+  lastEvidence: Date,
 ): { expectedOccurrenceAt: Date; deadlineAt: Date } {
   switch (contract.cadenceType) {
     case "interval":
-      return firstMissedIntervalAfterSuccess(contract, lastSuccess);
+      return firstMissedIntervalAfterEvidence(contract, lastEvidence);
     case "cron":
-      return firstMissedCronAfterSuccess(contract, lastSuccess);
+      return firstMissedCronAfterEvidence(contract, lastEvidence);
     case "event_driven": {
       if (
         contract.maxQuietWindowMinutes === null ||
@@ -214,8 +217,8 @@ export function firstMissedOccurrenceAfterSuccess(
         );
       }
       return {
-        expectedOccurrenceAt: lastSuccess,
-        deadlineAt: addMinutes(lastSuccess, contract.maxQuietWindowMinutes),
+        expectedOccurrenceAt: lastEvidence,
+        deadlineAt: addMinutes(lastEvidence, contract.maxQuietWindowMinutes),
       };
     }
     default: {
@@ -225,9 +228,9 @@ export function firstMissedOccurrenceAfterSuccess(
   }
 }
 
-function firstMissedIntervalAfterSuccess(
+function firstMissedIntervalAfterEvidence(
   contract: CadenceContractFields,
-  lastSuccess: Date,
+  lastEvidence: Date,
 ): { expectedOccurrenceAt: Date; deadlineAt: Date } {
   if (!contract.intervalMode) {
     throw new CadenceEvaluationError(
@@ -242,7 +245,7 @@ function firstMissedIntervalAfterSuccess(
   }
 
   if (contract.intervalMode === "since_last_success") {
-    const expectedOccurrenceAt = addMinutes(lastSuccess, intervalMinutes);
+    const expectedOccurrenceAt = addMinutes(lastEvidence, intervalMinutes);
     return {
       expectedOccurrenceAt,
       deadlineAt: addMinutes(
@@ -259,7 +262,7 @@ function firstMissedIntervalAfterSuccess(
   }
   const anchor = contract.scheduleAnchorAt;
   const intervalMs = intervalMinutes * 60_000;
-  const elapsedMs = lastSuccess.getTime() - anchor.getTime();
+  const elapsedMs = lastEvidence.getTime() - anchor.getTime();
   const coveredN = elapsedMs < 0 ? -1 : Math.floor(elapsedMs / intervalMs);
   const firstMissedN = coveredN + 1;
   const expectedOccurrenceAt = new Date(
@@ -274,15 +277,15 @@ function firstMissedIntervalAfterSuccess(
   };
 }
 
-function firstMissedCronAfterSuccess(
+function firstMissedCronAfterEvidence(
   contract: CadenceContractFields,
-  lastSuccess: Date,
+  lastEvidence: Date,
 ): { expectedOccurrenceAt: Date; deadlineAt: Date } {
   if (!contract.timezone) {
     throw new CadenceEvaluationError("Cron cadence requires a timezone.");
   }
   const expression = CronExpressionParser.parse(contract.cadenceValue, {
-    currentDate: lastSuccess,
+    currentDate: lastEvidence,
     tz: contract.timezone,
   });
   const expectedOccurrenceAt = expression.next().toDate();

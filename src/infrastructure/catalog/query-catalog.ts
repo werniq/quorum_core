@@ -28,6 +28,10 @@ export interface CatalogContractRow {
   unverifiedDimensions: string[];
   expectedCadenceOrWindow: string;
   lastAcceptableEvidenceAt: string | null;
+  lastReportAt: string | null;
+  lastReportStatus: string | null;
+  lastExternalExecutionRef: string | null;
+  consecutiveFailures: number | null;
   nextDeadlineAt: string | null;
   overdueDurationSeconds: number | null;
   activeIncident: {
@@ -97,6 +101,9 @@ export function queryContractCatalog(input: {
          cl.name AS client_name,
          s.current_health,
          s.last_acceptable_success_at,
+         s.last_execution_at,
+         s.last_status,
+         s.last_external_execution_ref,
          s.next_expected_at,
          s.overdue_since,
          s.evidence_level AS state_evidence_level,
@@ -172,10 +179,15 @@ export function queryContractCatalog(input: {
 
     const incident = input.sqlite
       .prepare(
-        `SELECT id, incident_type, severity, status, summary FROM incidents
+        `SELECT id, incident_type, severity, status, summary, details_json FROM incidents
          WHERE tenant_id = ? AND workflow_id = ?
            AND status IN ('open', 'acknowledged')
          ORDER BY
+           CASE incident_type
+             WHEN 'hard_failure' THEN 0
+             WHEN 'silent_absence' THEN 1
+             ELSE 2
+           END,
            CASE severity WHEN 'critical' THEN 0 ELSE 1 END,
            opened_at ASC
          LIMIT 1`,
@@ -187,9 +199,23 @@ export function queryContractCatalog(input: {
           severity: string;
           status: string;
           summary: string;
+          details_json: string | null;
         }
       | undefined;
 
+    let consecutiveFailures: number | null = null;
+    if (incident?.incident_type === "hard_failure" && incident.details_json) {
+      try {
+        const parsed = JSON.parse(incident.details_json) as {
+          consecutiveFailures?: number;
+        };
+        if (typeof parsed.consecutiveFailures === "number") {
+          consecutiveFailures = parsed.consecutiveFailures;
+        }
+      } catch {
+        consecutiveFailures = null;
+      }
+    }
     const alertChannelHealth = worstAlertChannelHealth(
       input.sqlite,
       input.tenantId,
@@ -231,6 +257,14 @@ export function queryContractCatalog(input: {
       lastAcceptableEvidenceAt: row.last_acceptable_success_at
         ? String(row.last_acceptable_success_at)
         : null,
+      lastReportAt: row.last_execution_at
+        ? String(row.last_execution_at)
+        : null,
+      lastReportStatus: row.last_status ? String(row.last_status) : null,
+      lastExternalExecutionRef: row.last_external_execution_ref
+        ? String(row.last_external_execution_ref)
+        : null,
+      consecutiveFailures,
       nextDeadlineAt: row.next_expected_at
         ? String(row.next_expected_at)
         : null,
@@ -451,6 +485,10 @@ function queryOutcomeCatalogRows(input: {
       lastAcceptableEvidenceAt: latest?.completed_at
         ? String(latest.completed_at)
         : null,
+      lastReportAt: null,
+      lastReportStatus: null,
+      lastExternalExecutionRef: null,
+      consecutiveFailures: null,
       nextDeadlineAt: null,
       overdueDurationSeconds: oldestMissingAgeSeconds,
       activeIncident: incident

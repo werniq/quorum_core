@@ -259,10 +259,10 @@ describe("watcher", () => {
     sqlite
       .prepare(
         `UPDATE workflow_states
-         SET last_acceptable_success_at = ?, last_status = 'success'
+         SET last_execution_at = ?, last_acceptable_success_at = ?, last_status = 'success'
          WHERE workflow_id = ?`,
       )
-      .run("2026-07-18T08:50:00.000Z", workflowId);
+      .run("2026-07-18T08:50:00.000Z", "2026-07-18T08:50:00.000Z", workflowId);
 
     const healthyClock = new FixedClock(new Date("2026-07-18T09:00:00.000Z"));
     const healthyWatcher = createWatcher({
@@ -402,10 +402,10 @@ describe("watcher", () => {
     sqlite
       .prepare(
         `UPDATE workflow_states
-         SET last_acceptable_success_at = ?, last_status = 'success'
+         SET last_execution_at = ?, last_acceptable_success_at = ?, last_status = 'success'
          WHERE workflow_id = ?`,
       )
-      .run("2026-07-18T14:07:00.000Z", workflowId);
+      .run("2026-07-18T14:07:00.000Z", "2026-07-18T14:07:00.000Z", workflowId);
     const recovered = runAt("2026-07-18T14:07:15.000Z");
     expect(recovered.resolvedSilentAbsence).toBe(1);
     expect(

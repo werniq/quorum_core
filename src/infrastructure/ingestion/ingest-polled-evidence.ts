@@ -176,11 +176,7 @@ export function createIngestPolledEvidenceHandler(deps: {
 
       const unverified = unverifiedDimensionsForEvidenceLevel("basic");
       const currentHealth =
-        evidenceClass === "warning_empty"
-          ? "warning"
-          : evidenceClass === "unacceptable"
-            ? "overdue"
-            : "healthy";
+        evidenceClass === "warning_empty" ? "warning" : "healthy";
 
       deps.sqlite
         .prepare(
@@ -190,7 +186,7 @@ export function createIngestPolledEvidenceHandler(deps: {
              last_status, next_expected_at, overdue_since, current_health, evidence_level,
              evidence_summary_code, unverified_dimensions_json, consecutive_stale_checks,
              updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, 'basic', ?, ?, 0, ?)
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, 'basic', ?, ?, 0, ?)
            ON CONFLICT(tenant_id, workflow_id) DO UPDATE SET
              last_execution_at = excluded.last_execution_at,
              last_nonempty_success_at = excluded.last_nonempty_success_at,
@@ -198,7 +194,7 @@ export function createIngestPolledEvidenceHandler(deps: {
              last_failure_at = excluded.last_failure_at,
              last_external_execution_ref = excluded.last_external_execution_ref,
              last_status = excluded.last_status,
-             overdue_since = excluded.overdue_since,
+             overdue_since = NULL,
              current_health = excluded.current_health,
              evidence_level = 'basic',
              evidence_summary_code = excluded.evidence_summary_code,
@@ -222,12 +218,19 @@ export function createIngestPolledEvidenceHandler(deps: {
             : (previous?.last_failure_at ?? null),
           command.externalExecutionRef,
           command.evidenceStatus,
-          currentHealth === "overdue" ? executedAt : null,
           currentHealth,
           "heartbeat_basic_polled",
           JSON.stringify(unverified),
           receivedAt,
         );
+
+      resolveSilentAbsenceIncident(
+        alerting,
+        command.tenantId,
+        command.workflowId,
+        receivedAt,
+        "system:ingest-polled",
+      );
 
       if (command.evidenceStatus === "failure") {
         const workflowMeta = deps.sqlite
@@ -309,7 +312,7 @@ export function createIngestPolledEvidenceHandler(deps: {
             `SELECT id, incident_type, details_json, opened_at FROM incidents
              WHERE tenant_id = ? AND workflow_id = ?
                AND status IN ('open', 'acknowledged')
-               AND incident_type IN ('hard_failure', 'empty_result', 'silent_absence')`,
+               AND incident_type IN ('hard_failure', 'empty_result')`,
           )
           .all(command.tenantId, command.workflowId) as Array<{
           id: string;
@@ -394,4 +397,37 @@ export function createIngestPolledEvidenceHandler(deps: {
 
     return { status: "accepted", eventId, idempotentReplay: false };
   };
+}
+
+function resolveSilentAbsenceIncident(
+  alerting: SqliteAlertingRepositories,
+  tenantId: string,
+  workflowId: string,
+  at: string,
+  actor: string,
+): void {
+  const open = alerting.getUnresolvedIncident(
+    tenantId,
+    "workflow",
+    workflowId,
+    "silent_absence",
+  );
+  if (!open) {
+    return;
+  }
+  alerting.resolveIncident(tenantId, open.id, {
+    actor,
+    at,
+    resolutionNote: "Reporting resumed",
+  });
+  alerting.enqueueOutbox(tenantId, {
+    id: createId(),
+    incidentId: open.id,
+    eventType: "resolved",
+    payloadJson: JSON.stringify({
+      incidentId: open.id,
+      incidentType: "silent_absence",
+    }),
+    availableAt: at,
+  });
 }

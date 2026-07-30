@@ -23,7 +23,7 @@ function eventCadence(
     allowedLatenessMinutes: 0,
     maxQuietWindowMinutes: 60,
     monitoringStartedAt: new Date("2026-07-10T08:00:00.000Z"),
-    lastAcceptableSuccessAt: null,
+    lastEvidenceAt: null,
     ...overrides,
   };
 }
@@ -87,7 +87,7 @@ describe("evaluateContractHealth", () => {
         emptyResultPolicy: "warning",
         initialGraceMinutes: 0,
         cadence: eventCadence({
-          lastAcceptableSuccessAt: lastSuccess,
+          lastEvidenceAt: lastSuccess,
           monitoringStartedAt: new Date("2026-07-10T08:00:00.000Z"),
         }),
         latestEvidence: { status: "empty_result", at: lastSuccess },
@@ -98,7 +98,8 @@ describe("evaluateContractHealth", () => {
     expect(result.evidenceLevel).toBe("basic");
   });
 
-  it("marks unacceptable empty_result as overdue and keeps evidence basic", () => {
+  it("marks unacceptable empty_result as overdue while reporting is present", () => {
+    const at = new Date("2026-07-10T08:05:00.000Z");
     const result = evaluateContractHealth(
       {
         isActive: true,
@@ -107,15 +108,17 @@ describe("evaluateContractHealth", () => {
         initialGraceMinutes: 0,
         cadence: eventCadence({
           monitoringStartedAt: new Date("2026-07-10T08:00:00.000Z"),
+          lastEvidenceAt: at,
         }),
         latestEvidence: {
           status: "empty_result",
-          at: new Date("2026-07-10T08:05:00.000Z"),
+          at,
         },
       },
-      new FixedClock(new Date("2026-07-10T09:05:00.000Z")),
+      new FixedClock(new Date("2026-07-10T08:30:00.000Z")),
     );
     expect(result.health).toBe("overdue");
+    expect(result.reasonCode).toBe("overdue_unacceptable_evidence");
     expect(result.evidenceLevel).toBe("basic");
     expect(result.unverifiedDimensions).toContain(
       "destination_delivery_not_checked",
@@ -130,7 +133,7 @@ describe("evaluateContractHealth", () => {
         evidenceLevel: "basic",
         emptyResultPolicy: "allowed",
         initialGraceMinutes: 0,
-        cadence: eventCadence({ lastAcceptableSuccessAt: lastSuccess }),
+        cadence: eventCadence({ lastEvidenceAt: lastSuccess }),
         latestEvidence: { status: "success", at: lastSuccess },
       },
       new FixedClock(new Date("2026-07-10T10:30:00.000Z")),

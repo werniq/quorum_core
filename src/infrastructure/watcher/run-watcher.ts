@@ -241,8 +241,8 @@ export function createWatcher(deps: {
           contract.activated_at ??
           contract.created_at,
       ),
-      lastAcceptableSuccessAt: state?.last_acceptable_success_at
-        ? new Date(String(state.last_acceptable_success_at))
+      lastEvidenceAt: state?.last_execution_at
+        ? new Date(String(state.last_execution_at))
         : null,
     };
 

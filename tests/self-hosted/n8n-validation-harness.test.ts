@@ -287,7 +287,7 @@ describe("n8n validation harness", () => {
         allowedLatenessMinutes: 2,
         maxQuietWindowMinutes: null,
         monitoringStartedAt: anchor,
-        lastAcceptableSuccessAt: lateSuccess,
+        lastEvidenceAt: lateSuccess,
       },
       laterClock,
     );

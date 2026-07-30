@@ -20,6 +20,10 @@ function baseRow(
     evidenceExplanation: "basic",
     expectedCadenceOrWindow: "interval:1@UTC",
     lastAcceptableEvidenceAt: "2026-07-29T20:16:00.000Z",
+    lastReportAt: "2026-07-29T20:16:00.000Z",
+    lastReportStatus: "success",
+    lastExternalExecutionRef: null,
+    consecutiveFailures: null,
     nextDeadlineAt: "2026-07-29T20:17:00.000Z",
     overdueDurationSeconds: 120,
     alertChannelHealth: "none",
@@ -124,5 +128,32 @@ describe("catalog card polish formatting", () => {
     expect(html).toContain("contract-card is-healthy");
     expect(html).not.toContain("is-warning");
     expect(html).not.toContain("is-overdue");
+  });
+
+  it("shows Failure reported instead of Overdue while hard_failure is open", () => {
+    const html = renderContractCard(
+      baseRow({
+        health: "healthy",
+        lastAcceptableEvidenceAt: "2026-07-29T19:00:00.000Z",
+        lastReportAt: "2026-07-29T20:16:00.000Z",
+        lastReportStatus: "failure",
+        lastExternalExecutionRef: "n8n-exec-9",
+        consecutiveFailures: 3,
+        overdueDurationSeconds: null,
+        activeIncident: {
+          severity: "critical",
+          summary: "Invoice sync: hard failure · 3 consecutive",
+          id: "inc-hf",
+          type: "hard_failure",
+        },
+      }),
+    );
+    expect(html).toContain("Failure reported");
+    expect(html).toContain("Last report");
+    expect(html).toContain("Last successful execution");
+    expect(html).toContain("Consecutive failures: 3");
+    expect(html).toContain("External execution ref: n8n-exec-9");
+    expect(html).not.toContain(">Overdue<");
+    expect(html).not.toContain("Quorum has not received a new execution");
   });
 });

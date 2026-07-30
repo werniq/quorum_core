@@ -23,7 +23,7 @@ function base(
     allowedLatenessMinutes: 15,
     maxQuietWindowMinutes: null,
     monitoringStartedAt: new Date("2026-07-01T00:00:00.000Z"),
-    lastAcceptableSuccessAt: null,
+    lastEvidenceAt: null,
     ...overrides,
   };
 }
@@ -108,7 +108,7 @@ describe("evaluateCadenceDeadline", () => {
         intervalMode: "fixed_rate",
         scheduleAnchorAt: anchor,
         timezone: null,
-        lastAcceptableSuccessAt: new Date("2026-07-10T02:20:00.000Z"),
+        lastEvidenceAt: new Date("2026-07-10T02:20:00.000Z"),
       }),
       new FixedClock(new Date("2026-07-10T03:10:00.000Z")),
     );
@@ -126,7 +126,7 @@ describe("evaluateCadenceDeadline", () => {
         cadenceValue: "30",
         intervalMode: "since_last_success",
         timezone: null,
-        lastAcceptableSuccessAt: new Date("2026-07-10T11:00:00.000Z"),
+        lastEvidenceAt: new Date("2026-07-10T11:00:00.000Z"),
       }),
       clock,
     );
@@ -163,7 +163,7 @@ describe("evaluateCadenceDeadline", () => {
         cadenceValue: "event",
         timezone: null,
         maxQuietWindowMinutes: 45,
-        lastAcceptableSuccessAt: lastSuccess,
+        lastEvidenceAt: lastSuccess,
       }),
       new FixedClock(new Date("2026-07-10T10:20:00.000Z")),
     );

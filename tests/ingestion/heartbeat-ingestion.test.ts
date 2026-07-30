@@ -553,6 +553,19 @@ describe("secure heartbeat ingestion", () => {
       "n8n-fail-2",
     );
 
+    const health = sqlite
+      .prepare(
+        `SELECT current_health, overdue_since, last_status FROM workflow_states WHERE workflow_id = ?`,
+      )
+      .get(workflowId) as {
+      current_health: string;
+      overdue_since: string | null;
+      last_status: string;
+    };
+    expect(health.current_health).toBe("healthy");
+    expect(health.overdue_since).toBeNull();
+    expect(health.last_status).toBe("failure");
+
     const openedOutbox = sqlite
       .prepare(
         `SELECT COUNT(*) AS c FROM notification_outbox WHERE event_type = 'opened'`,
@@ -608,6 +621,222 @@ describe("secure heartbeat ingestion", () => {
       )
       .get() as { c: number };
     expect(outbox.c).toBe(2);
+  });
+
+  it("resolves silent_absence on failure heartbeat and recovers hard_failure on success", () => {
+    const sqlite = openDb();
+    const { tenant, workflowId, keyId, ingest } = seedWorkflow(sqlite, {
+      emptyResultPolicy: "failure",
+    });
+
+    const healthy = signedRequest({
+      workflowId,
+      keyId,
+      idempotencyKey: "ok-before",
+      body: {
+        schemaVersion: 1,
+        executedAt: "2026-07-18T07:00:00Z",
+        status: "success",
+        itemsProcessed: 3,
+        externalExecutionRef: "n8n-ok-before",
+      },
+    });
+    expect(
+      ingest({
+        workflowId,
+        method: "POST",
+        path: healthy.path,
+        keyId,
+        timestampSeconds: healthy.timestampSeconds,
+        idempotencyKey: "ok-before",
+        signatureHex: healthy.signature,
+        rawBody: healthy.rawBody,
+      }),
+    ).toMatchObject({ status: "accepted" });
+
+    const silenceId = createId();
+    const silenceOpenedAt = "2026-07-18T07:55:00.000Z";
+    sqlite
+      .prepare(
+        `INSERT INTO incidents (
+           id, tenant_id, client_id, contract_kind, workflow_id, outcome_contract_id,
+           incident_type, severity, status, opened_at, acknowledged_at, resolved_at,
+           last_observed_at, last_notified_at, notification_count, summary, details_json,
+           volume_rule_id, volume_window_start, assignee_user_id, resolution_note,
+           client_safe_resolution_note, response_target_minutes, resolution_target_minutes,
+           created_at, updated_at
+         ) VALUES (
+           ?, ?, NULL, 'workflow', ?, NULL, 'silent_absence', 'critical', 'open', ?, NULL, NULL,
+           ?, NULL, 0, 'Quorum has not received a new execution.', NULL,
+           NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?, ?
+         )`,
+      )
+      .run(
+        silenceId,
+        tenant.id,
+        workflowId,
+        silenceOpenedAt,
+        silenceOpenedAt,
+        silenceOpenedAt,
+        silenceOpenedAt,
+      );
+    sqlite
+      .prepare(
+        `UPDATE workflow_states
+         SET current_health = 'overdue',
+             overdue_since = ?,
+             last_execution_at = ?,
+             last_acceptable_success_at = ?
+         WHERE workflow_id = ?`,
+      )
+      .run(
+        silenceOpenedAt,
+        "2026-07-18T07:00:00.000Z",
+        "2026-07-18T07:00:00.000Z",
+        workflowId,
+      );
+
+    const fail1 = signedRequest({
+      workflowId,
+      keyId,
+      idempotencyKey: "fail-after-silence",
+      body: {
+        schemaVersion: 1,
+        executedAt: "2026-07-18T08:00:00Z",
+        status: "failure",
+        itemsProcessed: 0,
+        externalExecutionRef: "n8n-fail-a",
+      },
+    });
+    expect(
+      ingest({
+        workflowId,
+        method: "POST",
+        path: fail1.path,
+        keyId,
+        timestampSeconds: fail1.timestampSeconds,
+        idempotencyKey: "fail-after-silence",
+        signatureHex: fail1.signature,
+        rawBody: fail1.rawBody,
+      }),
+    ).toMatchObject({ status: "accepted" });
+
+    const silence = sqlite
+      .prepare(
+        `SELECT status FROM incidents WHERE id = ?`,
+      )
+      .get(silenceId) as { status: string };
+    expect(silence.status).toBe("resolved");
+
+    const hard = sqlite
+      .prepare(
+        `SELECT status, details_json FROM incidents
+         WHERE workflow_id = ? AND incident_type = 'hard_failure' AND status = 'open'`,
+      )
+      .get(workflowId) as { status: string; details_json: string };
+    expect(hard).toBeTruthy();
+    expect(JSON.parse(hard.details_json).consecutiveFailures).toBe(1);
+
+    const state = sqlite
+      .prepare(
+        `SELECT current_health, overdue_since, last_status, last_acceptable_success_at,
+                last_execution_at, last_external_execution_ref
+         FROM workflow_states WHERE workflow_id = ?`,
+      )
+      .get(workflowId) as {
+      current_health: string;
+      overdue_since: string | null;
+      last_status: string;
+      last_acceptable_success_at: string;
+      last_execution_at: string;
+      last_external_execution_ref: string;
+    };
+    expect(state.current_health).toBe("healthy");
+    expect(state.overdue_since).toBeNull();
+    expect(state.last_status).toBe("failure");
+    expect(state.last_acceptable_success_at).toBe("2026-07-18T07:00:00.000Z");
+    expect(state.last_execution_at).toBe("2026-07-18T08:00:00.000Z");
+    expect(state.last_external_execution_ref).toBe("n8n-fail-a");
+
+    const fail2 = signedRequest({
+      workflowId,
+      keyId,
+      idempotencyKey: "fail-again",
+      body: {
+        schemaVersion: 1,
+        executedAt: "2026-07-18T08:00:45Z",
+        status: "failure",
+        itemsProcessed: 0,
+        externalExecutionRef: "n8n-fail-b",
+      },
+    });
+    expect(
+      ingest({
+        workflowId,
+        method: "POST",
+        path: fail2.path,
+        keyId,
+        timestampSeconds: fail2.timestampSeconds,
+        idempotencyKey: "fail-again",
+        signatureHex: fail2.signature,
+        rawBody: fail2.rawBody,
+      }),
+    ).toMatchObject({ status: "accepted" });
+
+    const hardRows = sqlite
+      .prepare(
+        `SELECT status, details_json FROM incidents
+         WHERE workflow_id = ? AND incident_type = 'hard_failure'`,
+      )
+      .all(workflowId) as Array<{ status: string; details_json: string }>;
+    expect(hardRows).toHaveLength(1);
+    expect(hardRows[0]!.status).toBe("open");
+    expect(JSON.parse(hardRows[0]!.details_json).consecutiveFailures).toBe(2);
+    expect(JSON.parse(hardRows[0]!.details_json).externalExecutionRef).toBe(
+      "n8n-fail-b",
+    );
+
+    const recovered = signedRequest({
+      workflowId,
+      keyId,
+      idempotencyKey: "ok-after",
+      body: {
+        schemaVersion: 1,
+        executedAt: "2026-07-18T08:01:30Z",
+        status: "success",
+        itemsProcessed: 4,
+        externalExecutionRef: "n8n-ok-after",
+      },
+    });
+    expect(
+      ingest({
+        workflowId,
+        method: "POST",
+        path: recovered.path,
+        keyId,
+        timestampSeconds: recovered.timestampSeconds,
+        idempotencyKey: "ok-after",
+        signatureHex: recovered.signature,
+        rawBody: recovered.rawBody,
+      }),
+    ).toMatchObject({ status: "accepted" });
+
+    const after = sqlite
+      .prepare(
+        `SELECT status, summary FROM incidents
+         WHERE workflow_id = ? AND incident_type = 'hard_failure'`,
+      )
+      .get(workflowId) as { status: string; summary: string };
+    expect(after.status).toBe("resolved");
+    expect(after.summary).toContain("recovered");
+
+    const openCount = sqlite
+      .prepare(
+        `SELECT COUNT(*) AS c FROM incidents
+         WHERE workflow_id = ? AND status IN ('open', 'acknowledged')`,
+      )
+      .get(workflowId) as { c: number };
+    expect(openCount.c).toBe(0);
   });
 
   it("rejects revoked credentials", () => {

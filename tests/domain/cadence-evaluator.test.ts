@@ -20,7 +20,7 @@ function cronContract(
     allowedLatenessMinutes: 15,
     maxQuietWindowMinutes: null,
     monitoringStartedAt: new Date("2026-07-01T00:00:00.000Z"),
-    lastAcceptableSuccessAt: null,
+    lastEvidenceAt: null,
     ...overrides,
   };
 }
@@ -42,7 +42,7 @@ describe("cadence evaluator — cron", () => {
         isActive: true,
         initialGraceMinutes: 0,
         contract: cronContract({
-          lastAcceptableSuccessAt: new Date("2026-07-18T13:05:00.000Z"),
+          lastEvidenceAt: new Date("2026-07-18T13:05:00.000Z"),
         }),
       },
       new FixedClock(new Date("2026-07-18T14:10:00.000Z")),
@@ -58,7 +58,7 @@ describe("cadence evaluator — cron", () => {
         isActive: true,
         initialGraceMinutes: 0,
         contract: cronContract({
-          lastAcceptableSuccessAt: new Date("2026-07-18T14:05:00.000Z"),
+          lastEvidenceAt: new Date("2026-07-18T14:05:00.000Z"),
         }),
       },
       new FixedClock(new Date("2026-07-18T14:14:59.000Z")),
@@ -70,7 +70,7 @@ describe("cadence evaluator — cron", () => {
         isActive: true,
         initialGraceMinutes: 0,
         contract: cronContract({
-          lastAcceptableSuccessAt: new Date("2026-07-18T13:05:00.000Z"),
+          lastEvidenceAt: new Date("2026-07-18T13:05:00.000Z"),
         }),
       },
       new FixedClock(new Date("2026-07-18T14:15:01.000Z")),
@@ -82,7 +82,7 @@ describe("cadence evaluator — cron", () => {
   it("does not shift the next cron occurrence after late evidence", () => {
     const atFifteen = evaluateCadenceDeadline(
       cronContract({
-        lastAcceptableSuccessAt: new Date("2026-07-18T14:20:00.000Z"),
+        lastEvidenceAt: new Date("2026-07-18T14:20:00.000Z"),
       }),
       new FixedClock(new Date("2026-07-18T15:10:00.000Z")),
     );
@@ -217,7 +217,7 @@ describe("cadence evaluator — fixed-rate interval", () => {
 
     const next = evaluateCadenceDeadline(
       fixed({
-        lastAcceptableSuccessAt: new Date("2026-07-18T14:09:00.000Z"),
+        lastEvidenceAt: new Date("2026-07-18T14:09:00.000Z"),
       }),
       new FixedClock(new Date("2026-07-18T14:12:00.000Z")),
     );
@@ -232,7 +232,7 @@ describe("cadence evaluator — fixed-rate interval", () => {
         isActive: true,
         initialGraceMinutes: 0,
         contract: fixed({
-          lastAcceptableSuccessAt: new Date("2026-07-18T14:00:00.000Z"),
+          lastEvidenceAt: new Date("2026-07-18T14:00:00.000Z"),
         }),
       },
       new FixedClock(new Date("2026-07-18T14:05:00.000Z")),
@@ -244,7 +244,7 @@ describe("cadence evaluator — fixed-rate interval", () => {
         isActive: true,
         initialGraceMinutes: 0,
         contract: fixed({
-          lastAcceptableSuccessAt: new Date("2026-07-18T13:50:00.000Z"),
+          lastEvidenceAt: new Date("2026-07-18T13:50:00.000Z"),
         }),
       },
       new FixedClock(new Date("2026-07-18T14:05:01.000Z")),
@@ -281,7 +281,7 @@ describe("cadence evaluator — fixed-rate interval", () => {
     const oneMinute = fixed({
       cadenceValue: "1",
       allowedLatenessMinutes: 5,
-      lastAcceptableSuccessAt: new Date("2026-07-18T14:00:00.000Z"),
+      lastEvidenceAt: new Date("2026-07-18T14:00:00.000Z"),
     });
 
     const stillHealthy = evaluateCadence(
@@ -318,7 +318,7 @@ describe("cadence evaluator — since-last-success", () => {
         intervalMode: "since_last_success",
         timezone: null,
         allowedLatenessMinutes: 5,
-        lastAcceptableSuccessAt: new Date("2026-07-18T10:00:00.000Z"),
+        lastEvidenceAt: new Date("2026-07-18T10:00:00.000Z"),
       }),
       new FixedClock(new Date("2026-07-18T10:20:00.000Z")),
     );
@@ -385,7 +385,7 @@ describe("cadence evaluator — event-driven", () => {
         isActive: true,
         initialGraceMinutes: 0,
         contract: event({
-          lastAcceptableSuccessAt: new Date("2026-07-18T10:00:00.000Z"),
+          lastEvidenceAt: new Date("2026-07-18T10:00:00.000Z"),
         }),
       },
       new FixedClock(new Date("2026-07-18T10:30:00.000Z")),
@@ -398,7 +398,7 @@ describe("cadence evaluator — event-driven", () => {
         isActive: true,
         initialGraceMinutes: 0,
         contract: event({
-          lastAcceptableSuccessAt: new Date("2026-07-18T09:00:00.000Z"),
+          lastEvidenceAt: new Date("2026-07-18T09:00:00.000Z"),
         }),
       },
       new FixedClock(new Date("2026-07-18T10:30:00.000Z")),

@@ -7,7 +7,6 @@ import { addMinutes } from "../cadence/duration.js";
 import {
   classifyHeartbeatEvidence,
   type HeartbeatEvidenceStatus,
-  isAcceptableSuccess,
 } from "../evidence/empty-result.js";
 import {
   unverifiedDimensionsForEvidenceLevel,
@@ -62,7 +61,7 @@ export function evaluateContractHealth(
   const deadline = evaluateCadenceDeadline(input.cadence, clock);
   const now = clock.now();
   const unknownUntilAt =
-    input.cadence.lastAcceptableSuccessAt === null
+    input.cadence.lastEvidenceAt === null
       ? addMinutes(deadline.deadlineAt, input.initialGraceMinutes)
       : null;
 
@@ -82,13 +81,12 @@ export function evaluateContractHealth(
     ? classifyHeartbeatEvidence(latest.status, input.emptyResultPolicy)
     : null;
 
-  const coversCurrentOccurrence =
+  // Any valid report covers silence for this occurrence; hard failure is separate.
+  const reportingCoversOccurrence =
     latest !== null &&
-    classification !== null &&
-    isAcceptableSuccess(classification) &&
     latest.at.getTime() >= deadline.expectedOccurrenceAt.getTime();
 
-  if (!coversCurrentOccurrence) {
+  if (!reportingCoversOccurrence) {
     if (unknownUntilAt !== null && now.getTime() <= unknownUntilAt.getTime()) {
       return {
         health: "unknown",
@@ -97,17 +95,6 @@ export function evaluateContractHealth(
         deadlineAt: deadline.deadlineAt,
         unknownUntilAt,
         reasonCode: "unknown_awaiting_first_deadline",
-      };
-    }
-
-    if (classification === "unacceptable") {
-      return {
-        health: "overdue",
-        evidenceLevel,
-        unverifiedDimensions,
-        deadlineAt: deadline.deadlineAt,
-        unknownUntilAt,
-        reasonCode: "overdue_unacceptable_evidence",
       };
     }
 
@@ -131,6 +118,17 @@ export function evaluateContractHealth(
       deadlineAt: deadline.deadlineAt,
       unknownUntilAt,
       reasonCode: "overdue_missed_deadline",
+    };
+  }
+
+  if (classification === "unacceptable") {
+    return {
+      health: "overdue",
+      evidenceLevel,
+      unverifiedDimensions,
+      deadlineAt: deadline.deadlineAt,
+      unknownUntilAt,
+      reasonCode: "overdue_unacceptable_evidence",
     };
   }
 

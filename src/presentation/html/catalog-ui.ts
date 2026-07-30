@@ -26,6 +26,10 @@ export type CatalogRowView = {
   evidenceExplanation: string;
   expectedCadenceOrWindow: string;
   lastAcceptableEvidenceAt: string | null;
+  lastReportAt: string | null;
+  lastReportStatus: string | null;
+  lastExternalExecutionRef: string | null;
+  consecutiveFailures: number | null;
   nextDeadlineAt: string | null;
   overdueDurationSeconds: number | null;
   alertChannelHealth: string;
@@ -319,35 +323,76 @@ function renderTechnicalDetails(row: CatalogRowView): string {
     </details>`;
 }
 
+function formatReportStatus(status: string | null): string {
+  if (status === "success") return "Success";
+  if (status === "failure") return "Failure";
+  if (status === "empty_result") return "Empty result";
+  if (!status) return "—";
+  return status;
+}
+
+function isFailureReported(row: CatalogRowView): boolean {
+  return row.activeIncident?.type === "hard_failure";
+}
+
+function isSilenceAttention(row: CatalogRowView): boolean {
+  if (isFailureReported(row)) {
+    return false;
+  }
+  return row.health === "warning" || row.health === "overdue";
+}
+
 export function renderContractCard(row: CatalogRowView): string {
   const detail =
     row.contractKind === "outcome"
       ? `/catalog/outcome/${row.contractId}`
       : `/catalog/contracts/${row.workflowId}`;
+  const failureReported = isFailureReported(row);
+  const silenceAttention = isSilenceAttention(row);
   const toneClass =
-    row.health === "overdue" || row.activeIncident
-      ? " is-overdue"
-      : row.health === "warning"
-        ? " is-warning"
-        : row.health === "healthy"
-          ? " is-healthy"
-          : "";
-  const health =
-    row.health === "overdue" || row.health === "warning"
+    silenceAttention || failureReported || row.activeIncident
+      ? failureReported || row.health === "overdue" || row.activeIncident
+        ? " is-overdue"
+        : " is-warning"
+      : row.health === "healthy"
+        ? " is-healthy"
+        : "";
+  const health = failureReported
+    ? `<span class="badge badge-status-incident"><span class="sr-only">Health: </span>Failure reported</span>`
+    : silenceAttention
       ? statusBadge(row.health)
       : row.activeIncident
         ? `<span class="badge badge-status-incident"><span class="sr-only">Health: </span>Incident</span>`
         : statusBadge(row.health);
-  const silenceMessage =
-    row.health === "warning"
+  const silenceMessage = silenceAttention
+    ? row.health === "warning"
       ? `<p class="contract-card-message">Quorum has not received a new execution within the expected window.</p>
       <p class="helper">Early warning — an incident opens if this becomes Overdue.</p>`
-      : row.health === "overdue"
-        ? `<p class="contract-card-message">${escapeHtml(SILENT_ABSENCE_MESSAGE)}</p>`
-        : "";
+      : `<p class="contract-card-message">${escapeHtml(SILENT_ABSENCE_MESSAGE)}</p>`
+    : failureReported
+      ? `<p class="contract-card-message">A valid failure heartbeat arrived. Quorum is tracking consecutive failed executions until a successful report arrives.</p>`
+      : "";
   const volume = row.volumeSummary
     ? `<div>Reported volume: ${escapeHtml(row.volumeSummary.currentCount)} (${escapeHtml(row.volumeSummary.status)})</div>`
     : "";
+  const reportMeta = failureReported
+    ? `<div>${formatTimestampHint(row.lastReportAt, "Last report")}${
+        row.lastReportStatus
+          ? ` · ${escapeHtml(formatReportStatus(row.lastReportStatus))}`
+          : ""
+      }</div>
+      <div>${formatTimestampHint(row.lastAcceptableEvidenceAt, "Last successful execution")}</div>
+      <div>Consecutive failures: ${escapeHtml(
+        row.consecutiveFailures === null
+          ? "—"
+          : String(row.consecutiveFailures),
+      )}</div>
+      <div>External execution ref: ${escapeHtml(
+        row.lastExternalExecutionRef ?? "—",
+      )}</div>`
+    : `<div>${formatTimestampHint(row.lastAcceptableEvidenceAt, "Last execution")}</div>
+      <div>${formatTimestampHint(row.nextDeadlineAt, "Expected next execution")}</div>
+      <div>${escapeHtml(formatLateness(row.overdueDurationSeconds))}</div>`;
   const actions = contractCardActions(row)
     .map(
       (action, index) =>
@@ -365,9 +410,7 @@ export function renderContractCard(row: CatalogRowView): string {
     ${silenceMessage}
     <div class="contract-card-meta">
       <div>Expectation: ${escapeHtml(formatExpectation(row.expectedCadenceOrWindow))}</div>
-      <div>${formatTimestampHint(row.lastAcceptableEvidenceAt, "Last execution")}</div>
-      <div>${formatTimestampHint(row.nextDeadlineAt, "Expected next execution")}</div>
-      <div>${escapeHtml(formatLateness(row.overdueDurationSeconds))}</div>
+      ${reportMeta}
       <div>${escapeHtml(formatMonitoringMethod(row.monitoringMethod))}</div>
       ${volume}
       ${renderTechnicalDetails(row)}
@@ -377,7 +420,7 @@ export function renderContractCard(row: CatalogRowView): string {
         ${evidenceBadge(row.evidenceLevel, row.evidenceStale)}
         ${alertHealthBadge(row.alertChannelHealth)}
         ${
-          row.activeIncident
+          row.activeIncident && !failureReported
             ? `<span class="badge badge-status-incident">${escapeHtml(row.activeIncident.summary)}</span>`
             : ""
         }
