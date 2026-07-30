@@ -5,6 +5,7 @@ import type { CadenceContractFields } from "../../domain/cadence/evaluate-deadli
 import { shouldEnqueueRenotification } from "../../domain/alerting/renotification.js";
 import { createId } from "../../domain/ids.js";
 import { unverifiedDimensionsForEvidenceLevel } from "../../domain/evidence/unverified-dimensions.js";
+import { SILENT_ABSENCE_MESSAGE } from "../../domain/n8n/workflow-editor-url.js";
 import { SqliteAlertingRepositories } from "../db/repositories/sqlite-alerting-repositories.js";
 import {
   assertProcessingAllowed,
@@ -310,8 +311,7 @@ export function createWatcher(deps: {
         workflowId: contract.workflow_id,
         incidentType: "silent_absence",
         severity: "critical",
-        summary:
-          "Quorum has not received a new execution within the expected window.",
+        summary: SILENT_ABSENCE_MESSAGE,
         detailsJson: JSON.stringify({
           expectedAt: evaluation.expectedAt?.toISOString() ?? null,
           deadlineAt: evaluation.deadlineAt?.toISOString() ?? null,

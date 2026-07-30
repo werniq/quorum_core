@@ -896,6 +896,11 @@ td form button {
   box-shadow: var(--shadow-sm);
   transition: border-color 160ms ease, box-shadow 180ms ease, transform 160ms ease;
 }
+.contract-card.is-healthy {
+  border-color: #6ee7b7;
+  background: linear-gradient(180deg, #ecfdf5 0%, var(--background-surface) 48%);
+  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.1), var(--shadow-sm);
+}
 .contract-card.is-warning {
   border-color: #f59e0b;
   background: linear-gradient(180deg, #fffbeb 0%, var(--background-surface) 48%);
@@ -1281,6 +1286,19 @@ function parseNavMeta(nav?: string): {
   return { current: "", role: "admin", loggedIn: true };
 }
 
+function brandMark(href: string, className: string): string {
+  return `<a class="${className}" href="${href}"><span class="brand-glyph" aria-hidden="true">Q</span> Quorum</a>`;
+}
+
+/** Same teal Q mark as the sidebar brand glyph — used as the site favicon. */
+export const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Quorum"><rect width="32" height="32" rx="8" fill="#0d6b5c"/><text x="16" y="22" text-anchor="middle" font-family="Inter,Segoe UI,system-ui,sans-serif" font-size="17" font-weight="700" fill="#ffffff">Q</text></svg>`;
+
+const FAVICON_DATA_URI = `data:image/svg+xml,${encodeURIComponent(FAVICON_SVG)}`;
+
+const HEAD_ICONS = `<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="${FAVICON_DATA_URI}" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="${FAVICON_DATA_URI}" />`;
+
 function sidebarLink(
   href: string,
   label: string,
@@ -1303,10 +1321,7 @@ function renderSidebar(input: {
       : `<a class="nav-link nav-cta" href="/onboarding">Set up monitoring</a>`;
   return `
     <aside class="app-sidebar" id="app-sidebar" aria-label="Application">
-      <a class="sidebar-brand" href="/catalog">
-        <span class="brand-glyph" aria-hidden="true">Q</span>
-        Quorum
-      </a>
+      ${brandMark("/catalog", "sidebar-brand")}
       <div class="org-chip" title="Organization">${escapeHtml(input.orgName)}</div>
       <nav class="sidebar-nav" aria-label="Primary">
         <div class="nav-section-label">Monitor</div>
@@ -1435,13 +1450,14 @@ export function layout(input: {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escapeHtml(input.title)} · Quorum</title>
+  ${HEAD_ICONS}
   <style>${BASE_CSS}</style>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
   <div class="auth-shell">
     <div class="auth-card page-enter" id="main">
-      <a class="brand-mark" href="/login"><span class="brand-glyph" aria-hidden="true">Q</span> Quorum</a>
+      ${brandMark("/login", "brand-mark")}
       ${flashHtml}
       ${input.body}
     </div>
@@ -1464,6 +1480,7 @@ export function layout(input: {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escapeHtml(input.title)} · Quorum</title>
+  ${HEAD_ICONS}
   <style>${BASE_CSS}</style>
 </head>
 <body>

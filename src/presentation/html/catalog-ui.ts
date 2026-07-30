@@ -13,6 +13,7 @@ import {
   plainUnverifiedLabels,
   plainVerifiedLabels,
 } from "../../domain/catalog/evidence-explanation.js";
+import { SILENT_ABSENCE_MESSAGE } from "../../domain/n8n/workflow-editor-url.js";
 
 export type CatalogRowView = {
   contractId: string;
@@ -328,7 +329,9 @@ export function renderContractCard(row: CatalogRowView): string {
       ? " is-overdue"
       : row.health === "warning"
         ? " is-warning"
-        : "";
+        : row.health === "healthy"
+          ? " is-healthy"
+          : "";
   const health =
     row.health === "overdue" || row.health === "warning"
       ? statusBadge(row.health)
@@ -336,9 +339,12 @@ export function renderContractCard(row: CatalogRowView): string {
         ? `<span class="badge badge-status-incident"><span class="sr-only">Health: </span>Incident</span>`
         : statusBadge(row.health);
   const silenceMessage =
-    row.health === "warning" || row.health === "overdue"
-      ? `<p class="contract-card-message">Quorum has not received a new execution within the expected window.</p>`
-      : "";
+    row.health === "warning"
+      ? `<p class="contract-card-message">Quorum has not received a new execution within the expected window.</p>
+      <p class="helper">Early warning — an incident opens if this becomes Overdue.</p>`
+      : row.health === "overdue"
+        ? `<p class="contract-card-message">${escapeHtml(SILENT_ABSENCE_MESSAGE)}</p>`
+        : "";
   const volume = row.volumeSummary
     ? `<div>Reported volume: ${escapeHtml(row.volumeSummary.currentCount)} (${escapeHtml(row.volumeSummary.status)})</div>`
     : "";

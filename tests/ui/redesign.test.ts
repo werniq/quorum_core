@@ -78,6 +78,33 @@ describe("UI redesign copy and primitives", () => {
     expect(html).toContain('class="flash is-success"');
   });
 
+  it("uses the same brand mark in the sidebar and login shell, and sets a matching favicon", () => {
+    const app = layout({
+      title: "Catalog",
+      loggedIn: true,
+      current: "catalog",
+      body: "<p>ok</p>",
+    });
+    expect(app).toContain('class="sidebar-brand"');
+    expect(app).not.toContain('class="topbar-brand"');
+    expect(app).toMatch(
+      /sidebar-brand"[^>]*>\s*<span class="brand-glyph"[^>]*>Q<\/span>\s*Quorum/,
+    );
+    expect(app).toContain('rel="icon"');
+    expect(app).toContain("data:image/svg+xml");
+    expect(app).toContain("%230d6b5c");
+
+    const login = layout({
+      title: "Login",
+      loggedIn: false,
+      body: "<p>sign in</p>",
+    });
+    expect(login).toMatch(
+      /brand-mark"[^>]*>\s*<span class="brand-glyph"[^>]*>Q<\/span>\s*Quorum/,
+    );
+    expect(login).toContain('rel="icon"');
+  });
+
   it("separates health and evidence badges with text labels", () => {
     expect(statusBadge("healthy")).toContain("Healthy");
     expect(statusBadge("warning")).toContain("No recent execution");

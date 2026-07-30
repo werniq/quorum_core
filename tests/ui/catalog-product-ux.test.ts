@@ -591,4 +591,91 @@ describe("catalog product UX UI acceptance", () => {
 
     await app.close();
   });
+
+  it("explains Catalog silence when Incidents is empty but contracts are warning", async () => {
+    const sqlite = openDb();
+    const clock = new FixedClock(new Date("2026-07-19T10:00:00.000Z"));
+    const { core, tenant, sessionId } = seedAdmin(sqlite, clock);
+    const nowIso = clock.now().toISOString();
+    const workflow = core.createWorkflow(tenant.id, {
+      id: createId(),
+      clientId: null,
+      name: "Poll invoices",
+      externalWorkflowId: createId(),
+      description: null,
+      monitoringMethod: "poll",
+      isActive: true,
+      monitoringStartedAt: nowIso,
+    });
+    core.createWorkflowContract(tenant.id, {
+      id: createId(),
+      workflowId: workflow.id,
+      name: "Poll invoices",
+      businessPurpose: "Poll invoices",
+      cadenceType: "interval",
+      cadenceValue: "1",
+      intervalMode: "fixed_rate",
+      scheduleAnchorAt: nowIso,
+      timezone: "UTC",
+      allowedLatenessMinutes: 5,
+      maxQuietWindowMinutes: null,
+      initialGraceMinutes: 0,
+      emptyResultPolicy: "allowed",
+      countLessSuccessAllowed: true,
+      notificationBackoffMinutes: 30,
+      evidenceLevel: "basic",
+      schemaVersion: 1,
+      isActive: true,
+      activatedAt: nowIso,
+    });
+    core.upsertWorkflowState(tenant.id, {
+      tenantId: tenant.id,
+      workflowId: workflow.id,
+      lastExecutionAt: nowIso,
+      lastNonemptySuccessAt: nowIso,
+      lastAcceptableSuccessAt: nowIso,
+      lastFailureAt: null,
+      lastExternalExecutionRef: null,
+      lastStatus: "success",
+      nextExpectedAt: nowIso,
+      overdueSince: null,
+      currentHealth: "warning",
+      evidenceLevel: "basic",
+      evidenceSummaryCode: "warning_no_recent_execution",
+      unverifiedDimensionsJson: "[]",
+      consecutiveStaleChecks: 0,
+      updatedAt: nowIso,
+    });
+
+    const app = await bootApp(sqlite, clock);
+    const incidents = await app.inject({
+      method: "GET",
+      url: "/incidents",
+      headers: { cookie: `${SESSION_COOKIE}=${sessionId}` },
+    });
+    expect(incidents.statusCode).toBe(200);
+    expect(incidents.body).toContain("No open incidents");
+    expect(incidents.body).toContain("needing attention");
+    expect(incidents.body).toContain("no recent execution");
+    expect(incidents.body).toContain(
+      "opens a silent-absence incident when a contract becomes",
+    );
+    expect(incidents.body).toContain("Review Contract Catalog");
+    expect(incidents.body).not.toContain("Define contracts proactively");
+
+    const catalog = await app.inject({
+      method: "GET",
+      url: "/catalog",
+      headers: { cookie: `${SESSION_COOKIE}=${sessionId}` },
+    });
+    expect(catalog.body).toContain("No recent execution");
+    expect(catalog.body).toContain(
+      "Quorum has not received a new execution within the expected window.",
+    );
+    expect(catalog.body).toContain(
+      "Early warning — an incident opens if this becomes Overdue.",
+    );
+
+    await app.close();
+  });
 });

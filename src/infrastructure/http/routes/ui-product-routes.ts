@@ -31,6 +31,9 @@ import {
   renderSimpleNavPage,
   renderWorkflowContractDetailPage,
 } from "../../../presentation/html/catalog-ui.js";
+import { renderIncidentsPage } from "../../../presentation/html/incidents-ui.js";
+import type { IncidentListRow } from "../../../presentation/html/incidents-ui.js";
+import { SILENT_ABSENCE_MESSAGE } from "../../../domain/n8n/workflow-editor-url.js";
 import { toCatalogRowView } from "./catalog-row-view.js";
 import type { createOutboxProcessor } from "../../alerting/process-outbox.js";
 
@@ -262,12 +265,32 @@ export function registerProductUiRoutes(
       return;
     }
     const tid = deps.tenantId();
-    const rows = deps.sqlite
+    const rawRows = deps.sqlite
       .prepare(
-        `SELECT id, severity, status, summary, opened_at
-         FROM incidents
-         WHERE tenant_id = ? AND status IN ('open', 'acknowledged')
-         ORDER BY opened_at DESC
+        `SELECT
+           i.id,
+           i.severity,
+           i.status,
+           i.summary,
+           i.opened_at,
+           i.incident_type,
+           i.workflow_id,
+           w.name AS workflow_name,
+           w.monitoring_method,
+           w.external_workflow_id,
+           s.last_acceptable_success_at,
+           s.next_expected_at,
+           s.overdue_since,
+           nc.base_url AS connector_base_url
+         FROM incidents i
+         LEFT JOIN workflows w
+           ON w.id = i.workflow_id AND w.tenant_id = i.tenant_id
+         LEFT JOIN workflow_states s
+           ON s.workflow_id = i.workflow_id AND s.tenant_id = i.tenant_id
+         LEFT JOIN n8n_connectors nc
+           ON nc.id = w.connector_id AND nc.tenant_id = w.tenant_id
+         WHERE i.tenant_id = ? AND i.status IN ('open', 'acknowledged')
+         ORDER BY i.opened_at DESC
          LIMIT 100`,
       )
       .all(tid) as Array<{
@@ -276,23 +299,70 @@ export function registerProductUiRoutes(
       status: string;
       summary: string;
       opened_at: string;
+      incident_type: string;
+      workflow_id: string | null;
+      workflow_name: string | null;
+      monitoring_method: string | null;
+      external_workflow_id: string | null;
+      last_acceptable_success_at: string | null;
+      next_expected_at: string | null;
+      overdue_since: string | null;
+      connector_base_url: string | null;
     }>;
-    const body =
-      rows.length === 0
-        ? `<div class="empty-state"><h2>No open incidents</h2><p>Define contracts proactively. Do not wait for failures.</p><a class="btn" href="/catalog">Open Contract Catalog</a></div>`
-        : `<div class="card table-wrap" style="padding:0"><table class="responsive-cards"><thead><tr><th>Severity</th><th>Status</th><th>Summary</th><th>Opened</th></tr></thead><tbody>${rows
-            .map(
-              (r) =>
-                `<tr><td data-label="Severity" class="sev-${escapeHtml(r.severity)}">${escapeHtml(r.severity)}</td><td data-label="Status">${escapeHtml(r.status)}</td><td data-label="Summary">${escapeHtml(r.summary)}</td><td data-label="Opened" class="helper">${escapeHtml(r.opened_at)}</td></tr>`,
-            )
-            .join("")}</tbody></table></div>`;
+
+    const rows: IncidentListRow[] = rawRows.map((r) => ({
+      id: r.id,
+      severity: r.severity,
+      status: r.status,
+      summary:
+        r.incident_type === "silent_absence"
+          ? SILENT_ABSENCE_MESSAGE
+          : r.summary,
+      openedAt: r.opened_at,
+      incidentType: r.incident_type,
+      workflowId: r.workflow_id,
+      workflowName: r.workflow_name,
+      monitoringMethod:
+        r.monitoring_method === "poll" || r.monitoring_method === "push"
+          ? r.monitoring_method
+          : null,
+      externalWorkflowId: r.external_workflow_id,
+      connectorBaseUrl: r.connector_base_url,
+      lastAcceptableEvidenceAt: r.last_acceptable_success_at,
+      nextExpectedAt: r.next_expected_at,
+      overdueSince: r.overdue_since,
+    }));
+
+    const attention = deps.sqlite
+      .prepare(
+        `SELECT
+           SUM(CASE WHEN s.current_health = 'warning' THEN 1 ELSE 0 END) AS warning_count,
+           SUM(CASE WHEN s.current_health = 'overdue' THEN 1 ELSE 0 END) AS overdue_count
+         FROM workflow_contracts c
+         JOIN workflows w ON w.id = c.workflow_id AND w.tenant_id = c.tenant_id
+         JOIN workflow_states s ON s.workflow_id = c.workflow_id AND s.tenant_id = c.tenant_id
+         WHERE c.tenant_id = ?
+           AND c.contract_type = 'heartbeat'
+           AND c.is_active = 1
+           AND w.is_active = 1
+           AND IFNULL(w.description, '') != '__quorum_removed__'`,
+      )
+      .get(tid) as
+      | { warning_count: number | null; overdue_count: number | null }
+      | undefined;
+    const warningCount = Number(attention?.warning_count ?? 0);
+    const overdueCount = Number(attention?.overdue_count ?? 0);
+    const attentionCount = warningCount + overdueCount;
+
     return reply.type("text/html").send(
-      renderSimpleNavPage({
+      renderIncidentsPage({
         ...pageShell,
-        title: "Incidents",
-        current: "incidents",
         role: session.role,
-        body: `<h1 class="page-title">Incidents</h1><p class="page-subtitle">Operational issues that need acknowledgement or resolution.</p>${body}`,
+        rows,
+        nowMs: deps.clock.now().getTime(),
+        attentionCount,
+        warningCount,
+        overdueCount,
       }),
     );
   });

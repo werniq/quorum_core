@@ -38,6 +38,7 @@ import {
   renderSetupPage,
   renderWorkflowsPage,
 } from "../../../presentation/html/pages.js";
+import { FAVICON_SVG } from "../../../presentation/html/layout.js";
 import type { createOutboxProcessor } from "../../alerting/process-outbox.js";
 import { SqliteOutcomeContractRepositories } from "../../db/repositories/sqlite-outcome-contract-repositories.js";
 import { SqliteReconciliationRepositories } from "../../db/repositories/sqlite-reconciliation-repositories.js";
@@ -196,6 +197,13 @@ export function registerUiRoutes(
       }),
     );
   }
+
+  app.get("/favicon.svg", async (_request, reply) => {
+    return reply
+      .type("image/svg+xml")
+      .header("cache-control", "public, max-age=86400")
+      .send(FAVICON_SVG);
+  });
 
   app.get("/", async (request, reply) => {
     if (!isUiOpenWithoutLogin(deps.env) && !auth.hasAdminUser()) {

@@ -107,6 +107,22 @@ describe("catalog card polish formatting", () => {
     expect(pollHtml).toContain(
       "Quorum has not received a new execution within the expected window.",
     );
+    expect(pollHtml).toContain(
+      "Early warning — an incident opens if this becomes Overdue.",
+    );
     expect(pollHtml).toContain("Every 1 minute · UTC");
+  });
+
+  it("tints healthy cards slightly green", () => {
+    const html = renderContractCard(
+      baseRow({
+        health: "healthy",
+        overdueDurationSeconds: null,
+        activeIncident: null,
+      }),
+    );
+    expect(html).toContain("contract-card is-healthy");
+    expect(html).not.toContain("is-warning");
+    expect(html).not.toContain("is-overdue");
   });
 });

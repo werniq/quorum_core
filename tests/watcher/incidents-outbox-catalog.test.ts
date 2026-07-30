@@ -23,6 +23,7 @@ import {
   compareCatalogSortBuckets,
 } from "../../src/domain/catalog/sort.js";
 import { transitionIncidentStatus } from "../../src/domain/incidents/lifecycle.js";
+import { SILENT_ABSENCE_MESSAGE } from "../../src/domain/n8n/workflow-editor-url.js";
 
 const openConnections: BetterSqliteDatabase.Database[] = [];
 const tempFiles: string[] = [];
@@ -385,9 +386,7 @@ describe("watcher", () => {
           )
           .get(workflowId) as { summary: string }
       ).summary,
-    ).toBe(
-      "Quorum has not received a new execution within the expected window.",
-    );
+    ).toBe(SILENT_ABSENCE_MESSAGE);
 
     const catalog = queryContractCatalog({
       sqlite,
