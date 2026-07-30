@@ -16,7 +16,7 @@ Please **do not** open a public GitHub issue for security vulnerabilities.
 
 Include:
 
-- Quorum version / commit SHA / Docker image tag (e.g. `qniw984/quorum:0.1.0-beta.4`)
+- Quorum version / commit SHA / Docker image tag (e.g. `qniw984/quorum:0.1.0-beta.5`)
 - Deployment mode (Docker Compose, local `npm`, etc.)
 - Impact and reproduction steps
 

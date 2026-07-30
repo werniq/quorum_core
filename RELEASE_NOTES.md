@@ -1,15 +1,15 @@
-# Quorum v0.1.0-beta.4
+# Quorum v0.1.0-beta.5
 
-Fourth public **beta** of Quorum Community — self-hosted Contract Catalog for n8n.
+Fifth public **beta** of Quorum Community — self-hosted Contract Catalog for n8n.
 
 **Hosted multi-tenant SaaS is not available** from this repository.
 
 ## Docker installation
 
-Published image: [`qniw984/quorum:0.1.0-beta.4`](https://hub.docker.com/r/qniw984/quorum/tags)
+Published image: [`qniw984/quorum:0.1.0-beta.5`](https://hub.docker.com/r/qniw984/quorum/tags)
 
 ```bash
-docker pull qniw984/quorum:0.1.0-beta.4
+docker pull qniw984/quorum:0.1.0-beta.5
 cp .env.example .env
 # Set QUORUM_CREDENTIAL_KEK (min 16 chars) and QUORUM_SETUP_TOKEN (min 24 chars when auth is on)
 docker compose up -d
@@ -29,6 +29,8 @@ Lab stack with bundled n8n: `docker compose -f docker-compose.lab.yml up --build
 
 - Contract Catalog (health, evidence strength, deadlines, alert status)
 - Clear silence path on contract cards: **No recent execution** (warning) → **Overdue** + `silent_absence`, then recover to Healthy when executions resume (alert channel not required)
+- Failure heartbeats clear silence and show **Failure reported** (consecutive failures, last success, execution ref) without Overdue/silence copy
+- Hard-failure incident cards with n8n links, acknowledge, recovery duration, and human-readable heartbeat history
 - Simplified onboarding: connect n8n, select workflows by name, confirm expectations, start monitoring
 - n8n API polling (URL + API key, no workflow changes)
 - Push heartbeats (HMAC-signed reports from n8n)
@@ -54,7 +56,7 @@ Before any upgrade or restore:
 
 1. Back up the SQLite (or Postgres) data volume.
 2. Store `QUORUM_CREDENTIAL_KEK` in a **separate** secret store. Encrypted credentials cannot be recovered without it.
-3. Deploy `qniw984/quorum:0.1.0-beta.4` (or build from this tag), confirm `GET /readyz`, then watch `GET /health/watcher`.
+3. Deploy `qniw984/quorum:0.1.0-beta.5` (or build from this tag), confirm `GET /readyz`, then watch `GET /health/watcher`.
 
 Wrong KEK after restore causes decrypt failures; Quorum never prints the key.
 

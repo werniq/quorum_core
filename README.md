@@ -28,10 +28,10 @@ Quorum Community is **beta** software for self-hosted design partners. Expect ro
 
 ## Quick start (Docker)
 
-Published image: [`qniw984/quorum:0.1.0-beta.4`](https://hub.docker.com/r/qniw984/quorum/tags)
+Published image: [`qniw984/quorum:0.1.0-beta.5`](https://hub.docker.com/r/qniw984/quorum/tags)
 
 ```bash
-docker pull qniw984/quorum:0.1.0-beta.4
+docker pull qniw984/quorum:0.1.0-beta.5
 cp .env.example .env
 # Set QUORUM_CREDENTIAL_KEK (min 16 chars) and QUORUM_SETUP_TOKEN (min 24 chars when auth is on)
 docker compose up -d
