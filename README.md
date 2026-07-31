@@ -30,12 +30,14 @@ Design-partner kit: [lifecycle screenshot](docs/screenshots/lifecycle.png) · [p
 
 ## Quick start (Docker)
 
-Published image: [`qniw984/quorum:0.1.0-beta.5`](https://hub.docker.com/r/qniw984/quorum/tags)
+Published image: [`qniw984/quorum:0.1.0-beta.5`](https://hub.docker.com/r/qniw984/quorum/tags) (Compose default).
 
 ```bash
-docker pull qniw984/quorum:0.1.0-beta.5
+git clone https://github.com/werniq/quorum_core.git
+cd quorum_core
 cp .env.example .env
-# Set QUORUM_CREDENTIAL_KEK (min 16 chars) and QUORUM_SETUP_TOKEN (min 24 chars when auth is on)
+# Edit the required secrets: QUORUM_CREDENTIAL_KEK (min 16 chars)
+# and QUORUM_SETUP_TOKEN (min 24 chars when auth is on)
 docker compose up -d
 ```
 

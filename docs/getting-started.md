@@ -4,11 +4,18 @@ After [Quick start](../README.md#quick-start-docker), use this page for first-ru
 
 ## First-time setup
 
-1. Copy `.env.example` to `.env` and set secrets ([environment](environment.md)).
-2. Pull and start the published image:
+1. Clone the repository and copy `.env.example` to `.env`, then set secrets ([environment](environment.md)):
 
    ```bash
-   docker pull qniw984/quorum:0.1.0-beta.5
+   git clone https://github.com/werniq/quorum_core.git
+   cd quorum_core
+   cp .env.example .env
+   # Edit QUORUM_CREDENTIAL_KEK (min 16 chars) and QUORUM_SETUP_TOKEN (min 24 chars when auth is on)
+   ```
+
+2. Start the published image (Compose defaults to `qniw984/quorum:0.1.0-beta.5`):
+
+   ```bash
    docker compose up -d
    ```
 

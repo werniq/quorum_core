@@ -1,6 +1,6 @@
 # Known limitations
 
-Updated 2026-07-21 after Community pre-release verification ([release-verification.md](./verification/release-verification.md)).
+Updated 2026-07-31 after Community beta.5 verification ([release-verification.md](./verification/release-verification.md)).
 
 ## Product scope
 
@@ -16,9 +16,9 @@ Updated 2026-07-21 after Community pre-release verification ([release-verificati
 
 ## Runtime and ops
 
-10. CI workflow exists at `.github/workflows/ci.yml`. This pass did not publish a GitHub Actions run; validate on the remote when pushed.
+10. CI workflow exists at `.github/workflows/ci.yml`. Master pushes run `static-and-tests` and `compose-and-e2e`; latest green runs are linked from [release-verification.md](./verification/release-verification.md).
 11. `npm run format:check` is part of `release:check` / `verify:self-hosted`.
-12. `npm run verify:self-hosted` passed on 2026-07-21 (Windows, Docker 28.4.0) after format/lint fixes and starting Docker Desktop.
+12. Local unit + coverage gates passed on 2026-07-31 (`npm test` 322; `test:cov` ≥90%). Full `verify:self-hosted` / Compose path is exercised on CI and was green for the empty-result and beta-kit pushes.
 13. Graceful shutdown drains in-flight work up to `SHUTDOWN_GRACE_MS` (default 10s), then may force exit.
 14. n8n `/healthz` can succeed while migrations still run; verification scripts wait for `/rest/settings` JSON before owner setup.
 
