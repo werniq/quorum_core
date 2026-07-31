@@ -2,6 +2,8 @@
 
 Polling is the recommended first path. Push heartbeats are optional when you need richer reporting from inside the workflow.
 
+Short comparison: [push versus polling](push-vs-polling.md).
+
 ## Polling (recommended)
 
 1. Open **Set up monitoring** (`/onboarding`), or use **Connectors** for an advanced setup.

@@ -1,0 +1,74 @@
+name: Beta feedback
+description: Share design-partner feedback, friction, or a missing expectation for Quorum Community beta.
+title: "Beta: "
+labels: ["beta-feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying Quorum Community beta. Keep this short — one issue per report works best.
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of feedback is this?
+      options:
+        - Bug
+        - Confusing UX
+        - Missing capability
+        - Docs gap
+        - Praise / what worked
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: One or two sentences. Include the page or flow if you can.
+      placeholder: Example — Catalog stayed Healthy after I disabled the n8n schedule for Poll invoices.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect instead?
+      placeholder: Example — Catalog should move to No recent execution, then Overdue with a silent-absence incident.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: path
+    attributes:
+      label: Monitoring path
+      options:
+        - Polling (Connect n8n)
+        - Push heartbeats
+        - Both / not sure
+        - N/A (docs or setup only)
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Quorum version or image tag
+      description: Optional. Example — 0.1.0-beta.5 or qniw984/quorum:0.1.0-beta.5
+      placeholder: 0.1.0-beta.5
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce (optional)
+      description: Only if this is a bug or confusing path.
+      placeholder: |
+        1.
+        2.
+        3.
+
+  - type: textarea
+    id: extras
+    attributes:
+      label: Anything else?
+      description: Screenshots, logs (no secrets), n8n version, or severity.

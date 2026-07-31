@@ -24,6 +24,8 @@ Quorum shows what your n8n workflows are expected to do, whether reported volume
 
 Quorum Community is **beta** software for self-hosted design partners. Expect rough edges — see [limitations](#limitations). **Hosted multi-tenant SaaS is not available** from this repository.
 
+Design-partner kit: [lifecycle screenshot](docs/screenshots/lifecycle.png) · [push vs polling](docs/push-vs-polling.md) · [Poll invoices example](docs/demo/poll-invoices-example.md) · [Beta feedback](.github/ISSUE_TEMPLATE/beta-feedback.yml) issue template · [demo index](docs/demo/README.md).
+
 **Licence:** [Apache-2.0](LICENSE) — Quorum Community only. Quorum Cloud (hosted SaaS) is separate proprietary code outside this tree.
 
 ## Quick start (Docker)
