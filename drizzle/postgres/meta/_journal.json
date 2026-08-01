@@ -120,6 +120,20 @@
       "when": 1752900016000,
       "tag": "0017_simplified_onboarding",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1752900017000,
+      "tag": "0018_watchdog_dimensions",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1752900018000,
+      "tag": "0019_watchdog_unknown_freshness",
+      "breakpoints": true
     }
   ]
 }

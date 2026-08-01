@@ -16,7 +16,8 @@ export type IncidentType =
   | "connector_unavailable"
   | "schema_drift"
   | "watcher_failure"
-  | "alert_delivery_failure";
+  | "alert_delivery_failure"
+  | "freshness_stale";
 
 export type IncidentSeverity = "warning" | "critical";
 

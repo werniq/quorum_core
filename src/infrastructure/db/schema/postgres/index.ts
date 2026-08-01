@@ -113,6 +113,15 @@ export const n8nConnectors = pgTable("n8n_connectors", {
   }),
   lastErrorCode: text("last_error_code"),
   lastErrorSummary: text("last_error_summary"),
+  unknownReason: text("unknown_reason"),
+  firstFailureAt: timestamp("first_failure_at", {
+    withTimezone: true,
+    mode: "date",
+  }),
+  latestFailureAt: timestamp("latest_failure_at", {
+    withTimezone: true,
+    mode: "date",
+  }),
   pollIntervalMs: integer("poll_interval_ms").notNull().default(60_000),
   createdAt: timestamp("created_at", {
     withTimezone: true,
@@ -408,6 +417,7 @@ export const incidents = pgTable("incidents", {
       "schema_drift",
       "watcher_failure",
       "alert_delivery_failure",
+      "freshness_stale",
     ],
   }).notNull(),
   severity: text("severity", { enum: ["warning", "critical"] }).notNull(),
