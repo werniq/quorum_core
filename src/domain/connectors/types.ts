@@ -16,6 +16,9 @@ export interface ConnectorHealthView {
   lastErrorCode: string | null;
   /** Sanitized operator-facing summary; never contains secrets. */
   lastErrorSummary: string | null;
+  unknownReason: string | null;
+  firstFailureAt: Date | null;
+  latestFailureAt: Date | null;
 }
 
 /** Public polling targets must use HTTPS and non-private destinations. */

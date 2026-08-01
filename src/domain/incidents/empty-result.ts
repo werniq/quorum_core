@@ -74,6 +74,8 @@ export function buildEmptyResultDetails(input: {
   itemsProcessed: number;
   externalExecutionRef: string | null;
   lastNonEmptySuccessAt: string | null;
+  /** When set, overrides the default existing+1 increment (tracked state counter). */
+  consecutiveEmpties?: number;
 }): EmptyResultDetails {
   return {
     workflowName: input.workflowName,
@@ -81,7 +83,8 @@ export function buildEmptyResultDetails(input: {
     policy: input.policy,
     firstEmptyAt: input.existing?.firstEmptyAt ?? input.observedAt,
     latestEmptyAt: input.observedAt,
-    consecutiveEmpties: (input.existing?.consecutiveEmpties ?? 0) + 1,
+    consecutiveEmpties:
+      input.consecutiveEmpties ?? (input.existing?.consecutiveEmpties ?? 0) + 1,
     itemsProcessed: input.itemsProcessed,
     externalExecutionRef: input.externalExecutionRef,
     lastNonEmptySuccessAt: input.lastNonEmptySuccessAt,

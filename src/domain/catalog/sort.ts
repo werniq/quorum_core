@@ -1,9 +1,11 @@
 import type { ContractHealth } from "../terminology.js";
 import type { AlertChannelHealthState } from "../terminology.js";
+import type { CatalogDisplayHealth } from "../health/contract-dimensions.js";
 
 export type CatalogSortBucket =
   | "critical_incident"
   | "alert_channel_failing"
+  | "monitor_unknown"
   | "overdue"
   | "warning"
   | "unknown"
@@ -11,7 +13,8 @@ export type CatalogSortBucket =
   | "inactive";
 
 export interface CatalogSortInput {
-  health: ContractHealth;
+  /** Prefer displayHealth (includes monitor_unknown) when available. */
+  health: ContractHealth | CatalogDisplayHealth;
   hasCriticalIncident: boolean;
   alertChannelHealth: AlertChannelHealthState | "none";
 }
@@ -19,11 +22,12 @@ export interface CatalogSortInput {
 const BUCKET_RANK: Record<CatalogSortBucket, number> = {
   critical_incident: 0,
   alert_channel_failing: 1,
-  overdue: 2,
-  warning: 3,
-  unknown: 4,
-  healthy: 5,
-  inactive: 6,
+  monitor_unknown: 2,
+  overdue: 3,
+  warning: 4,
+  unknown: 5,
+  healthy: 6,
+  inactive: 7,
 };
 
 export function catalogSortBucket(input: CatalogSortInput): CatalogSortBucket {
@@ -32,6 +36,9 @@ export function catalogSortBucket(input: CatalogSortInput): CatalogSortBucket {
   }
   if (input.alertChannelHealth === "failing") {
     return "alert_channel_failing";
+  }
+  if (input.health === "monitor_unknown") {
+    return "monitor_unknown";
   }
   if (input.health === "overdue") {
     return "overdue";
