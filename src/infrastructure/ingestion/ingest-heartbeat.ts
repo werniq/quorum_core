@@ -31,8 +31,14 @@ import {
   parseHardFailureDetails,
 } from "../../domain/incidents/hard-failure.js";
 import {
+  evaluateWatermarkFreshness,
+  type WatermarkComparisonType,
+} from "../../domain/evidence/source-watermark.js";
+import { nextConsecutiveEmptyResults } from "../../domain/health/contract-dimensions.js";
+import {
   computeNextExpectedIso,
   openOrUpdateEmptyResultIncident,
+  openOrUpdateFreshnessIncident,
   resolveOpenIncidentsOfTypes,
   upsertWorkflowStateAfterHeartbeat,
 } from "./apply-heartbeat-state.js";
@@ -356,6 +362,36 @@ export function createIngestHeartbeatHandler(deps: {
         clock: deps.clock,
       });
 
+      const breachThreshold = Math.max(
+        1,
+        Number(contract.empty_result_breach_threshold ?? 1),
+      );
+      const consecutiveEmptyResults = nextConsecutiveEmptyResults({
+        evidenceStatus: classified.evidenceStatus,
+        itemsProcessed: classified.itemsProcessed,
+        previous: Number(previous?.consecutive_empty_results ?? 0),
+      });
+
+      const watermarkRequired = Boolean(contract.source_watermark_required);
+      const comparisonType = (contract.watermark_comparison_type ??
+        "auto") as WatermarkComparisonType;
+      const allowedStalenessSeconds = Number(
+        contract.freshness_allowed_staleness_seconds ?? 0,
+      );
+      const watermarkEval = evaluateWatermarkFreshness({
+        required: watermarkRequired && classified.evidenceStatus === "success",
+        previousWatermark:
+          (previous?.last_source_watermark as string | null) ?? null,
+        previousWatermarkAt:
+          (previous?.last_source_watermark_at as string | null) ?? null,
+        observedAt: executedAt,
+        metadata: metadataObject,
+        consecutiveStale: Number(previous?.consecutive_stale_watermarks ?? 0),
+        breachThreshold,
+        comparisonType,
+        allowedStalenessSeconds,
+      });
+
       upsertWorkflowStateAfterHeartbeat({
         sqlite: deps.sqlite,
         tenantId,
@@ -367,11 +403,22 @@ export function createIngestHeartbeatHandler(deps: {
         externalExecutionRef: classified.externalExecutionRef,
         previous,
         nextExpectedAt,
-        evidenceSummaryCode: "heartbeat_basic",
+        evidenceSummaryCode:
+          watermarkEval.status === "stale" || watermarkEval.status === "missing"
+            ? "freshness_stale"
+            : acceptable
+              ? "healthy_occurrence_satisfied"
+              : classified.evidenceStatus === "empty_result"
+                ? "empty_result_received"
+                : "failure_received",
         unverifiedJson: JSON.stringify(unverified),
+        consecutiveEmptyResults,
+        lastSourceWatermark: watermarkEval.nextWatermark,
+        lastSourceWatermarkAt: watermarkEval.nextWatermarkAt,
+        consecutiveStaleWatermarks: watermarkEval.consecutiveStale,
       });
 
-      // Any valid report clears silence.
+      // Any valid report clears silent absence.
       resolveOpenIncidentsOfTypes({
         alerting,
         sqlite: deps.sqlite,
@@ -382,15 +429,15 @@ export function createIngestHeartbeatHandler(deps: {
         types: ["silent_absence"],
       });
 
+      const workflowMeta = deps.sqlite
+        .prepare(
+          `SELECT name, monitoring_method FROM workflows WHERE tenant_id = ? AND id = ?`,
+        )
+        .get(tenantId, command.workflowId) as
+        | { name: string; monitoring_method: string }
+        | undefined;
+
       if (classified.evidenceStatus === "failure") {
-        const workflowMeta = deps.sqlite
-          .prepare(
-            `SELECT name, monitoring_method FROM workflows
-             WHERE tenant_id = ? AND id = ?`,
-          )
-          .get(tenantId, command.workflowId) as
-          | { name: string; monitoring_method: string }
-          | undefined;
         const before = alerting.getUnresolvedIncident(
           tenantId,
           "workflow",
@@ -449,6 +496,8 @@ export function createIngestHeartbeatHandler(deps: {
             itemsProcessed: classified.itemsProcessed ?? 0,
             externalExecutionRef: classified.externalExecutionRef,
             lastNonEmptySuccessAt: stampsPrevious,
+            consecutiveEmpties: consecutiveEmptyResults,
+            breachThreshold,
             enqueueOpened: (incidentId) =>
               enqueueOpened(alerting, tenantId, incidentId, receivedAt),
           });
@@ -471,8 +520,24 @@ export function createIngestHeartbeatHandler(deps: {
           workflowId: command.workflowId,
           at: receivedAt,
           actor: "system:ingest-heartbeat",
-          types: ["hard_failure", "empty_result"],
+          types: ["hard_failure", "empty_result", "freshness_stale"],
         });
+        if (watermarkEval.shouldOpenIncident) {
+          openOrUpdateFreshnessIncident({
+            alerting,
+            tenantId,
+            workflowId: command.workflowId,
+            receivedAt,
+            summary: `${workflowMeta?.name ?? "Workflow"}: source watermark did not advance`,
+            detailsJson: JSON.stringify({
+              status: watermarkEval.status,
+              consecutiveStale: watermarkEval.consecutiveStale,
+              watermark: watermarkEval.nextWatermark,
+            }),
+            enqueueOpened: (incidentId) =>
+              enqueueOpened(alerting, tenantId, incidentId, receivedAt),
+          });
+        }
       }
     });
 

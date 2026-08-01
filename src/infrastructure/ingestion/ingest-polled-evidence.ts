@@ -6,7 +6,12 @@ import {
   type HeartbeatEvidenceStatus,
 } from "../../domain/evidence/empty-result.js";
 import { sanitizeHeartbeatMetadata } from "../../domain/evidence/heartbeat-metadata.js";
+import {
+  evaluateWatermarkFreshness,
+  type WatermarkComparisonType,
+} from "../../domain/evidence/source-watermark.js";
 import { unverifiedDimensionsForEvidenceLevel } from "../../domain/evidence/unverified-dimensions.js";
+import { nextConsecutiveEmptyResults } from "../../domain/health/contract-dimensions.js";
 import {
   buildHardFailureDetails,
   formatHardFailureSummary,
@@ -21,6 +26,7 @@ import {
 import {
   computeNextExpectedIso,
   openOrUpdateEmptyResultIncident,
+  openOrUpdateFreshnessIncident,
   resolveOpenIncidentsOfTypes,
   upsertWorkflowStateAfterHeartbeat,
 } from "./apply-heartbeat-state.js";
@@ -140,6 +146,9 @@ export function createIngestPolledEvidenceHandler(deps: {
     if (!sanitized.ok) {
       return { status: "bad_request", code: "INVALID_METADATA" };
     }
+    const metadataObject = sanitized.metadataJson
+      ? (JSON.parse(sanitized.metadataJson) as Record<string, unknown>)
+      : {};
 
     const now = deps.clock.now();
     const eventId = createId();
@@ -185,6 +194,36 @@ export function createIngestPolledEvidenceHandler(deps: {
         clock: deps.clock,
       });
 
+      const breachThreshold = Math.max(
+        1,
+        Number(contract.empty_result_breach_threshold ?? 1),
+      );
+      const consecutiveEmptyResults = nextConsecutiveEmptyResults({
+        evidenceStatus: command.evidenceStatus,
+        itemsProcessed: command.itemsProcessed,
+        previous: Number(previous?.consecutive_empty_results ?? 0),
+      });
+
+      const watermarkRequired = Boolean(contract.source_watermark_required);
+      const comparisonType = (contract.watermark_comparison_type ??
+        "auto") as WatermarkComparisonType;
+      const allowedStalenessSeconds = Number(
+        contract.freshness_allowed_staleness_seconds ?? 0,
+      );
+      const watermarkEval = evaluateWatermarkFreshness({
+        required: watermarkRequired && command.evidenceStatus === "success",
+        previousWatermark:
+          (previous?.last_source_watermark as string | null) ?? null,
+        previousWatermarkAt:
+          (previous?.last_source_watermark_at as string | null) ?? null,
+        observedAt: executedAt,
+        metadata: metadataObject,
+        consecutiveStale: Number(previous?.consecutive_stale_watermarks ?? 0),
+        breachThreshold,
+        comparisonType,
+        allowedStalenessSeconds,
+      });
+
       upsertWorkflowStateAfterHeartbeat({
         sqlite: deps.sqlite,
         tenantId: command.tenantId,
@@ -196,8 +235,19 @@ export function createIngestPolledEvidenceHandler(deps: {
         externalExecutionRef: command.externalExecutionRef,
         previous,
         nextExpectedAt,
-        evidenceSummaryCode: "heartbeat_basic_polled",
+        evidenceSummaryCode:
+          watermarkEval.status === "stale" || watermarkEval.status === "missing"
+            ? "freshness_stale"
+            : acceptable
+              ? "heartbeat_basic_polled"
+              : command.evidenceStatus === "empty_result"
+                ? "empty_result_received"
+                : "failure_received",
         unverifiedJson: JSON.stringify(unverified),
+        consecutiveEmptyResults,
+        lastSourceWatermark: watermarkEval.nextWatermark,
+        lastSourceWatermarkAt: watermarkEval.nextWatermarkAt,
+        consecutiveStaleWatermarks: watermarkEval.consecutiveStale,
       });
 
       resolveOpenIncidentsOfTypes({
@@ -210,15 +260,16 @@ export function createIngestPolledEvidenceHandler(deps: {
         types: ["silent_absence"],
       });
 
+      const workflowMeta = deps.sqlite
+        .prepare(
+          `SELECT name, monitoring_method FROM workflows
+           WHERE tenant_id = ? AND id = ?`,
+        )
+        .get(command.tenantId, command.workflowId) as
+        | { name: string; monitoring_method: string }
+        | undefined;
+
       if (command.evidenceStatus === "failure") {
-        const workflowMeta = deps.sqlite
-          .prepare(
-            `SELECT name, monitoring_method FROM workflows
-             WHERE tenant_id = ? AND id = ?`,
-          )
-          .get(command.tenantId, command.workflowId) as
-          | { name: string; monitoring_method: string }
-          | undefined;
         const before = alerting.getUnresolvedIncident(
           command.tenantId,
           "workflow",
@@ -280,6 +331,8 @@ export function createIngestPolledEvidenceHandler(deps: {
             externalExecutionRef: command.externalExecutionRef,
             lastNonEmptySuccessAt:
               (previous?.last_nonempty_success_at as string | null) ?? null,
+            consecutiveEmpties: consecutiveEmptyResults,
+            breachThreshold,
             enqueueOpened: (incidentId) => {
               alerting.enqueueOutbox(command.tenantId, {
                 id: createId(),
@@ -309,8 +362,31 @@ export function createIngestPolledEvidenceHandler(deps: {
           workflowId: command.workflowId,
           at: receivedAt,
           actor: "system:ingest-polled",
-          types: ["hard_failure", "empty_result"],
+          types: ["hard_failure", "empty_result", "freshness_stale"],
         });
+        if (watermarkEval.shouldOpenIncident) {
+          openOrUpdateFreshnessIncident({
+            alerting,
+            tenantId: command.tenantId,
+            workflowId: command.workflowId,
+            receivedAt,
+            summary: `${workflowMeta?.name ?? "Workflow"}: source watermark did not advance`,
+            detailsJson: JSON.stringify({
+              status: watermarkEval.status,
+              consecutiveStale: watermarkEval.consecutiveStale,
+              watermark: watermarkEval.nextWatermark,
+            }),
+            enqueueOpened: (incidentId) => {
+              alerting.enqueueOutbox(command.tenantId, {
+                id: createId(),
+                incidentId,
+                eventType: "opened",
+                payloadJson: JSON.stringify({ incidentId }),
+                availableAt: receivedAt,
+              });
+            },
+          });
+        }
       }
     });
 

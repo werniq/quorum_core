@@ -22,6 +22,9 @@ export interface N8nConnectorRecord {
   lastSuccessAt: string | null;
   lastErrorCode: string | null;
   lastErrorSummary: string | null;
+  unknownReason: string | null;
+  firstFailureAt: string | null;
+  latestFailureAt: string | null;
   pollIntervalMs: number;
   createdAt: string;
   updatedAt: string;
@@ -167,6 +170,13 @@ export class SqliteN8nConnectorRepositories {
         : null,
       lastErrorCode: connector.lastErrorCode,
       lastErrorSummary: connector.lastErrorSummary,
+      unknownReason: connector.unknownReason,
+      firstFailureAt: connector.firstFailureAt
+        ? new Date(connector.firstFailureAt)
+        : null,
+      latestFailureAt: connector.latestFailureAt
+        ? new Date(connector.latestFailureAt)
+        : null,
     };
   }
 
@@ -242,6 +252,10 @@ export class SqliteN8nConnectorRepositories {
       errorSummary?: string | null;
     },
   ): void {
+    const recovered = Boolean(input.success) || input.health === "healthy";
+    const unknownReason = recovered
+      ? null
+      : (input.errorSummary ?? input.errorCode ?? input.health);
     this.sqlite
       .prepare(
         `UPDATE n8n_connectors
@@ -250,16 +264,30 @@ export class SqliteN8nConnectorRepositories {
              last_success_at = CASE WHEN ? = 1 THEN ? ELSE last_success_at END,
              last_error_code = ?,
              last_error_summary = ?,
+             unknown_reason = ?,
+             first_failure_at = CASE
+               WHEN ? = 1 THEN NULL
+               ELSE COALESCE(first_failure_at, ?)
+             END,
+             latest_failure_at = CASE
+               WHEN ? = 1 THEN NULL
+               ELSE ?
+             END,
              updated_at = ?
          WHERE tenant_id = ? AND id = ?`,
       )
       .run(
         input.health,
         input.checkedAtIso,
-        input.success ? 1 : 0,
+        recovered ? 1 : 0,
         input.checkedAtIso,
-        input.errorCode ?? null,
-        input.errorSummary ?? null,
+        recovered ? null : (input.errorCode ?? null),
+        recovered ? null : (input.errorSummary ?? null),
+        unknownReason,
+        recovered ? 1 : 0,
+        input.checkedAtIso,
+        recovered ? 1 : 0,
+        input.checkedAtIso,
         input.checkedAtIso,
         tenantId,
         connectorId,
@@ -509,6 +537,9 @@ function mapConnector(row: Record<string, unknown>): N8nConnectorRecord {
     lastSuccessAt: (row.last_success_at as string | null) ?? null,
     lastErrorCode: (row.last_error_code as string | null) ?? null,
     lastErrorSummary: (row.last_error_summary as string | null) ?? null,
+    unknownReason: (row.unknown_reason as string | null) ?? null,
+    firstFailureAt: (row.first_failure_at as string | null) ?? null,
+    latestFailureAt: (row.latest_failure_at as string | null) ?? null,
     pollIntervalMs: Number(row.poll_interval_ms ?? 60_000),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),

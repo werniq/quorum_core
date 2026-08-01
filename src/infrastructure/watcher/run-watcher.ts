@@ -6,6 +6,10 @@ import { shouldEnqueueRenotification } from "../../domain/alerting/renotificatio
 import { createId } from "../../domain/ids.js";
 import { unverifiedDimensionsForEvidenceLevel } from "../../domain/evidence/unverified-dimensions.js";
 import { SILENT_ABSENCE_MESSAGE } from "../../domain/n8n/workflow-editor-url.js";
+import {
+  MONITOR_UNREACHABLE_REASON,
+  shouldSuppressSilentAbsence,
+} from "../../domain/health/monitor-reachability.js";
 import { SqliteAlertingRepositories } from "../db/repositories/sqlite-alerting-repositories.js";
 import {
   assertProcessingAllowed,
@@ -41,6 +45,9 @@ export function createWatcher(deps: {
     lastSuccessAt: string | null;
     lastStartedAt: string | null;
     lastErrorSummary: string | null;
+    unknownReason: string | null;
+    firstFailureAt: string | null;
+    latestFailureAt: string | null;
     evaluatedContracts: number;
   } {
     const row = deps.sqlite
@@ -50,6 +57,9 @@ export function createWatcher(deps: {
           last_success_at: string | null;
           last_started_at: string | null;
           last_error_summary: string | null;
+          unknown_reason: string | null;
+          first_failure_at: string | null;
+          latest_failure_at: string | null;
           evaluated_contracts: number;
         }
       | undefined;
@@ -57,6 +67,9 @@ export function createWatcher(deps: {
       lastSuccessAt: row?.last_success_at ?? null,
       lastStartedAt: row?.last_started_at ?? null,
       lastErrorSummary: row?.last_error_summary ?? null,
+      unknownReason: row?.unknown_reason ?? null,
+      firstFailureAt: row?.first_failure_at ?? null,
+      latestFailureAt: row?.latest_failure_at ?? null,
       evaluatedContracts: row?.evaluated_contracts ?? 0,
     };
   }
@@ -117,6 +130,9 @@ export function createWatcher(deps: {
           `UPDATE watcher_run_state
            SET last_success_at = ?,
                last_error_summary = NULL,
+               unknown_reason = NULL,
+               first_failure_at = NULL,
+               latest_failure_at = NULL,
                evaluated_contracts = ?,
                updated_at = ?
            WHERE id = 1`,
@@ -193,10 +209,14 @@ export function createWatcher(deps: {
       deps.sqlite
         .prepare(
           `UPDATE watcher_run_state
-           SET last_error_summary = ?, updated_at = ?
+           SET last_error_summary = ?,
+               unknown_reason = ?,
+               first_failure_at = COALESCE(first_failure_at, ?),
+               latest_failure_at = ?,
+               updated_at = ?
            WHERE id = 1`,
         )
-        .run(summary, nowIso);
+        .run(summary, summary, nowIso, nowIso, nowIso);
       throw error;
     }
   }
@@ -255,9 +275,35 @@ export function createWatcher(deps: {
       deps.clock,
     );
 
+    const connectorHealth = lookupConnectorHealth(
+      deps.sqlite,
+      contract.tenant_id,
+      contract.connector_id,
+    );
+    const monitorUnreachable = shouldSuppressSilentAbsence({
+      monitoringMethod: contract.monitoring_method,
+      connectorHealth,
+    });
+
     const unverified = unverifiedDimensionsForEvidenceLevel(
       (contract.evidence_level as "basic" | "medium" | "high") ?? "basic",
     );
+
+    // Keep true schedule health + overdue_since even when the monitor is down.
+    // Monitor unknown dominates the Catalog badge; open breaches stay visible.
+    const persistedHealth =
+      evaluation.health === "inactive"
+        ? "inactive"
+        : evaluation.health === "unknown"
+          ? "unknown"
+          : evaluation.health === "warning"
+            ? "warning"
+            : evaluation.health === "overdue"
+              ? "overdue"
+              : "healthy";
+    const reasonCode = monitorUnreachable
+      ? MONITOR_UNREACHABLE_REASON
+      : evaluation.reasonCode;
 
     deps.sqlite
       .prepare(
@@ -283,19 +329,16 @@ export function createWatcher(deps: {
         contract.workflow_id,
         evaluation.expectedAt?.toISOString() ?? null,
         evaluation.overdueSince?.toISOString() ?? null,
-        evaluation.health === "inactive"
-          ? "inactive"
-          : evaluation.health === "unknown"
-            ? "unknown"
-            : evaluation.health === "warning"
-              ? "warning"
-              : evaluation.health === "overdue"
-                ? "overdue"
-                : "healthy",
-        evaluation.reasonCode,
+        persistedHealth,
+        reasonCode,
         JSON.stringify(unverified),
         nowIso,
       );
+
+    if (monitorUnreachable) {
+      // Skip opening *new* silence; do not resolve or hide an open breach.
+      return { openedSilentAbsence, resolvedSilentAbsence, renotifications };
+    }
 
     if (evaluation.health === "overdue") {
       const before = alerting.getUnresolvedIncident(
@@ -399,6 +442,20 @@ interface ActiveContractRow {
   created_at: string;
   monitoring_started_at: string | null;
   workflow_is_active: number;
+  monitoring_method: string | null;
+  connector_id: string | null;
+}
+
+function lookupConnectorHealth(
+  sqlite: Database.Database,
+  tenantId: string,
+  connectorId: string | null,
+): string | null {
+  if (!connectorId) return null;
+  const row = sqlite
+    .prepare(`SELECT health FROM n8n_connectors WHERE tenant_id = ? AND id = ?`)
+    .get(tenantId, connectorId) as { health: string } | undefined;
+  return row?.health ?? null;
 }
 
 function listActiveContracts(
@@ -409,7 +466,7 @@ function listActiveContracts(
     return sqlite
       .prepare(
         `SELECT c.*, w.client_id, w.is_active AS workflow_is_active,
-                w.monitoring_started_at
+                w.monitoring_started_at, w.monitoring_method, w.connector_id
          FROM workflow_contracts c
          JOIN workflows w ON w.id = c.workflow_id AND w.tenant_id = c.tenant_id
          WHERE c.tenant_id = ?
@@ -422,7 +479,7 @@ function listActiveContracts(
   return sqlite
     .prepare(
       `SELECT c.*, w.client_id, w.is_active AS workflow_is_active,
-              w.monitoring_started_at
+              w.monitoring_started_at, w.monitoring_method, w.connector_id
        FROM workflow_contracts c
        JOIN workflows w ON w.id = c.workflow_id AND w.tenant_id = c.tenant_id
        WHERE c.contract_type = 'heartbeat'

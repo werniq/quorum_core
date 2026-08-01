@@ -11,6 +11,7 @@ import {
   type HeartbeatEvidenceStatus,
   isOutcomeSuccess,
 } from "../../domain/evidence/empty-result.js";
+import { nextConsecutiveEmptyResults } from "../../domain/health/contract-dimensions.js";
 import {
   buildEmptyResultDetails,
   formatEmptyResultRecoverySummary,
@@ -119,6 +120,10 @@ export function upsertWorkflowStateAfterHeartbeat(input: {
   nextExpectedAt: string | null;
   evidenceSummaryCode: string;
   unverifiedJson: string;
+  consecutiveEmptyResults?: number;
+  lastSourceWatermark?: string | null;
+  lastSourceWatermarkAt?: string | null;
+  consecutiveStaleWatermarks?: number;
 }): void {
   const stamps = computeHeartbeatTimestamps({
     executedAt: input.executedAt,
@@ -127,6 +132,25 @@ export function upsertWorkflowStateAfterHeartbeat(input: {
     previous: input.previous,
   });
 
+  const consecutiveEmpty =
+    input.consecutiveEmptyResults ??
+    nextConsecutiveEmptyResults({
+      evidenceStatus: input.evidenceStatus,
+      itemsProcessed: input.itemsProcessed,
+      previous: Number(input.previous?.consecutive_empty_results ?? 0),
+    });
+  const lastWatermark =
+    input.lastSourceWatermark !== undefined
+      ? input.lastSourceWatermark
+      : ((input.previous?.last_source_watermark as string | null) ?? null);
+  const lastWatermarkAt =
+    input.lastSourceWatermarkAt !== undefined
+      ? input.lastSourceWatermarkAt
+      : ((input.previous?.last_source_watermark_at as string | null) ?? null);
+  const consecutiveStale =
+    input.consecutiveStaleWatermarks ??
+    Number(input.previous?.consecutive_stale_watermarks ?? 0);
+
   input.sqlite
     .prepare(
       `INSERT INTO workflow_states (
@@ -134,8 +158,9 @@ export function upsertWorkflowStateAfterHeartbeat(input: {
          last_acceptable_success_at, last_failure_at, last_external_execution_ref,
          last_status, next_expected_at, overdue_since, current_health, evidence_level,
          evidence_summary_code, unverified_dimensions_json, consecutive_stale_checks,
-         updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'healthy', 'basic', ?, ?, 0, ?)
+         consecutive_empty_results, last_source_watermark, last_source_watermark_at,
+         consecutive_stale_watermarks, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'healthy', 'basic', ?, ?, 0, ?, ?, ?, ?, ?)
        ON CONFLICT(tenant_id, workflow_id) DO UPDATE SET
          last_execution_at = excluded.last_execution_at,
          last_nonempty_success_at = excluded.last_nonempty_success_at,
@@ -150,6 +175,10 @@ export function upsertWorkflowStateAfterHeartbeat(input: {
          evidence_summary_code = excluded.evidence_summary_code,
          unverified_dimensions_json = excluded.unverified_dimensions_json,
          consecutive_stale_checks = 0,
+         consecutive_empty_results = excluded.consecutive_empty_results,
+         last_source_watermark = excluded.last_source_watermark,
+         last_source_watermark_at = excluded.last_source_watermark_at,
+         consecutive_stale_watermarks = excluded.consecutive_stale_watermarks,
          updated_at = excluded.updated_at`,
     )
     .run(
@@ -164,6 +193,10 @@ export function upsertWorkflowStateAfterHeartbeat(input: {
       input.nextExpectedAt,
       input.evidenceSummaryCode,
       input.unverifiedJson,
+      consecutiveEmpty,
+      lastWatermark,
+      lastWatermarkAt,
+      consecutiveStale,
       input.receivedAt,
     );
 }
@@ -175,7 +208,9 @@ export function resolveOpenIncidentsOfTypes(input: {
   workflowId: string;
   at: string;
   actor: string;
-  types: Array<"hard_failure" | "empty_result" | "silent_absence">;
+  types: Array<
+    "hard_failure" | "empty_result" | "silent_absence" | "freshness_stale"
+  >;
 }): void {
   const placeholders = input.types.map(() => "?").join(", ");
   const openIncidents = input.sqlite
@@ -283,8 +318,13 @@ export function openOrUpdateEmptyResultIncident(input: {
   itemsProcessed: number;
   externalExecutionRef: string | null;
   lastNonEmptySuccessAt: string | null;
+  consecutiveEmpties: number;
+  breachThreshold: number;
   enqueueOpened: (incidentId: string) => void;
 }): void {
+  if (input.consecutiveEmpties < Math.max(1, input.breachThreshold)) {
+    return;
+  }
   const workflowMeta = input.sqlite
     .prepare(
       `SELECT name, monitoring_method FROM workflows
@@ -312,6 +352,8 @@ export function openOrUpdateEmptyResultIncident(input: {
     itemsProcessed: input.itemsProcessed,
     externalExecutionRef: input.externalExecutionRef,
     lastNonEmptySuccessAt: input.lastNonEmptySuccessAt,
+    // Prefer the tracked consecutive counter (may include pre-incident empties).
+    consecutiveEmpties: input.consecutiveEmpties,
   });
   const incident = input.alerting.openOrObserveIncident(input.tenantId, {
     id: createId(),
@@ -321,6 +363,36 @@ export function openOrUpdateEmptyResultIncident(input: {
     severity: input.policy === "warning" ? "warning" : "critical",
     summary: formatEmptyResultSummary(details),
     detailsJson: JSON.stringify(details),
+    observedAt: input.receivedAt,
+  });
+  if (!before) {
+    input.enqueueOpened(incident.id);
+  }
+}
+
+export function openOrUpdateFreshnessIncident(input: {
+  alerting: SqliteAlertingRepositories;
+  tenantId: string;
+  workflowId: string;
+  receivedAt: string;
+  summary: string;
+  detailsJson: string;
+  enqueueOpened: (incidentId: string) => void;
+}): void {
+  const before = input.alerting.getUnresolvedIncident(
+    input.tenantId,
+    "workflow",
+    input.workflowId,
+    "freshness_stale",
+  );
+  const incident = input.alerting.openOrObserveIncident(input.tenantId, {
+    id: createId(),
+    contractKind: "workflow",
+    workflowId: input.workflowId,
+    incidentType: "freshness_stale",
+    severity: "warning",
+    summary: input.summary,
+    detailsJson: input.detailsJson,
     observedAt: input.receivedAt,
   });
   if (!before) {
