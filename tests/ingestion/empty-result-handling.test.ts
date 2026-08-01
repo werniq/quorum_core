@@ -401,6 +401,199 @@ describe("empty-result contract handling", () => {
     expect(empty.status).toBe("open");
     expect(empty.summary).toContain("contract violation");
   });
+
+  it("resets consecutive empties only after non-empty success; failures do not count", () => {
+    const sqlite = openDb();
+    const { tenant, workflowId, keyId, ingest } = seedWorkflow(
+      sqlite,
+      "failure",
+    );
+    sqlite
+      .prepare(
+        `UPDATE workflow_contracts
+         SET empty_result_breach_threshold = 2
+         WHERE tenant_id = ? AND workflow_id = ?`,
+      )
+      .run(tenant.id, workflowId);
+
+    ingestOk(ingest, workflowId, keyId, "empty-a", {
+      schemaVersion: 1,
+      executedAt: "2026-07-18T08:00:00Z",
+      status: "success",
+      itemsProcessed: 0,
+      externalExecutionRef: "empty-a",
+    });
+    expect(
+      (
+        sqlite
+          .prepare(
+            `SELECT consecutive_empty_results AS n FROM workflow_states WHERE workflow_id = ?`,
+          )
+          .get(workflowId) as { n: number }
+      ).n,
+    ).toBe(1);
+    expect(
+      sqlite
+        .prepare(
+          `SELECT id FROM incidents WHERE workflow_id = ? AND incident_type = 'empty_result' AND status IN ('open','acknowledged')`,
+        )
+        .get(workflowId),
+    ).toBeUndefined();
+
+    ingestOk(ingest, workflowId, keyId, "fail-hold", {
+      schemaVersion: 1,
+      executedAt: "2026-07-18T08:05:00Z",
+      status: "failure",
+      itemsProcessed: 4,
+      externalExecutionRef: "fail-hold",
+    });
+    expect(
+      (
+        sqlite
+          .prepare(
+            `SELECT consecutive_empty_results AS n FROM workflow_states WHERE workflow_id = ?`,
+          )
+          .get(workflowId) as { n: number }
+      ).n,
+    ).toBe(1);
+
+    ingestOk(ingest, workflowId, keyId, "empty-b", {
+      schemaVersion: 1,
+      executedAt: "2026-07-18T08:10:00Z",
+      status: "success",
+      itemsProcessed: 0,
+      externalExecutionRef: "empty-b",
+    });
+    expect(
+      (
+        sqlite
+          .prepare(
+            `SELECT consecutive_empty_results AS n FROM workflow_states WHERE workflow_id = ?`,
+          )
+          .get(workflowId) as { n: number }
+      ).n,
+    ).toBe(2);
+    expect(
+      (
+        sqlite
+          .prepare(
+            `SELECT status FROM incidents
+             WHERE workflow_id = ? AND incident_type = 'empty_result'`,
+          )
+          .get(workflowId) as { status: string }
+      ).status,
+    ).toBe("open");
+
+    ingestOk(ingest, workflowId, keyId, "ok-reset", {
+      schemaVersion: 1,
+      executedAt: "2026-07-18T08:15:00Z",
+      status: "success",
+      itemsProcessed: 3,
+      externalExecutionRef: "ok-reset",
+    });
+    expect(
+      (
+        sqlite
+          .prepare(
+            `SELECT consecutive_empty_results AS n FROM workflow_states WHERE workflow_id = ?`,
+          )
+          .get(workflowId) as { n: number }
+      ).n,
+    ).toBe(0);
+    expect(
+      (
+        sqlite
+          .prepare(
+            `SELECT status FROM incidents
+             WHERE workflow_id = ? AND incident_type = 'empty_result'`,
+          )
+          .get(workflowId) as { status: string }
+      ).status,
+    ).toBe("resolved");
+  });
+
+  it("opens freshness_stale then recovers when the watermark advances", () => {
+    const sqlite = openDb();
+    const { tenant, workflowId, keyId, ingest } = seedWorkflow(
+      sqlite,
+      "allowed",
+    );
+    sqlite
+      .prepare(
+        `UPDATE workflow_contracts
+         SET source_watermark_required = 1,
+             watermark_comparison_type = 'numeric',
+             freshness_allowed_staleness_seconds = 0,
+             empty_result_breach_threshold = 1
+         WHERE tenant_id = ? AND workflow_id = ?`,
+      )
+      .run(tenant.id, workflowId);
+
+    ingestOk(ingest, workflowId, keyId, "wm-1", {
+      schemaVersion: 1,
+      executedAt: "2026-07-18T08:00:00Z",
+      status: "success",
+      itemsProcessed: 2,
+      externalExecutionRef: "wm-1",
+      metadata: { sourceWatermark: "100" },
+    });
+    ingestOk(ingest, workflowId, keyId, "wm-stale", {
+      schemaVersion: 1,
+      executedAt: "2026-07-18T08:05:00Z",
+      status: "success",
+      itemsProcessed: 2,
+      externalExecutionRef: "wm-stale",
+      metadata: { sourceWatermark: "100" },
+    });
+    expect(
+      (
+        sqlite
+          .prepare(
+            `SELECT status FROM incidents
+             WHERE workflow_id = ? AND incident_type = 'freshness_stale'`,
+          )
+          .get(workflowId) as { status: string }
+      ).status,
+    ).toBe("open");
+
+    ingestOk(ingest, workflowId, keyId, "wm-advance", {
+      schemaVersion: 1,
+      executedAt: "2026-07-18T08:10:00Z",
+      status: "success",
+      itemsProcessed: 2,
+      externalExecutionRef: "wm-advance",
+      metadata: { sourceWatermark: "101" },
+    });
+    expect(
+      (
+        sqlite
+          .prepare(
+            `SELECT status FROM incidents
+             WHERE workflow_id = ? AND incident_type = 'freshness_stale'`,
+          )
+          .get(workflowId) as { status: string }
+      ).status,
+    ).toBe("resolved");
+    expect(
+      (
+        sqlite
+          .prepare(
+            `SELECT last_source_watermark AS w, consecutive_stale_watermarks AS n
+             FROM workflow_states WHERE workflow_id = ?`,
+          )
+          .get(workflowId) as { w: string; n: number }
+      ).w,
+    ).toBe("101");
+    expect(
+      (
+        sqlite
+          .prepare(
+            `SELECT consecutive_stale_watermarks AS n FROM workflow_states WHERE workflow_id = ?`,
+          )
+          .get(workflowId) as { n: number }
+      ).n,
+    ).toBe(0);
+  });
 });
 
 describe("incidents page open-before-history", () => {

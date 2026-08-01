@@ -5,7 +5,8 @@ Quorum uses strict layer boundaries:
 ```text
 Domain
   contracts, evidence classification, cadence, health, incidents,
-  evidence-level calculation, notification policy
+  evidence-level calculation, notification policy,
+  schedule / output / freshness dimensions, monitor reachability
 
 Application
   use cases, authorization, transactions, repositories,
@@ -41,8 +42,8 @@ Rules:
   timeouts, and response-size limits. Private/link-local/metadata destinations are rejected for
   hosted policy. Self-hosted Community may allow LAN `http://` n8n via `networkPolicy: self_hosted_local`
   (cloud metadata stays blocked). Polling is the easiest onboarding path; push heartbeats remain available for detailed signed reporting.
-- Watcher liveness is exposed at `GET /health/watcher` and must be monitored by an external
-  uptime check; the endpoint is non-200 when evaluations are stale.
+- Watcher liveness is exposed at `GET /health/watcher` (and Catalog **Test watchdog**) and must be monitored by an external
+  uptime check; the endpoint is non-200 when evaluations are stale. Poll connector failure surfaces as **Monitor unknown**, not workflow silence.
 
 Default self-hosted process (`src/main.ts`):
 

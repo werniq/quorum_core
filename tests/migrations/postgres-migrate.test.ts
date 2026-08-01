@@ -322,6 +322,25 @@ describe("Postgres migrations", () => {
     expect(waitingSql).toContain("'waiting'");
     expect(waitingSql).toContain("SET \"match_status\" = 'waiting'");
     expect(waitingSql).toContain("reconciliation_items_status_check");
+
+    const watchdogSql = readMigrationSql(
+      "postgres",
+      "0018_watchdog_dimensions",
+    );
+    expect(watchdogSql).toContain("empty_result_breach_threshold");
+    expect(watchdogSql).toContain("source_watermark_required");
+    expect(watchdogSql).toContain("freshness_stale");
+    expect(watchdogSql).toContain("consecutive_empty_results");
+    expect(watchdogSql).toContain("last_source_watermark");
+
+    const unknownFreshSql = readMigrationSql(
+      "postgres",
+      "0019_watchdog_unknown_freshness",
+    );
+    expect(unknownFreshSql).toContain("unknown_reason");
+    expect(unknownFreshSql).toContain("watermark_comparison_type");
+    expect(unknownFreshSql).toContain("freshness_allowed_staleness_seconds");
+    expect(unknownFreshSql).toContain("last_source_watermark_at");
   });
 
   it("enforces heartbeat idempotency, immutability, and healthy+basic state", async () => {

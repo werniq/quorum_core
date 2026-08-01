@@ -23,6 +23,8 @@ import {
   compareCatalogSortBuckets,
 } from "../../src/domain/catalog/sort.js";
 import { transitionIncidentStatus } from "../../src/domain/incidents/lifecycle.js";
+import { SqliteN8nConnectorRepositories } from "../../src/infrastructure/db/repositories/sqlite-n8n-connector-repositories.js";
+import { MONITOR_UNREACHABLE_REASON } from "../../src/domain/health/monitor-reachability.js";
 import { SILENT_ABSENCE_MESSAGE } from "../../src/domain/n8n/workflow-editor-url.js";
 
 const openConnections: BetterSqliteDatabase.Database[] = [];
@@ -755,6 +757,317 @@ describe("alert delivery and catalog", () => {
     });
     expect(catalog[0]?.unverifiedDimensions.length).toBeGreaterThan(0);
     expect(catalog[0]?.detailUrl).toContain(workflowId);
+  });
+
+  it("does not open silent_absence when the poll connector is unreachable", () => {
+    const sqlite = openDb();
+    const core = new SqliteCoreRepositories(sqlite);
+    const connectors = new SqliteN8nConnectorRepositories(sqlite);
+    const tenant = core.ensureSelfHostedTenant();
+    const workflowId = createId();
+    const anchor = "2026-07-18T14:00:00.000Z";
+    const connector = connectors.createConnector(tenant.id, {
+      name: "Prod n8n",
+      baseUrl: "https://n8n.example.com",
+      encryptedApiKey: encryptCredentialSecret("test-api-key", KEK),
+      status: "active",
+      pollIntervalMs: 60_000,
+      nowIso: anchor,
+    });
+    core.createWorkflow(tenant.id, {
+      id: workflowId,
+      clientId: null,
+      name: "Poll invoices",
+      externalWorkflowId: createId(),
+      description: null,
+      monitoringMethod: "poll",
+      isActive: true,
+      monitoringStartedAt: anchor,
+    });
+    connectors.bindWorkflowConnector(tenant.id, workflowId, connector.id);
+    connectors.updateConnectorHealth(tenant.id, connector.id, {
+      health: "unreachable",
+      checkedAtIso: anchor,
+      errorCode: "unreachable",
+      errorSummary: "n8n API down",
+    });
+    core.createWorkflowContract(tenant.id, {
+      id: createId(),
+      workflowId,
+      name: "Poll invoices",
+      businessPurpose: "Poll invoices",
+      cadenceType: "interval",
+      cadenceValue: "1",
+      intervalMode: "fixed_rate",
+      scheduleAnchorAt: anchor,
+      timezone: null,
+      allowedLatenessMinutes: 5,
+      maxQuietWindowMinutes: 60,
+      initialGraceMinutes: 0,
+      emptyResultPolicy: "allowed",
+      countLessSuccessAllowed: true,
+      notificationBackoffMinutes: 60,
+      evidenceLevel: "basic",
+      schemaVersion: 1,
+      isActive: true,
+      activatedAt: anchor,
+    });
+    core.upsertWorkflowState(tenant.id, {
+      tenantId: tenant.id,
+      workflowId,
+      lastExecutionAt: anchor,
+      lastNonemptySuccessAt: anchor,
+      lastAcceptableSuccessAt: anchor,
+      lastFailureAt: null,
+      lastExternalExecutionRef: "exec-1",
+      lastStatus: "success",
+      nextExpectedAt: null,
+      overdueSince: null,
+      currentHealth: "healthy",
+      evidenceLevel: "basic",
+      evidenceSummaryCode: "healthy_occurrence_satisfied",
+      unverifiedDimensionsJson: "[]",
+      consecutiveStaleChecks: 0,
+      updatedAt: anchor,
+    });
+
+    const watcher = createWatcher({
+      sqlite,
+      clock: new FixedClock(new Date("2026-07-18T14:06:01.000Z")),
+      claimOwner: "watcher-1",
+      claimTtlMs: 55_000,
+      getSchemaReadiness: () => ({ status: "ready", appliedMigrations: [] }),
+    });
+    const result = watcher.runTick(tenant.id);
+    expect(result.openedSilentAbsence).toBe(0);
+    const state = sqlite
+      .prepare(
+        `SELECT current_health AS h, evidence_summary_code AS c, overdue_since AS o
+         FROM workflow_states WHERE workflow_id = ?`,
+      )
+      .get(workflowId) as { h: string; c: string; o: string | null };
+    // Schedule breach stays persisted; monitor unknown is a Catalog badge/trust signal.
+    expect(state.h).toBe("overdue");
+    expect(state.o).toBeTruthy();
+    expect(state.c).toBe(MONITOR_UNREACHABLE_REASON);
+
+    const catalog = queryContractCatalog({
+      sqlite,
+      clock: new FixedClock(new Date("2026-07-18T14:06:30.000Z")),
+      tenantId: tenant.id,
+      publicBaseUrl: "http://127.0.0.1:3000",
+    });
+    const row = catalog.find((r) => r.workflowId === workflowId);
+    expect(row?.displayHealth).toBe("monitor_unknown");
+    expect(row?.dimensions.schedule).toBe("breached");
+    expect(row?.activeIncident?.type).not.toBe("silent_absence");
+  });
+
+  it("keeps an open silent_absence visible when the monitor becomes unknown", () => {
+    const sqlite = openDb();
+    const core = new SqliteCoreRepositories(sqlite);
+    const connectors = new SqliteN8nConnectorRepositories(sqlite);
+    const alerting = new SqliteAlertingRepositories(sqlite);
+    const tenant = core.ensureSelfHostedTenant();
+    const workflowId = createId();
+    const anchor = "2026-07-18T14:00:00.000Z";
+    const connector = connectors.createConnector(tenant.id, {
+      name: "Prod n8n",
+      baseUrl: "https://n8n.example.com",
+      encryptedApiKey: encryptCredentialSecret("test-api-key", KEK),
+      status: "active",
+      pollIntervalMs: 60_000,
+      nowIso: anchor,
+    });
+    core.createWorkflow(tenant.id, {
+      id: workflowId,
+      clientId: null,
+      name: "Poll invoices",
+      externalWorkflowId: createId(),
+      description: null,
+      monitoringMethod: "poll",
+      isActive: true,
+      monitoringStartedAt: anchor,
+    });
+    connectors.bindWorkflowConnector(tenant.id, workflowId, connector.id);
+    connectors.updateConnectorHealth(tenant.id, connector.id, {
+      health: "healthy",
+      checkedAtIso: anchor,
+      success: true,
+    });
+    core.createWorkflowContract(tenant.id, {
+      id: createId(),
+      workflowId,
+      name: "Poll invoices",
+      businessPurpose: "Poll invoices",
+      cadenceType: "interval",
+      cadenceValue: "1",
+      intervalMode: "fixed_rate",
+      scheduleAnchorAt: anchor,
+      timezone: null,
+      allowedLatenessMinutes: 5,
+      maxQuietWindowMinutes: 60,
+      initialGraceMinutes: 0,
+      emptyResultPolicy: "allowed",
+      countLessSuccessAllowed: true,
+      notificationBackoffMinutes: 60,
+      evidenceLevel: "basic",
+      schemaVersion: 1,
+      isActive: true,
+      activatedAt: anchor,
+    });
+    core.upsertWorkflowState(tenant.id, {
+      tenantId: tenant.id,
+      workflowId,
+      lastExecutionAt: anchor,
+      lastNonemptySuccessAt: anchor,
+      lastAcceptableSuccessAt: anchor,
+      lastFailureAt: null,
+      lastExternalExecutionRef: "exec-1",
+      lastStatus: "success",
+      nextExpectedAt: null,
+      overdueSince: null,
+      currentHealth: "healthy",
+      evidenceLevel: "basic",
+      evidenceSummaryCode: "healthy_occurrence_satisfied",
+      unverifiedDimensionsJson: "[]",
+      consecutiveStaleChecks: 0,
+      updatedAt: anchor,
+    });
+
+    const watcher = createWatcher({
+      sqlite,
+      clock: new FixedClock(new Date("2026-07-18T14:06:01.000Z")),
+      claimOwner: "watcher-1",
+      claimTtlMs: 55_000,
+      getSchemaReadiness: () => ({ status: "ready", appliedMigrations: [] }),
+    });
+    expect(watcher.runTick(tenant.id).openedSilentAbsence).toBe(1);
+    const open = alerting.getUnresolvedIncident(
+      tenant.id,
+      "workflow",
+      workflowId,
+      "silent_absence",
+    );
+    expect(open).toBeTruthy();
+
+    connectors.updateConnectorHealth(tenant.id, connector.id, {
+      health: "unreachable",
+      checkedAtIso: "2026-07-18T14:06:30.000Z",
+      errorCode: "unreachable",
+      errorSummary: "n8n API down",
+    });
+    const connectorRow = connectors.getConnector(tenant.id, connector.id);
+    expect(connectorRow?.unknownReason).toBe("n8n API down");
+    expect(connectorRow?.firstFailureAt).toBe("2026-07-18T14:06:30.000Z");
+    expect(connectorRow?.latestFailureAt).toBe("2026-07-18T14:06:30.000Z");
+    expect(connectorRow?.lastSuccessAt).toBe(anchor);
+
+    expect(watcher.runTick(tenant.id).openedSilentAbsence).toBe(0);
+    const stillOpen = alerting.getUnresolvedIncident(
+      tenant.id,
+      "workflow",
+      workflowId,
+      "silent_absence",
+    );
+    expect(stillOpen?.id).toBe(open?.id);
+
+    const catalog = queryContractCatalog({
+      sqlite,
+      clock: new FixedClock(new Date("2026-07-18T14:07:00.000Z")),
+      tenantId: tenant.id,
+      publicBaseUrl: "http://127.0.0.1:3000",
+    });
+    const row = catalog.find((r) => r.workflowId === workflowId);
+    expect(row?.displayHealth).toBe("monitor_unknown");
+    expect(row?.dimensions.schedule).toBe("breached");
+    expect(row?.activeIncident?.type).toBe("silent_absence");
+
+    connectors.updateConnectorHealth(tenant.id, connector.id, {
+      health: "healthy",
+      checkedAtIso: "2026-07-18T14:08:00.000Z",
+      success: true,
+    });
+    const recovered = connectors.getConnector(tenant.id, connector.id);
+    expect(recovered?.health).toBe("healthy");
+    expect(recovered?.unknownReason).toBeNull();
+    expect(recovered?.firstFailureAt).toBeNull();
+    expect(recovered?.latestFailureAt).toBeNull();
+    expect(recovered?.lastSuccessAt).toBe("2026-07-18T14:08:00.000Z");
+  });
+
+  it("persists watcher unknown state on tick failure and clears on success", () => {
+    const sqlite = openDb();
+    const core = new SqliteCoreRepositories(sqlite);
+    const tenant = core.ensureSelfHostedTenant();
+    const workflowId = createId();
+    const now = "2026-07-18T12:00:00.000Z";
+    core.createWorkflow(tenant.id, {
+      id: workflowId,
+      clientId: null,
+      name: "Broken cron",
+      externalWorkflowId: createId(),
+      description: null,
+      monitoringMethod: "push",
+      isActive: true,
+      monitoringStartedAt: now,
+    });
+    // Cron without timezone forces CadenceEvaluationError inside the tick.
+    core.createWorkflowContract(tenant.id, {
+      id: createId(),
+      workflowId,
+      name: "Broken cron",
+      businessPurpose: "Broken cron",
+      cadenceType: "cron",
+      cadenceValue: "0 * * * *",
+      intervalMode: null,
+      scheduleAnchorAt: null,
+      timezone: null,
+      allowedLatenessMinutes: 5,
+      maxQuietWindowMinutes: null,
+      initialGraceMinutes: 0,
+      emptyResultPolicy: "allowed",
+      countLessSuccessAllowed: true,
+      notificationBackoffMinutes: 60,
+      evidenceLevel: "basic",
+      schemaVersion: 1,
+      isActive: true,
+      activatedAt: now,
+    });
+
+    const watcher = createWatcher({
+      sqlite,
+      clock: new FixedClock(new Date(now)),
+      claimOwner: "watcher-1",
+      claimTtlMs: 55_000,
+      getSchemaReadiness: () => ({ status: "ready", appliedMigrations: [] }),
+    });
+    expect(() => watcher.runTick(tenant.id)).toThrow(/timezone/i);
+    const failed = watcher.getRunState();
+    expect(failed.unknownReason).toMatch(/timezone/i);
+    expect(failed.firstFailureAt).toBe(now);
+    expect(failed.latestFailureAt).toBe(now);
+
+    // Deactivate the broken contract so the next tick can succeed.
+    sqlite
+      .prepare(
+        `UPDATE workflow_contracts SET is_active = 0 WHERE workflow_id = ?`,
+      )
+      .run(workflowId);
+
+    const okWatcher = createWatcher({
+      sqlite,
+      clock: new FixedClock(new Date("2026-07-18T12:01:00.000Z")),
+      claimOwner: "watcher-2",
+      claimTtlMs: 55_000,
+      getSchemaReadiness: () => ({ status: "ready", appliedMigrations: [] }),
+    });
+    okWatcher.runTick(tenant.id);
+    const ok = okWatcher.getRunState();
+    expect(ok.unknownReason).toBeNull();
+    expect(ok.firstFailureAt).toBeNull();
+    expect(ok.latestFailureAt).toBeNull();
+    expect(ok.lastSuccessAt).toBe("2026-07-18T12:01:00.000Z");
   });
 });
 

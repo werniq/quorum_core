@@ -2,14 +2,28 @@
 
 Quorum can watch an n8n workflow in two ways. Start with **polling** unless you already know you need signed reports from inside the workflow.
 
+Under one workflow registration, Quorum evaluates **three dimensions**:
+
+| Dimension     | Question                                    | Typical source                        |
+| ------------- | ------------------------------------------- | ------------------------------------- |
+| **Schedule**  | Did it run within the grace window?         | Polling or push cadence               |
+| **Output**    | Did items/policy predicates hold (after N)? | Push (and polled counts when present) |
+| **Freshness** | Did a source watermark advance?             | Push metadata (`sourceWatermark`)     |
+
+Trust signals (not workflow breaches):
+
+- **Monitor unknown** — Quorum cannot reach the n8n API (poll connector unreachable / auth failed / misconfigured). The Catalog **badge** shows Monitor unknown; open schedule/output/freshness breaches stay visible on the card and are not auto-resolved.
+- **Watchdog** — Quorum’s own watcher liveness (`GET /health/watcher` + Catalog **Test watchdog**, read-only — does not open incidents or change workflows).
+
 ## Polling (recommended)
 
 Quorum connects to n8n with a base URL and API key, then reads execution history on a schedule.
 
 - No edits inside the n8n workflow
 - No HMAC secrets or Quorum workflow IDs for the normal path
-- Best first path for silent absence (“did it run when it should?”)
+- Best first path for **schedule** (“did it run when it should?”)
 - Evidence stays **basic** — Quorum saw n8n’s execution record, not a custom payload you signed
+- If the API is down, Catalog shows **Monitor unknown**, not Overdue silence
 
 Use this for most contracts, including the [Poll invoices](demo/poll-invoices-example.md) silent-absence walkthrough.
 
@@ -18,8 +32,9 @@ Use this for most contracts, including the [Poll invoices](demo/poll-invoices-ex
 The n8n workflow posts a signed heartbeat to Quorum after (or during) a run.
 
 - Requires a push credential (Key ID + HMAC secret) and a small setup in the workflow
-- Richer reporting from inside the run: status, items processed, external execution refs
-- Useful when you want signed failure or empty-result heartbeats, not only what the n8n executions API exposes
+- Richer **output** reporting: status, items processed, external execution refs
+- Optional **freshness**: set contract `source_watermark_required`, choose `watermark_comparison_type` (`auto` / `numeric` / `iso_datetime` / `lexicographic`), and optionally `freshness_allowed_staleness_seconds` (how long an unchanged watermark may remain before counting as stale). Send `metadata.sourceWatermark` (or `source_watermark` / `source_max_updated_at`). If freshness is not configured, Catalog shows **Not configured**.
+- Empty-result policy is per-workflow (`allowed` / `warning` / `failure`) with a **consecutive-breach threshold** (default 1) — zero items is not a global `items >= 1` rule
 - Import [examples/n8n/quorum-signed-heartbeat.json](../examples/n8n/quorum-signed-heartbeat.json)
 
 ## Choose in one line
@@ -27,8 +42,9 @@ The n8n workflow posts a signed heartbeat to Quorum after (or during) a run.
 | Need                                         | Path            |
 | -------------------------------------------- | --------------- |
 | Fastest setup, no workflow changes           | Polling         |
-| Silent absence on a schedule you already run | Polling         |
+| Schedule / silent absence                    | Polling         |
 | Signed success / failure / empty-result body | Push            |
+| Source watermark freshness                   | Push            |
 | Fleet secret injection via Docker/K8s env    | Push (advanced) |
 
 Setup details: [connect-n8n.md](connect-n8n.md) · [push-heartbeats.md](push-heartbeats.md) · [examples/n8n/README.md](../examples/n8n/README.md).

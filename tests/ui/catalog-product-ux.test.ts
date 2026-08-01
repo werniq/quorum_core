@@ -678,4 +678,99 @@ describe("catalog product UX UI acceptance", () => {
 
     await app.close();
   });
+
+  it("runs a safe read-only watchdog test without creating incidents", async () => {
+    const sqlite = openDb();
+    const clock = new FixedClock(new Date("2026-07-18T12:00:00.000Z"));
+    const { sessionId, csrf, core, tenant } = seedAdmin(sqlite, clock);
+    const workflowId = createId();
+    core.createWorkflow(tenant.id, {
+      id: workflowId,
+      clientId: null,
+      name: "Watchdog probe",
+      externalWorkflowId: "ext-wd",
+      description: null,
+      monitoringMethod: "push",
+      isActive: true,
+      monitoringStartedAt: clock.now().toISOString(),
+    });
+    core.createWorkflowContract(tenant.id, {
+      id: createId(),
+      workflowId,
+      name: "Watchdog probe",
+      businessPurpose: "Watchdog probe",
+      cadenceType: "interval",
+      cadenceValue: "60",
+      intervalMode: "fixed_rate",
+      scheduleAnchorAt: clock.now().toISOString(),
+      timezone: null,
+      allowedLatenessMinutes: 5,
+      maxQuietWindowMinutes: 60,
+      initialGraceMinutes: 0,
+      emptyResultPolicy: "allowed",
+      countLessSuccessAllowed: true,
+      notificationBackoffMinutes: 60,
+      evidenceLevel: "basic",
+      schemaVersion: 1,
+      isActive: true,
+      activatedAt: clock.now().toISOString(),
+    });
+    const beforeIncidents = (
+      sqlite.prepare(`SELECT COUNT(*) AS n FROM incidents`).get() as {
+        n: number;
+      }
+    ).n;
+    const beforeWorkflowUpdated = (
+      sqlite
+        .prepare(`SELECT updated_at AS u FROM workflows WHERE id = ?`)
+        .get(workflowId) as { u: string }
+    ).u;
+
+    const app = await buildApp({
+      env: loadEnv({
+        NODE_ENV: "test",
+        QUORUM_CREDENTIAL_KEK: "quorum-test-credential-kek",
+      }),
+      clock,
+      sqlite,
+      enableUi: true,
+      getSchemaReadiness: () => ({
+        status: "ready",
+        appliedMigrations: ["0010_catalog_ux_roles"],
+      }),
+      getWatcherHealth: () => ({
+        lastSuccessAt: "2026-07-18T11:59:00.000Z",
+        staleAfterMs: 180_000,
+        nowMs: clock.now().getTime(),
+      }),
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/catalog/watchdog-test",
+      headers: {
+        cookie: `${SESSION_COOKIE}=${sessionId}`,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      payload: `csrf=${encodeURIComponent(csrf)}`,
+    });
+    expect(res.statusCode).toBe(302);
+    expect(res.headers.location).toContain("Watchdog%20ok");
+
+    expect(
+      (
+        sqlite.prepare(`SELECT COUNT(*) AS n FROM incidents`).get() as {
+          n: number;
+        }
+      ).n,
+    ).toBe(beforeIncidents);
+    expect(
+      (
+        sqlite
+          .prepare(`SELECT updated_at AS u FROM workflows WHERE id = ?`)
+          .get(workflowId) as { u: string }
+      ).u,
+    ).toBe(beforeWorkflowUpdated);
+    await app.close();
+  });
 });
