@@ -1593,6 +1593,10 @@ export function statusBadge(health: string): string {
     overdue: { label: "Overdue", cls: "badge-status-overdue" },
     unknown: { label: "Unknown", cls: "badge-status-unknown" },
     inactive: { label: "Paused", cls: "badge-status-paused" },
+    monitor_unknown: {
+      label: "Monitor unknown",
+      cls: "badge-status-unknown",
+    },
   };
   const item = map[health] ?? { label: health, cls: "badge-status-unknown" };
   return `<span class="badge ${item.cls}"><span class="sr-only">Health: </span>${escapeHtml(item.label)}</span>`;

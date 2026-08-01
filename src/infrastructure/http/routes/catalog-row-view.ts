@@ -9,6 +9,8 @@ export function toCatalogRowView(row: CatalogContractRow): CatalogRowView {
     clientName: row.clientName,
     businessPurposeName: row.businessPurposeName,
     health: row.health,
+    displayHealth: row.displayHealth,
+    dimensions: row.dimensions,
     evidenceLevel: row.evidenceLevel,
     evidenceExplanation: row.evidenceExplanation,
     expectedCadenceOrWindow: row.expectedCadenceOrWindow,
@@ -25,6 +27,9 @@ export function toCatalogRowView(row: CatalogContractRow): CatalogRowView {
     alertChannelHealth: row.alertChannelHealth,
     connectorHealth: row.connectorHealth,
     watcherHealth: row.watcherHealth,
+    processWatchdogHealth: row.processWatchdogHealth,
+    sourceWatermarkRequired: row.sourceWatermarkRequired,
+    emptyResultBreachThreshold: row.emptyResultBreachThreshold,
     monitoringMethod: row.monitoringMethod,
     activeIncident: row.activeIncident
       ? {

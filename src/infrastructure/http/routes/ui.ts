@@ -85,6 +85,11 @@ export function registerUiRoutes(
     sqlite: Database.Database;
     clock: Clock;
     processOutbox?: ReturnType<typeof createOutboxProcessor>;
+    getWatcherHealth?: () => {
+      lastSuccessAt: string | null;
+      staleAfterMs: number;
+      nowMs: number;
+    };
   },
 ): void {
   const auth = new SqliteAuthRepositories(deps.sqlite);
@@ -225,6 +230,9 @@ export function registerUiRoutes(
     sqlite: deps.sqlite,
     clock: deps.clock,
     ...(deps.processOutbox ? { processOutbox: deps.processOutbox } : {}),
+    ...(deps.getWatcherHealth
+      ? { getWatcherHealth: deps.getWatcherHealth }
+      : {}),
     requireSession,
     assertCsrf,
     tenantId,

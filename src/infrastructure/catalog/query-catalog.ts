@@ -9,6 +9,13 @@ import {
   verifiedDimensionsForEvidenceLevel,
 } from "../../domain/catalog/evidence-explanation.js";
 import { resolveEffectiveEvidenceLevel } from "../../domain/evidence/resolve-evidence-level.js";
+import {
+  buildContractDimensions,
+  rollUpCatalogDisplayHealth,
+  type CatalogDisplayHealth,
+  type ContractDimensions,
+} from "../../domain/health/contract-dimensions.js";
+import { shouldSuppressSilentAbsence } from "../../domain/health/monitor-reachability.js";
 import type { ContractHealth } from "../../domain/terminology.js";
 import type { AlertChannelHealthState } from "../../domain/terminology.js";
 import { queryVolumeCatalogSummary } from "./volume-catalog.js";
@@ -21,7 +28,11 @@ export interface CatalogContractRow {
   clientName: string | null;
   businessPurposeName: string;
   contractKind: "workflow" | "outcome";
+  /** Underlying schedule health from workflow_states / deriveHealth. */
   health: ContractHealth;
+  /** Primary catalog UI health (monitor_unknown dominates when n8n unreachable). */
+  displayHealth: CatalogDisplayHealth;
+  dimensions: ContractDimensions;
   evidenceLevel: "basic" | "medium" | "high";
   evidenceExplanation: string;
   verifiedDimensions: string[];
@@ -45,8 +56,12 @@ export interface CatalogContractRow {
     summary: string;
   } | null;
   connectorHealth: string | null;
-  /** Derived from last watcher write to workflow_states.updated_at. */
+  /** Derived from last watcher write to workflow_states.updated_at (per-row). */
   watcherHealth: "ok" | "stale" | "not_evaluated";
+  /** Process-level dead-man from watcher_run_state (same for all rows). */
+  processWatchdogHealth: "ok" | "stale" | "not_evaluated";
+  sourceWatermarkRequired: boolean;
+  emptyResultBreachThreshold: number;
   alertChannelHealth: AlertChannelHealthState | "none";
   monitoringMethod: "poll" | "push" | null;
   detailUrl: string;
@@ -84,6 +99,11 @@ export function queryContractCatalog(input: {
     params.push(input.clientId);
   }
 
+  const processWatchdogHealth = deriveProcessWatchdogHealth(
+    input.sqlite,
+    input.clock,
+  );
+
   const rows = input.sqlite
     .prepare(
       `SELECT
@@ -98,6 +118,8 @@ export function queryContractCatalog(input: {
          c.is_active AS contract_active,
          c.evidence_level,
          c.empty_result_policy,
+         c.empty_result_breach_threshold,
+         c.source_watermark_required,
          w.client_id,
          w.is_active AS workflow_active,
          w.connector_id,
@@ -112,7 +134,11 @@ export function queryContractCatalog(input: {
          s.next_expected_at,
          s.overdue_since,
          s.evidence_level AS state_evidence_level,
-         s.updated_at AS state_updated_at
+         s.updated_at AS state_updated_at,
+         s.consecutive_empty_results,
+         s.last_source_watermark,
+         s.consecutive_stale_watermarks,
+         s.evidence_summary_code
        FROM workflow_contracts c
        JOIN workflows w ON w.id = c.workflow_id AND w.tenant_id = c.tenant_id
        LEFT JOIN clients cl ON cl.id = w.client_id AND cl.tenant_id = c.tenant_id
@@ -187,7 +213,7 @@ export function queryContractCatalog(input: {
       );
     }
 
-    const incident = input.sqlite
+    const openIncidents = input.sqlite
       .prepare(
         `SELECT id, incident_type, severity, status, summary, details_json FROM incidents
          WHERE tenant_id = ? AND workflow_id = ?
@@ -196,23 +222,29 @@ export function queryContractCatalog(input: {
            CASE incident_type
              WHEN 'hard_failure' THEN 0
              WHEN 'empty_result' THEN 1
-             WHEN 'silent_absence' THEN 2
-             ELSE 3
+             WHEN 'freshness_stale' THEN 2
+             WHEN 'silent_absence' THEN 3
+             ELSE 4
            END,
            CASE severity WHEN 'critical' THEN 0 ELSE 1 END,
-           opened_at ASC
-         LIMIT 1`,
+           opened_at ASC`,
       )
-      .get(input.tenantId, workflowId) as
-      | {
-          id: string;
-          incident_type: string;
-          severity: string;
-          status: string;
-          summary: string;
-          details_json: string | null;
-        }
-      | undefined;
+      .all(input.tenantId, workflowId) as Array<{
+      id: string;
+      incident_type: string;
+      severity: string;
+      status: string;
+      summary: string;
+      details_json: string | null;
+    }>;
+
+    const incident = openIncidents[0];
+    const hasOpenEmptyResult = openIncidents.some(
+      (i) => i.incident_type === "empty_result",
+    );
+    const hasOpenFreshness = openIncidents.some(
+      (i) => i.incident_type === "freshness_stale",
+    );
 
     let consecutiveFailures: number | null = null;
     let emptyResultPolicy: "warning" | "failure" | null = null;
@@ -228,13 +260,18 @@ export function queryContractCatalog(input: {
         consecutiveFailures = null;
       }
     }
-    if (incident?.incident_type === "empty_result") {
-      const policy = String(row.empty_result_policy ?? "");
+    const contractEmptyPolicy = String(row.empty_result_policy ?? "");
+    if (hasOpenEmptyResult || incident?.incident_type === "empty_result") {
       emptyResultPolicy =
-        policy === "failure" || policy === "warning" ? policy : "warning";
-      if (incident.details_json) {
+        contractEmptyPolicy === "failure" || contractEmptyPolicy === "warning"
+          ? contractEmptyPolicy
+          : "warning";
+      const emptyIncident =
+        openIncidents.find((i) => i.incident_type === "empty_result") ??
+        incident;
+      if (emptyIncident?.details_json) {
         try {
-          const parsed = JSON.parse(incident.details_json) as {
+          const parsed = JSON.parse(emptyIncident.details_json) as {
             policy?: string;
           };
           if (parsed.policy === "failure" || parsed.policy === "warning") {
@@ -266,6 +303,61 @@ export function queryContractCatalog(input: {
       workflowId,
     });
 
+    const emptyResultBreachThreshold = Math.max(
+      1,
+      Number(row.empty_result_breach_threshold ?? 1),
+    );
+    const sourceWatermarkRequired = Boolean(row.source_watermark_required);
+    const emptyResultConfigured =
+      contractEmptyPolicy === "warning" ||
+      contractEmptyPolicy === "failure" ||
+      emptyResultBreachThreshold > 1;
+    const volumeBreached =
+      volumeSummary?.status === "Below minimum" ||
+      volumeSummary?.status === "Above maximum";
+    const consecutiveStaleWatermarks = Number(
+      row.consecutive_stale_watermarks ?? 0,
+    );
+    const evidenceSummaryCode = row.evidence_summary_code
+      ? String(row.evidence_summary_code)
+      : null;
+    const freshnessBreached =
+      hasOpenFreshness ||
+      evidenceSummaryCode === "freshness_stale" ||
+      (sourceWatermarkRequired &&
+        consecutiveStaleWatermarks >= emptyResultBreachThreshold);
+    const lastSourceWatermark = row.last_source_watermark
+      ? String(row.last_source_watermark)
+      : null;
+    const freshnessUnknown =
+      sourceWatermarkRequired &&
+      !freshnessBreached &&
+      lastSourceWatermark === null;
+
+    const monitorUnreachable = shouldSuppressSilentAbsence({
+      monitoringMethod,
+      connectorHealth,
+    });
+
+    const dimensions = buildContractDimensions({
+      monitoringMethod,
+      connectorHealth,
+      scheduleHealth: health,
+      hasOpenEmptyResult,
+      emptyResultConfigured,
+      volumeBreached,
+      sourceWatermarkRequired,
+      freshnessBreached,
+      freshnessUnknown,
+      watcherHealth: processWatchdogHealth,
+      monitorUnreachable,
+    });
+    const displayHealth = rollUpCatalogDisplayHealth({
+      scheduleHealth: health,
+      dimensions,
+      monitorUnreachable,
+    });
+
     return {
       tenantId: String(row.tenant_id),
       workflowId,
@@ -275,6 +367,8 @@ export function queryContractCatalog(input: {
       businessPurposeName: String(row.business_purpose),
       contractKind: "workflow",
       health,
+      displayHealth,
+      dimensions,
       evidenceLevel,
       evidenceExplanation: evidenceExplanationForLevel(
         evidenceLevel,
@@ -319,6 +413,9 @@ export function queryContractCatalog(input: {
         row.state_updated_at ? String(row.state_updated_at) : null,
         input.clock,
       ),
+      processWatchdogHealth,
+      sourceWatermarkRequired,
+      emptyResultBreachThreshold,
       alertChannelHealth,
       monitoringMethod,
       detailUrl: `${input.publicBaseUrl.replace(/\/+$/, "")}/catalog/contracts/${workflowId}`,
@@ -333,17 +430,17 @@ export function queryContractCatalog(input: {
     };
   });
 
-  mapped.push(...queryOutcomeCatalogRows(input));
+  mapped.push(...queryOutcomeCatalogRows({ ...input, processWatchdogHealth }));
 
   mapped.sort((a, b) => {
     const bucket = compareCatalogSortBuckets(
       catalogSortBucket({
-        health: a.health,
+        health: a.displayHealth,
         hasCriticalIncident: a.activeIncident?.severity === "critical",
         alertChannelHealth: a.alertChannelHealth,
       }),
       catalogSortBucket({
-        health: b.health,
+        health: b.displayHealth,
         hasCriticalIncident: b.activeIncident?.severity === "critical",
         alertChannelHealth: b.alertChannelHealth,
       }),
@@ -373,6 +470,7 @@ function queryOutcomeCatalogRows(input: {
   tenantId: string;
   publicBaseUrl: string;
   clientId?: string | null;
+  processWatchdogHealth: "ok" | "stale" | "not_evaluated";
 }): CatalogContractRow[] {
   const params: unknown[] = [input.tenantId];
   let clientFilter = "";
@@ -496,6 +594,27 @@ function queryOutcomeCatalogRows(input: {
       health = "overdue";
     }
 
+    const dimensions = buildContractDimensions({
+      monitoringMethod: null,
+      connectorHealth: connectorStale
+        ? `${sourceStatus}/${destStatus}`
+        : "healthy",
+      scheduleHealth: health,
+      hasOpenEmptyResult: false,
+      emptyResultConfigured: false,
+      volumeBreached: false,
+      sourceWatermarkRequired: false,
+      freshnessBreached: false,
+      freshnessUnknown: false,
+      watcherHealth: input.processWatchdogHealth,
+      monitorUnreachable: false,
+    });
+    const displayHealth = rollUpCatalogDisplayHealth({
+      scheduleHealth: health,
+      dimensions,
+      monitorUnreachable: false,
+    });
+
     return {
       tenantId: String(row.tenant_id),
       workflowId: null,
@@ -505,6 +624,8 @@ function queryOutcomeCatalogRows(input: {
       businessPurposeName: String(row.business_purpose),
       contractKind: "outcome" as const,
       health,
+      displayHealth,
+      dimensions,
       evidenceLevel: resolved.level,
       evidenceExplanation: evidenceExplanationForLevel(
         resolved.level,
@@ -540,6 +661,9 @@ function queryOutcomeCatalogRows(input: {
         ? `${sourceStatus}/${destStatus}`
         : "healthy",
       watcherHealth: "ok",
+      processWatchdogHealth: input.processWatchdogHealth,
+      sourceWatermarkRequired: false,
+      emptyResultBreachThreshold: 1,
       alertChannelHealth,
       monitoringMethod: null,
       detailUrl: `${input.publicBaseUrl.replace(/\/+$/, "")}/catalog/outcome/${contractId}`,
@@ -612,6 +736,20 @@ function deriveWatcherHealth(
     return "stale";
   }
   return "ok";
+}
+
+/** Process-level dead-man switch from watcher_run_state (not per-row updated_at). */
+function deriveProcessWatchdogHealth(
+  sqlite: Database.Database,
+  clock: Clock,
+): "ok" | "stale" | "not_evaluated" {
+  const row = sqlite
+    .prepare(`SELECT last_success_at FROM watcher_run_state WHERE id = 1`)
+    .get() as { last_success_at: string | null } | undefined;
+  return deriveWatcherHealth(
+    row?.last_success_at ? String(row.last_success_at) : null,
+    clock,
+  );
 }
 
 function worstAlertChannelHealth(

@@ -13,6 +13,11 @@ import {
   plainUnverifiedLabels,
   plainVerifiedLabels,
 } from "../../domain/catalog/evidence-explanation.js";
+import {
+  dimensionStatusLabel,
+  type CatalogDisplayHealth,
+  type ContractDimensions,
+} from "../../domain/health/contract-dimensions.js";
 import { SILENT_ABSENCE_MESSAGE } from "../../domain/n8n/workflow-editor-url.js";
 
 export type CatalogRowView = {
@@ -22,6 +27,8 @@ export type CatalogRowView = {
   clientName: string | null;
   businessPurposeName: string;
   health: string;
+  displayHealth: CatalogDisplayHealth;
+  dimensions: ContractDimensions;
   evidenceLevel: "basic" | "medium" | "high";
   evidenceExplanation: string;
   expectedCadenceOrWindow: string;
@@ -38,6 +45,9 @@ export type CatalogRowView = {
   alertChannelHealth: string;
   connectorHealth: string | null;
   watcherHealth: "ok" | "stale" | "not_evaluated";
+  processWatchdogHealth: "ok" | "stale" | "not_evaluated";
+  sourceWatermarkRequired: boolean;
+  emptyResultBreachThreshold: number;
   monitoringMethod: "poll" | "push" | null;
   activeIncident: {
     severity: string;
@@ -192,6 +202,7 @@ const HEALTH_FILTER_LABELS: Record<string, string> = {
   warning: "No recent execution",
   overdue: "Overdue",
   unknown: "Unknown",
+  monitor_unknown: "Monitor unknown",
   inactive: "Paused",
 };
 
@@ -257,6 +268,28 @@ function formatWatcherHealth(health: "ok" | "stale" | "not_evaluated"): string {
   if (health === "ok") return "Watcher: ok";
   if (health === "stale") return "Watcher: stale";
   return "Watcher: not evaluated";
+}
+
+function formatProcessWatchdogChip(
+  health: "ok" | "stale" | "not_evaluated",
+): string {
+  const label =
+    health === "ok" ? "ok" : health === "stale" ? "stale" : "not evaluated";
+  const cls =
+    health === "ok"
+      ? "badge-status-healthy"
+      : health === "stale"
+        ? "badge-status-waiting"
+        : "badge-status-unknown";
+  return `<span class="badge ${cls}">Watchdog: ${escapeHtml(label)}</span>`;
+}
+
+function renderDimensionRows(dimensions: ContractDimensions): string {
+  return `<div class="contract-dimensions">
+      <div>Schedule: ${escapeHtml(dimensionStatusLabel(dimensions.schedule))}</div>
+      <div>Output: ${escapeHtml(dimensionStatusLabel(dimensions.output))}</div>
+      <div>Freshness: ${escapeHtml(dimensionStatusLabel(dimensions.freshness))}</div>
+    </div>`;
 }
 
 function contractCardActions(row: CatalogRowView): Array<{
@@ -341,6 +374,9 @@ function isEmptyResultReported(row: CatalogRowView): boolean {
 }
 
 function isSilenceAttention(row: CatalogRowView): boolean {
+  if (row.displayHealth === "monitor_unknown") {
+    return false;
+  }
   if (isFailureReported(row) || isEmptyResultReported(row)) {
     return false;
   }
@@ -354,39 +390,45 @@ export function renderContractCard(row: CatalogRowView): string {
       : `/catalog/contracts/${row.workflowId}`;
   const failureReported = isFailureReported(row);
   const emptyReported = isEmptyResultReported(row);
+  const monitorUnknown = row.displayHealth === "monitor_unknown";
   const silenceAttention = isSilenceAttention(row);
   const emptyLabel =
     row.emptyResultPolicy === "failure" ? "Contract violation" : "Empty result";
-  const toneClass =
-    silenceAttention || failureReported || emptyReported || row.activeIncident
+  const toneClass = monitorUnknown
+    ? " is-warning"
+    : silenceAttention || failureReported || emptyReported || row.activeIncident
       ? failureReported ||
         emptyReported ||
         row.health === "overdue" ||
         row.activeIncident
         ? " is-overdue"
         : " is-warning"
-      : row.health === "healthy"
+      : row.displayHealth === "healthy"
         ? " is-healthy"
         : "";
-  const health = failureReported
-    ? `<span class="badge badge-status-incident"><span class="sr-only">Health: </span>Failure reported</span>`
-    : emptyReported
-      ? `<span class="badge badge-status-incident"><span class="sr-only">Health: </span>${escapeHtml(emptyLabel)}</span>`
-      : silenceAttention
-        ? statusBadge(row.health)
-        : row.activeIncident
-          ? `<span class="badge badge-status-incident"><span class="sr-only">Health: </span>Incident</span>`
-          : statusBadge(row.health);
-  const silenceMessage = silenceAttention
-    ? row.health === "warning"
-      ? `<p class="contract-card-message">Quorum has not received a new execution within the expected window.</p>
-      <p class="helper">Early warning — an incident opens if this becomes Overdue.</p>`
-      : `<p class="contract-card-message">${escapeHtml(SILENT_ABSENCE_MESSAGE)}</p>`
+  const health = monitorUnknown
+    ? statusBadge("monitor_unknown")
     : failureReported
-      ? `<p class="contract-card-message">A valid failure heartbeat arrived. Quorum is tracking consecutive failed executions until a successful report arrives.</p>`
+      ? `<span class="badge badge-status-incident"><span class="sr-only">Health: </span>Failure reported</span>`
       : emptyReported
-        ? `<p class="contract-card-message">A valid heartbeat arrived with 0 items. Reporting is present; the empty-result policy opened an incident.</p>`
-        : "";
+        ? `<span class="badge badge-status-incident"><span class="sr-only">Health: </span>${escapeHtml(emptyLabel)}</span>`
+        : silenceAttention
+          ? statusBadge(row.health)
+          : row.activeIncident
+            ? `<span class="badge badge-status-incident"><span class="sr-only">Health: </span>Incident</span>`
+            : statusBadge(row.displayHealth);
+  const silenceMessage = monitorUnknown
+    ? `<p class="contract-card-message">Quorum cannot reach the n8n API. This is a monitor problem, not a workflow silence failure.</p>`
+    : silenceAttention
+      ? row.health === "warning"
+        ? `<p class="contract-card-message">Quorum has not received a new execution within the expected window.</p>
+      <p class="helper">Early warning — an incident opens if this becomes Overdue.</p>`
+        : `<p class="contract-card-message">${escapeHtml(SILENT_ABSENCE_MESSAGE)}</p>`
+      : failureReported
+        ? `<p class="contract-card-message">A valid failure heartbeat arrived. Quorum is tracking consecutive failed executions until a successful report arrives.</p>`
+        : emptyReported
+          ? `<p class="contract-card-message">A valid heartbeat arrived with 0 items. Reporting is present; the empty-result policy opened an incident.</p>`
+          : "";
   const volume = row.volumeSummary
     ? `<div>Reported volume: ${escapeHtml(row.volumeSummary.currentCount)} (${escapeHtml(row.volumeSummary.status)})</div>`
     : "";
@@ -444,6 +486,8 @@ export function renderContractCard(row: CatalogRowView): string {
       ${reportMeta}
       <div>${escapeHtml(formatMonitoringMethod(row.monitoringMethod))}</div>
       ${volume}
+      ${renderDimensionRows(row.dimensions)}
+      <div>${formatProcessWatchdogChip(row.processWatchdogHealth)}</div>
       ${renderTechnicalDetails(row)}
     </div>
     <div class="contract-card-footer">
@@ -470,7 +514,9 @@ export function renderCatalogPage(input: {
   clients: Array<{ id: string; name: string }>;
   filters: Record<string, string>;
   flash?: string | null;
+  flashTone?: "error" | "success";
   banner?: string | null;
+  processWatchdogHealth?: "ok" | "stale" | "not_evaluated";
 }): string {
   const empty =
     input.contracts.length === 0
@@ -487,6 +533,26 @@ export function renderCatalogPage(input: {
 
   const s = input.summary;
   const filterVal = (key: string) => escapeHtml(input.filters[key] ?? "");
+  const watchdogHealth =
+    input.processWatchdogHealth ??
+    input.contracts.find((c) => c.processWatchdogHealth === "stale")
+      ?.processWatchdogHealth ??
+    input.contracts[0]?.processWatchdogHealth ??
+    "not_evaluated";
+  const watchdogStrip = `<div class="card compact" style="display:flex;flex-wrap:wrap;gap:0.75rem;align-items:center;justify-content:space-between;margin-bottom:1rem">
+        <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center">
+          ${formatProcessWatchdogChip(watchdogHealth)}
+          <span class="helper">Process dead-man switch for the Quorum watcher</span>
+        </div>
+        ${
+          input.role !== "viewer"
+            ? `<form method="post" action="/catalog/watchdog-test" style="margin:0">
+          <input type="hidden" name="csrf" value="${escapeHtml(input.csrf)}" />
+          <button type="submit" class="btn-secondary">Test watchdog</button>
+        </form>`
+            : ""
+        }
+      </div>`;
 
   return layout({
     demoMode: input.demoMode === true,
@@ -497,10 +563,12 @@ export function renderCatalogPage(input: {
     pageTitle: "Contract Catalog",
     contentWide: true,
     flash: input.flash ?? null,
+    flashTone: input.flashTone ?? "error",
     banner: input.banner ?? null,
     body: `
       <h1 class="page-title">Contract Catalog</h1>
       <p class="page-subtitle">What should happen, is it happening, how sure are we, and what should I do?</p>
+      ${watchdogStrip}
       <div class="summary-grid" aria-label="Catalog summary">
         <div class="card compact"><strong>${s.contractsCurrentlySatisfied}</strong><div class="helper">Contracts currently satisfied</div></div>
         <div class="card compact"><strong>${s.clientProcessesNeedingAttention}</strong><div class="helper">Processes needing attention</div></div>
@@ -524,7 +592,14 @@ export function renderCatalogPage(input: {
         <label class="field">Health
           <select name="health">
             <option value="">All</option>
-            ${["healthy", "warning", "overdue", "unknown", "inactive"]
+            ${[
+              "healthy",
+              "warning",
+              "overdue",
+              "unknown",
+              "monitor_unknown",
+              "inactive",
+            ]
               .map(
                 (h) =>
                   `<option value="${h}"${input.filters.health === h ? " selected" : ""}>${HEALTH_FILTER_LABELS[h] ?? h}</option>`,

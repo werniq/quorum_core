@@ -52,6 +52,11 @@ export function registerProductUiRoutes(
     sqlite: Database.Database;
     clock: Clock;
     processOutbox?: ReturnType<typeof createOutboxProcessor>;
+    getWatcherHealth?: () => {
+      lastSuccessAt: string | null;
+      staleAfterMs: number;
+      nowMs: number;
+    };
     requireSession: (
       request: FastifyRequest,
       reply: FastifyReply,
@@ -142,6 +147,12 @@ export function registerProductUiRoutes(
     };
     const all = loadCatalogViews(tid);
     const filtered = applyCatalogFilters(all, filters).map((r) => r);
+    const processWatchdogHealth =
+      all.find((c) => c.processWatchdogHealth === "stale")
+        ?.processWatchdogHealth ??
+      all[0]?.processWatchdogHealth ??
+      "not_evaluated";
+    const flashRaw = q.flash ? String(q.flash) : null;
     return reply.type("text/html").send(
       renderCatalogPage({
         ...pageShell,
@@ -153,9 +164,42 @@ export function registerProductUiRoutes(
         filters: Object.fromEntries(
           Object.entries(filters).map(([k, v]) => [k, v ?? ""]),
         ),
+        flash: flashRaw,
+        flashTone: flashRaw?.startsWith("Watchdog ok") ? "success" : "error",
         banner: failingBanner(tid),
+        processWatchdogHealth,
       }),
     );
+  });
+
+  app.post("/catalog/watchdog-test", async (request, reply) => {
+    const session = deps.requireSession(request, reply);
+    if (!session || !requireAdmin(session, reply)) {
+      return;
+    }
+    if (!deps.assertCsrf(request, session, reply)) {
+      return;
+    }
+    // Read-only probe: never opens incidents or mutates workflow/contract state.
+    const health = deps.getWatcherHealth
+      ? deps.getWatcherHealth()
+      : {
+          lastSuccessAt: null as string | null,
+          staleAfterMs: 180_000,
+          nowMs: deps.clock.now().getTime(),
+        };
+    let flash: string;
+    if (!health.lastSuccessAt) {
+      flash = "Watchdog stale (never succeeded)";
+    } else {
+      const ageMs = health.nowMs - new Date(health.lastSuccessAt).getTime();
+      if (ageMs > health.staleAfterMs) {
+        flash = `Watchdog stale (age ${Math.round(ageMs / 1000)}s)`;
+      } else {
+        flash = `Watchdog ok (age ${Math.round(ageMs / 1000)}s)`;
+      }
+    }
+    return reply.redirect(`/catalog?flash=${encodeURIComponent(flash)}`);
   });
 
   // Canonical setup UI is /onboarding. POST /protect/* stays in ui-protect-compat-routes

@@ -247,6 +247,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         sqlite,
         clock,
         ...(deps.processOutbox ? { processOutbox: deps.processOutbox } : {}),
+        getWatcherHealth:
+          deps.getWatcherHealth ??
+          (() => ({
+            lastSuccessAt: null,
+            staleAfterMs: deps.env.WATCHER_STALE_MS,
+            nowMs: clock.now().getTime(),
+          })),
       });
     }
   }
