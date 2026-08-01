@@ -6,7 +6,7 @@ Quorum uses strict layer boundaries:
 Domain
   contracts, evidence classification, cadence, health, incidents,
   evidence-level calculation, notification policy,
-  schedule / output / freshness dimensions, monitor reachability
+  schedule / output / freshness / reconciliation (experimental) dimensions, monitor reachability
 
 Application
   use cases, authorization, transactions, repositories,

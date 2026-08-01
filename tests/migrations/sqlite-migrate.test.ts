@@ -308,6 +308,14 @@ describe("SQLite migrations", () => {
     expect(unknownFreshSql).toContain("freshness_allowed_staleness_seconds");
     expect(unknownFreshSql).toContain("last_source_watermark_at");
 
+    const effectSql = readMigrationSql(
+      "sqlite",
+      "0020_effect_receipt_reconciliation",
+    );
+    expect(effectSql).toContain("effect_reconciliation_enabled");
+    expect(effectSql).toContain("effect_count_mismatch");
+    expect(effectSql).toContain("last_effect_reconciliation_status");
+
     const srcRoot = path.resolve("src");
     const offenders: string[] = [];
     const walk = (dir: string) => {
@@ -328,6 +336,39 @@ describe("SQLite migrations", () => {
     };
     walk(srcRoot);
     expect(offenders).toEqual([]);
+  });
+
+  it("migrates a pre-0020 database forward onto effect receipt columns", () => {
+    const sqlite = openTempSqlite();
+    migrateSqliteUpTo(sqlite, "0019_watchdog_unknown_freshness");
+    const before = getAppliedSqliteMigrationTags(sqlite);
+    expect(before).toContain("0019_watchdog_unknown_freshness");
+    expect(before).not.toContain("0020_effect_receipt_reconciliation");
+
+    const colsBefore = sqlite
+      .prepare(`PRAGMA table_info(workflow_contracts)`)
+      .all() as Array<{ name: string }>;
+    expect(colsBefore.map((c) => c.name)).not.toContain(
+      "effect_reconciliation_enabled",
+    );
+
+    migrateSqliteToLatest(sqlite);
+    const after = getAppliedSqliteMigrationTags(sqlite);
+    expect(after).toContain("0020_effect_receipt_reconciliation");
+    expect(after).toEqual(listMigrationTags("sqlite"));
+
+    const contractCols = sqlite
+      .prepare(`PRAGMA table_info(workflow_contracts)`)
+      .all() as Array<{ name: string }>;
+    expect(contractCols.map((c) => c.name)).toContain(
+      "effect_reconciliation_enabled",
+    );
+    const stateCols = sqlite
+      .prepare(`PRAGMA table_info(workflow_states)`)
+      .all() as Array<{ name: string }>;
+    expect(stateCols.map((c) => c.name)).toContain(
+      "last_effect_reconciliation_status",
+    );
   });
 
   it("enforces one active heartbeat contract per workflow at the database", () => {

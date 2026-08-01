@@ -418,6 +418,7 @@ export const incidents = pgTable("incidents", {
       "watcher_failure",
       "alert_delivery_failure",
       "freshness_stale",
+      "effect_count_mismatch",
     ],
   }).notNull(),
   severity: text("severity", { enum: ["warning", "critical"] }).notNull(),

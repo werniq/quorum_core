@@ -120,6 +120,7 @@ export function queryContractCatalog(input: {
          c.empty_result_policy,
          c.empty_result_breach_threshold,
          c.source_watermark_required,
+         c.effect_reconciliation_enabled,
          w.client_id,
          w.is_active AS workflow_active,
          w.connector_id,
@@ -138,6 +139,7 @@ export function queryContractCatalog(input: {
          s.consecutive_empty_results,
          s.last_source_watermark,
          s.consecutive_stale_watermarks,
+         s.last_effect_reconciliation_status,
          s.evidence_summary_code
        FROM workflow_contracts c
        JOIN workflows w ON w.id = c.workflow_id AND w.tenant_id = c.tenant_id
@@ -223,8 +225,9 @@ export function queryContractCatalog(input: {
              WHEN 'hard_failure' THEN 0
              WHEN 'empty_result' THEN 1
              WHEN 'freshness_stale' THEN 2
-             WHEN 'silent_absence' THEN 3
-             ELSE 4
+             WHEN 'effect_count_mismatch' THEN 3
+             WHEN 'silent_absence' THEN 4
+             ELSE 5
            END,
            CASE severity WHEN 'critical' THEN 0 ELSE 1 END,
            opened_at ASC`,
@@ -244,6 +247,9 @@ export function queryContractCatalog(input: {
     );
     const hasOpenFreshness = openIncidents.some(
       (i) => i.incident_type === "freshness_stale",
+    );
+    const hasOpenEffectMismatch = openIncidents.some(
+      (i) => i.incident_type === "effect_count_mismatch",
     );
 
     let consecutiveFailures: number | null = null;
@@ -308,6 +314,9 @@ export function queryContractCatalog(input: {
       Number(row.empty_result_breach_threshold ?? 1),
     );
     const sourceWatermarkRequired = Boolean(row.source_watermark_required);
+    const effectReconciliationEnabled = Boolean(
+      row.effect_reconciliation_enabled,
+    );
     const emptyResultConfigured =
       contractEmptyPolicy === "warning" ||
       contractEmptyPolicy === "failure" ||
@@ -349,6 +358,12 @@ export function queryContractCatalog(input: {
       sourceWatermarkRequired,
       freshnessBreached,
       freshnessUnknown,
+      effectReconciliationEnabled,
+      reconciliationBreached: hasOpenEffectMismatch,
+      reconciliationUnknown:
+        effectReconciliationEnabled &&
+        !hasOpenEffectMismatch &&
+        String(row.last_effect_reconciliation_status ?? "") !== "passed",
       watcherHealth: processWatchdogHealth,
       monitorUnreachable,
     });
@@ -606,6 +621,9 @@ function queryOutcomeCatalogRows(input: {
       sourceWatermarkRequired: false,
       freshnessBreached: false,
       freshnessUnknown: false,
+      effectReconciliationEnabled: false,
+      reconciliationBreached: false,
+      reconciliationUnknown: false,
       watcherHealth: input.processWatchdogHealth,
       monitorUnreachable: false,
     });

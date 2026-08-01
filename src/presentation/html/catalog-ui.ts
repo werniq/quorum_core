@@ -15,6 +15,7 @@ import {
 } from "../../domain/catalog/evidence-explanation.js";
 import {
   dimensionStatusLabel,
+  reconciliationDimensionLabel,
   type CatalogDisplayHealth,
   type ContractDimensions,
 } from "../../domain/health/contract-dimensions.js";
@@ -289,6 +290,7 @@ function renderDimensionRows(dimensions: ContractDimensions): string {
       <div>Schedule: ${escapeHtml(dimensionStatusLabel(dimensions.schedule))}</div>
       <div>Output: ${escapeHtml(dimensionStatusLabel(dimensions.output))}</div>
       <div>Freshness: ${escapeHtml(dimensionStatusLabel(dimensions.freshness))}</div>
+      <div>Reconciliation: ${escapeHtml(reconciliationDimensionLabel(dimensions.reconciliation))}</div>
     </div>`;
 }
 

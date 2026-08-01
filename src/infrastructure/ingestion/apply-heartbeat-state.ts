@@ -124,6 +124,7 @@ export function upsertWorkflowStateAfterHeartbeat(input: {
   lastSourceWatermark?: string | null;
   lastSourceWatermarkAt?: string | null;
   consecutiveStaleWatermarks?: number;
+  lastEffectReconciliationStatus?: string | null;
 }): void {
   const stamps = computeHeartbeatTimestamps({
     executedAt: input.executedAt,
@@ -150,6 +151,11 @@ export function upsertWorkflowStateAfterHeartbeat(input: {
   const consecutiveStale =
     input.consecutiveStaleWatermarks ??
     Number(input.previous?.consecutive_stale_watermarks ?? 0);
+  const lastEffectStatus =
+    input.lastEffectReconciliationStatus !== undefined
+      ? input.lastEffectReconciliationStatus
+      : ((input.previous?.last_effect_reconciliation_status as string | null) ??
+        null);
 
   input.sqlite
     .prepare(
@@ -159,8 +165,8 @@ export function upsertWorkflowStateAfterHeartbeat(input: {
          last_status, next_expected_at, overdue_since, current_health, evidence_level,
          evidence_summary_code, unverified_dimensions_json, consecutive_stale_checks,
          consecutive_empty_results, last_source_watermark, last_source_watermark_at,
-         consecutive_stale_watermarks, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'healthy', 'basic', ?, ?, 0, ?, ?, ?, ?, ?)
+         consecutive_stale_watermarks, last_effect_reconciliation_status, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'healthy', 'basic', ?, ?, 0, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(tenant_id, workflow_id) DO UPDATE SET
          last_execution_at = excluded.last_execution_at,
          last_nonempty_success_at = excluded.last_nonempty_success_at,
@@ -179,6 +185,7 @@ export function upsertWorkflowStateAfterHeartbeat(input: {
          last_source_watermark = excluded.last_source_watermark,
          last_source_watermark_at = excluded.last_source_watermark_at,
          consecutive_stale_watermarks = excluded.consecutive_stale_watermarks,
+         last_effect_reconciliation_status = excluded.last_effect_reconciliation_status,
          updated_at = excluded.updated_at`,
     )
     .run(
@@ -197,6 +204,7 @@ export function upsertWorkflowStateAfterHeartbeat(input: {
       lastWatermark,
       lastWatermarkAt,
       consecutiveStale,
+      lastEffectStatus,
       input.receivedAt,
     );
 }
@@ -209,7 +217,11 @@ export function resolveOpenIncidentsOfTypes(input: {
   at: string;
   actor: string;
   types: Array<
-    "hard_failure" | "empty_result" | "silent_absence" | "freshness_stale"
+    | "hard_failure"
+    | "empty_result"
+    | "silent_absence"
+    | "freshness_stale"
+    | "effect_count_mismatch"
   >;
 }): void {
   const placeholders = input.types.map(() => "?").join(", ");
@@ -390,6 +402,36 @@ export function openOrUpdateFreshnessIncident(input: {
     contractKind: "workflow",
     workflowId: input.workflowId,
     incidentType: "freshness_stale",
+    severity: "warning",
+    summary: input.summary,
+    detailsJson: input.detailsJson,
+    observedAt: input.receivedAt,
+  });
+  if (!before) {
+    input.enqueueOpened(incident.id);
+  }
+}
+
+export function openOrUpdateEffectCountMismatchIncident(input: {
+  alerting: SqliteAlertingRepositories;
+  tenantId: string;
+  workflowId: string;
+  receivedAt: string;
+  summary: string;
+  detailsJson: string;
+  enqueueOpened: (incidentId: string) => void;
+}): void {
+  const before = input.alerting.getUnresolvedIncident(
+    input.tenantId,
+    "workflow",
+    input.workflowId,
+    "effect_count_mismatch",
+  );
+  const incident = input.alerting.openOrObserveIncident(input.tenantId, {
+    id: createId(),
+    contractKind: "workflow",
+    workflowId: input.workflowId,
+    incidentType: "effect_count_mismatch",
     severity: "warning",
     summary: input.summary,
     detailsJson: input.detailsJson,

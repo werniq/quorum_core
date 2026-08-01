@@ -50,12 +50,16 @@ describe("contract dimensions roll-up", () => {
       sourceWatermarkRequired: false,
       freshnessBreached: false,
       freshnessUnknown: false,
+      effectReconciliationEnabled: false,
+      reconciliationBreached: false,
+      reconciliationUnknown: false,
       watcherHealth: "ok",
       monitorUnreachable: true,
     });
     expect(dimensions.monitor).toBe("unknown");
     expect(dimensions.schedule).toBe("breached");
     expect(dimensions.freshness).toBe("not_configured");
+    expect(dimensions.reconciliation).toBe("not_configured");
     expect(
       rollUpCatalogDisplayHealth({
         scheduleHealth: "overdue",
@@ -76,6 +80,9 @@ describe("contract dimensions roll-up", () => {
       sourceWatermarkRequired: false,
       freshnessBreached: false,
       freshnessUnknown: false,
+      effectReconciliationEnabled: false,
+      reconciliationBreached: false,
+      reconciliationUnknown: false,
       watcherHealth: "ok",
       monitorUnreachable: false,
     });
@@ -100,6 +107,9 @@ describe("contract dimensions roll-up", () => {
       sourceWatermarkRequired: false,
       freshnessBreached: false,
       freshnessUnknown: false,
+      effectReconciliationEnabled: false,
+      reconciliationBreached: false,
+      reconciliationUnknown: false,
       watcherHealth: "ok",
       monitorUnreachable: false,
     });

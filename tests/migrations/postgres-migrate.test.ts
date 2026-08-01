@@ -341,6 +341,14 @@ describe("Postgres migrations", () => {
     expect(unknownFreshSql).toContain("watermark_comparison_type");
     expect(unknownFreshSql).toContain("freshness_allowed_staleness_seconds");
     expect(unknownFreshSql).toContain("last_source_watermark_at");
+
+    const effectSql = readMigrationSql(
+      "postgres",
+      "0020_effect_receipt_reconciliation",
+    );
+    expect(effectSql).toContain("effect_reconciliation_enabled");
+    expect(effectSql).toContain("effect_count_mismatch");
+    expect(effectSql).toContain("last_effect_reconciliation_status");
   });
 
   it("enforces heartbeat idempotency, immutability, and healthy+basic state", async () => {

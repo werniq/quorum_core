@@ -17,7 +17,8 @@ export type IncidentType =
   | "schema_drift"
   | "watcher_failure"
   | "alert_delivery_failure"
-  | "freshness_stale";
+  | "freshness_stale"
+  | "effect_count_mismatch";
 
 export type IncidentSeverity = "warning" | "critical";
 

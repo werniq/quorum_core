@@ -34,10 +34,12 @@ import {
   evaluateWatermarkFreshness,
   type WatermarkComparisonType,
 } from "../../domain/evidence/source-watermark.js";
+import { evaluateEffectReceipt } from "../../domain/evidence/effect-receipt.js";
 import { nextConsecutiveEmptyResults } from "../../domain/health/contract-dimensions.js";
 import {
   computeNextExpectedIso,
   openOrUpdateEmptyResultIncident,
+  openOrUpdateEffectCountMismatchIncident,
   openOrUpdateFreshnessIncident,
   resolveOpenIncidentsOfTypes,
   upsertWorkflowStateAfterHeartbeat,
@@ -392,6 +394,13 @@ export function createIngestHeartbeatHandler(deps: {
         allowedStalenessSeconds,
       });
 
+      const effectEval = evaluateEffectReceipt({
+        enabled:
+          Boolean(contract.effect_reconciliation_enabled) &&
+          classified.evidenceStatus === "success",
+        metadata: metadataObject,
+      });
+
       upsertWorkflowStateAfterHeartbeat({
         sqlite: deps.sqlite,
         tenantId,
@@ -416,6 +425,11 @@ export function createIngestHeartbeatHandler(deps: {
         lastSourceWatermark: watermarkEval.nextWatermark,
         lastSourceWatermarkAt: watermarkEval.nextWatermarkAt,
         consecutiveStaleWatermarks: watermarkEval.consecutiveStale,
+        lastEffectReconciliationStatus:
+          effectEval.status === "not_configured"
+            ? ((previous?.last_effect_reconciliation_status as string | null) ??
+              null)
+            : effectEval.status,
       });
 
       // Any valid report clears silent absence.
@@ -533,6 +547,34 @@ export function createIngestHeartbeatHandler(deps: {
               status: watermarkEval.status,
               consecutiveStale: watermarkEval.consecutiveStale,
               watermark: watermarkEval.nextWatermark,
+            }),
+            enqueueOpened: (incidentId) =>
+              enqueueOpened(alerting, tenantId, incidentId, receivedAt),
+          });
+        }
+        if (effectEval.shouldResolveIncident) {
+          resolveOpenIncidentsOfTypes({
+            alerting,
+            sqlite: deps.sqlite,
+            tenantId,
+            workflowId: command.workflowId,
+            at: receivedAt,
+            actor: "system:ingest-heartbeat",
+            types: ["effect_count_mismatch"],
+          });
+        } else if (effectEval.shouldOpenIncident) {
+          openOrUpdateEffectCountMismatchIncident({
+            alerting,
+            tenantId,
+            workflowId: command.workflowId,
+            receivedAt,
+            summary: `${workflowMeta?.name ?? "Workflow"}: effect receipt count mismatch`,
+            detailsJson: JSON.stringify({
+              status: effectEval.status,
+              expectedCount: effectEval.receipt.expectedCount,
+              writtenCount: effectEval.receipt.writtenCount,
+              inputBatchId: effectEval.receipt.inputBatchId,
+              destinationName: effectEval.receipt.destinationName,
             }),
             enqueueOpened: (incidentId) =>
               enqueueOpened(alerting, tenantId, incidentId, receivedAt),
