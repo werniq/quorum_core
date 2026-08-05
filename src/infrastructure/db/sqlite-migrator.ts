@@ -40,6 +40,13 @@ function ensureMetaTables(sqlite: Database.Database): void {
   `);
 }
 
+function migrationControlsForeignKeys(tag: string): boolean {
+  return splitMigrationStatements(readMigrationSql("sqlite", tag)).some(
+    (statement) =>
+      /^PRAGMA\s+foreign_keys\s*=\s*OFF\s*;?$/i.test(statement.trim()),
+  );
+}
+
 function applyMigration(
   sqlite: Database.Database,
   tag: string,
@@ -47,9 +54,7 @@ function applyMigration(
 ): void {
   const sql = readMigrationSql("sqlite", tag);
   const statements = splitMigrationStatements(sql);
-  const controlsForeignKeys = statements.some((statement) =>
-    /^PRAGMA\s+foreign_keys\s*=\s*OFF\s*;?$/i.test(statement.trim()),
-  );
+  const controlsForeignKeys = migrationControlsForeignKeys(tag);
   const executableStatements = controlsForeignKeys
     ? statements.filter(
         (statement) =>
@@ -122,10 +127,11 @@ export function migrateSqliteToLatest(sqlite: Database.Database): void {
   const existingFailure = getSqliteMigrationFailure(sqlite);
   if (existingFailure) {
     const nextPending = expected.find((tag) => !applied.has(tag));
-    const isRecoverable0020Failure =
-      nextPending === "0020_effect_receipt_reconciliation" &&
+    const isRecoverableForeignKeyFailure =
+      nextPending !== undefined &&
+      migrationControlsForeignKeys(nextPending) &&
       existingFailure === "FOREIGN KEY constraint failed";
-    if (!isRecoverable0020Failure) {
+    if (!isRecoverableForeignKeyFailure) {
       throw new Error(
         `Cannot migrate: previous migration failed: ${existingFailure}`,
       );

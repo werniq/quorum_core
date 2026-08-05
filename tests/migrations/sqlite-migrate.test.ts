@@ -432,6 +432,24 @@ describe("SQLite migrations", () => {
     expect(sqlite.pragma("foreign_keys", { simple: true })).toBe(1);
   });
 
+  it("retries a foreign-key failure recorded before migration 0016", () => {
+    const sqlite = openTempSqlite();
+    migrateSqliteUpTo(sqlite, "0015_ops_audit_events");
+    sqlite
+      .prepare(
+        `INSERT INTO __quorum_migration_failure (id, error, failed_at)
+         VALUES (1, 'FOREIGN KEY constraint failed', ?)`,
+      )
+      .run(new Date().toISOString());
+
+    expect(() => migrateSqliteToLatest(sqlite)).not.toThrow();
+    expect(getSqliteMigrationFailure(sqlite)).toBeNull();
+    expect(getAppliedSqliteMigrationTags(sqlite)).toEqual(
+      listMigrationTags("sqlite"),
+    );
+    expect(sqlite.pragma("foreign_keys", { simple: true })).toBe(1);
+  });
+
   it("enforces one active heartbeat contract per workflow at the database", () => {
     const sqlite = openTempSqlite();
     migrateSqliteToLatest(sqlite);
