@@ -1,6 +1,7 @@
 import { escapeHtml, layout, primaryNav, renderStepper } from "./layout.js";
 import type { OnboardingStep } from "../../infrastructure/db/repositories/sqlite-onboarding-repositories.js";
 import type { OnboardingDraft } from "../../domain/onboarding/draft.js";
+import { selectedWorkflowConfigs } from "../../domain/onboarding/draft.js";
 import type { DiscoveredWorkflow } from "../../domain/n8n/discovered-workflow.js";
 
 const FLOW: Array<{ id: OnboardingStep; label: string }> = [
@@ -172,7 +173,11 @@ function renderConnectStep(input: SimplifiedOnboardingPageInput): string {
 
 function renderSelectStep(input: SimplifiedOnboardingPageInput): string {
   const protectedIds = input.protectedExternalIds ?? new Set<string>();
-  const selected = new Set(input.draft.selectedExternalWorkflowIds ?? []);
+  const selected = new Set(
+    (input.draft.selectedExternalWorkflowIds ?? []).filter(
+      (id) => !protectedIds.has(id),
+    ),
+  );
   const q = (input.draft.search ?? "").trim().toLowerCase();
   const rows = (input.discovered ?? [])
     .filter((w) => !q || w.name.toLowerCase().includes(q))
@@ -180,7 +185,7 @@ function renderSelectStep(input: SimplifiedOnboardingPageInput): string {
       const already = protectedIds.has(w.externalWorkflowId);
       const state = w.active ? "Active" : "Inactive";
       return `<label class="radio-card" style="align-items:flex-start">
-        <input type="checkbox" name="externalWorkflowIds" value="${escapeHtml(w.externalWorkflowId)}"${selected.has(w.externalWorkflowId) ? " checked" : ""}${already ? " disabled" : ""} />
+        <input type="checkbox" name="externalWorkflowIds" value="${escapeHtml(w.externalWorkflowId)}"${already || selected.has(w.externalWorkflowId) ? " checked" : ""}${already ? " disabled" : ""} />
         <span>
           <span class="radio-card-title">${escapeHtml(w.name)}</span>
           <p class="radio-card-desc">${escapeHtml(state)} · ${escapeHtml(w.triggerSummary)}${already ? " · Already protected" : ""}</p>
@@ -224,7 +229,7 @@ function renderSelectStep(input: SimplifiedOnboardingPageInput): string {
 }
 
 function renderConfigureStep(input: SimplifiedOnboardingPageInput): string {
-  const configs = Object.values(input.draft.workflowConfigs ?? {});
+  const configs = selectedWorkflowConfigs(input.draft);
   const cards = configs
     .map((cfg, index) => {
       const detected =

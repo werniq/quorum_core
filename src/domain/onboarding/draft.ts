@@ -43,7 +43,20 @@ export interface OnboardingDraft {
 }
 
 export function emptyOnboardingDraft(): OnboardingDraft {
-  return {};
+  return {
+    selectedExternalWorkflowIds: [],
+    workflowConfigs: {},
+  };
+}
+
+/** Later steps must follow the explicit selection, not stale config entries. */
+export function selectedWorkflowConfigs(
+  draft: OnboardingDraft,
+): OnboardingWorkflowConfig[] {
+  const configs = draft.workflowConfigs ?? {};
+  return [...new Set(draft.selectedExternalWorkflowIds ?? [])]
+    .map((id) => configs[id])
+    .filter((config): config is OnboardingWorkflowConfig => Boolean(config));
 }
 
 export function parseOnboardingDraft(

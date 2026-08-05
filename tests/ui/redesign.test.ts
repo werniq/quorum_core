@@ -406,6 +406,57 @@ describe("UI redesign copy and primitives", () => {
     expect(onboarding).toContain(">Back</button>");
   });
 
+  it("shows already-protected workflows but excludes them from explicit selection", () => {
+    const protectedId = "quorum-silent-48h";
+    const html = renderSimplifiedOnboardingPage({
+      csrf: "csrf-token",
+      step: "select_workflows",
+      draft: {
+        selectedExternalWorkflowIds: [protectedId, "acme-lead-sync"],
+      },
+      clients: [],
+      connectors: [],
+      alertChannels: [],
+      protectedExternalIds: new Set([protectedId]),
+      discovered: [
+        {
+          externalWorkflowId: protectedId,
+          name: "Quorum Silent Failure Detect 48H",
+          active: true,
+          triggerKind: "schedule",
+          inferredCadence: null,
+          multipleTriggers: false,
+          triggerSummary: "Every 48 hours",
+        },
+        {
+          externalWorkflowId: "acme-lead-sync",
+          name: "Acme - Website Lead Synchronization",
+          active: true,
+          triggerKind: "schedule",
+          inferredCadence: null,
+          multipleTriggers: false,
+          triggerSummary: "Every minute",
+        },
+        {
+          externalWorkflowId: "soak-test",
+          name: "Quorum 48-hour soak test",
+          active: false,
+          triggerKind: "manual",
+          inferredCadence: null,
+          multipleTriggers: false,
+          triggerSummary: "Manual",
+        },
+      ],
+    });
+
+    expect(html).toMatch(
+      /value="quorum-silent-48h" checked disabled[^>]*>[\s\S]*Already protected/,
+    );
+    expect(html).toContain('value="acme-lead-sync" checked');
+    expect(html).toContain('value="soak-test"');
+    expect(html).not.toContain('value="soak-test" checked');
+  });
+
   it("catalog empty state and status badges render", () => {
     const html = renderCatalogPage({
       csrf: "csrf",

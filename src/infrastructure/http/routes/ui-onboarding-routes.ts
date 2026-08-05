@@ -22,6 +22,7 @@ import {
 import { renderSimplifiedOnboardingPage } from "../../../presentation/html/simplified-onboarding-ui.js";
 import type { OnboardingDraft } from "../../../domain/onboarding/draft.js";
 import type { OnboardingWorkflowConfig } from "../../../domain/onboarding/draft.js";
+import { selectedWorkflowConfigs } from "../../../domain/onboarding/draft.js";
 import type {
   CadenceType,
   MonitoringMethod,
@@ -206,7 +207,7 @@ export function registerSimplifiedOnboardingRoutes(
 
     const completionRows =
       state.step === "complete"
-        ? Object.values(state.draft.workflowConfigs ?? {}).map((cfg) => {
+        ? selectedWorkflowConfigs(state.draft).map((cfg) => {
             const workflowId = cfg.workflowId;
             const stateRow = workflowId
               ? core.getWorkflowState(tid, workflowId)
@@ -395,6 +396,8 @@ export function registerSimplifiedOnboardingRoutes(
       connectorId: connector.id,
       connectorLabel: connector.name,
       connectionTestOk: connector.health === "healthy",
+      selectedExternalWorkflowIds: [],
+      workflowConfigs: {},
     };
     onboarding.setStep(tid, "select_workflows", nowIso, { draft });
     return reply.redirect("/onboarding");
@@ -515,6 +518,8 @@ export function registerSimplifiedOnboardingRoutes(
       connectorLabel: name,
       connectionTestOk: true,
       workflowCountHint: count,
+      selectedExternalWorkflowIds: [],
+      workflowConfigs: {},
     };
     onboarding.setStep(tid, "select_workflows", nowIso, { draft });
     return reply.redirect("/onboarding");
@@ -594,16 +599,6 @@ export function registerSimplifiedOnboardingRoutes(
     const tid = deps.tenantId();
     const nowIso = deps.clock.now().toISOString();
     const state = onboarding.ensure(tid, nowIso);
-    const selected = formBodyMulti(request, "externalWorkflowIds");
-    const manualIds = Object.keys(state.draft.workflowConfigs ?? {}).filter(
-      (id) => (state.draft.selectedExternalWorkflowIds ?? []).includes(id),
-    );
-    const allSelected = [...new Set([...selected, ...manualIds])];
-    if (allSelected.length === 0) {
-      return render(reply, session, tid, {
-        flash: "Select at least one workflow to continue.",
-      });
-    }
     if (!state.draft.connectorId) {
       return render(reply, session, tid, {
         flash: "Connect n8n before selecting workflows.",
@@ -616,13 +611,26 @@ export function registerSimplifiedOnboardingRoutes(
         w,
       ]),
     );
-    const configs: Record<string, OnboardingWorkflowConfig> = {
-      ...(state.draft.workflowConfigs ?? {}),
-    };
+    const protectedIds = protectedExternalIds(tid);
+    const selected = formBodyMulti(request, "externalWorkflowIds").filter(
+      (id) => !protectedIds.has(id),
+    );
+    const manualIds = (state.draft.selectedExternalWorkflowIds ?? []).filter(
+      (id) => !byId.has(id) && !protectedIds.has(id),
+    );
+    const allSelected = [...new Set([...selected, ...manualIds])];
+    if (allSelected.length === 0) {
+      return render(reply, session, tid, {
+        flash: "Select at least one workflow to continue.",
+      });
+    }
+    const previousConfigs = state.draft.workflowConfigs ?? {};
+    const configs: Record<string, OnboardingWorkflowConfig> = {};
     for (const id of allSelected) {
       const found = byId.get(id);
-      const existing = configs[id];
+      const existing = previousConfigs[id];
       if (existing && !found) {
+        configs[id] = existing;
         continue;
       }
       if (found) {
@@ -655,7 +663,7 @@ export function registerSimplifiedOnboardingRoutes(
           volumeMin: null,
           volumeMax: null,
           monitoringMethod: "poll",
-          alreadyMonitored: protectedExternalIds(tid).has(id),
+          alreadyMonitored: false,
           ...(existing?.workflowId ? { workflowId: existing.workflowId } : {}),
           ...(existing?.contractId ? { contractId: existing.contractId } : {}),
         };
@@ -684,10 +692,16 @@ export function registerSimplifiedOnboardingRoutes(
     const tid = deps.tenantId();
     const nowIso = deps.clock.now().toISOString();
     const state = onboarding.ensure(tid, nowIso);
-    const configs = { ...(state.draft.workflowConfigs ?? {}) };
+    const selectedIds = new Set(state.draft.selectedExternalWorkflowIds ?? []);
+    const configs = Object.fromEntries(
+      selectedWorkflowConfigs(state.draft).map((config) => [
+        config.externalWorkflowId,
+        config,
+      ]),
+    );
     for (let i = 0; i < 50; i += 1) {
       const externalId = body[`wfid__${i}`];
-      if (!externalId || !configs[externalId]) {
+      if (!externalId || !selectedIds.has(externalId) || !configs[externalId]) {
         if (!externalId) break;
         continue;
       }
@@ -845,16 +859,17 @@ export function registerSimplifiedOnboardingRoutes(
     }
 
     // Activate monitoring for all configured workflows
-    const configs = Object.values(draft.workflowConfigs ?? {});
+    const configs = selectedWorkflowConfigs(draft);
     if (configs.length === 0) {
       return render(reply, session, tid, {
         flash: "No workflows configured to activate.",
       });
     }
 
-    const updatedConfigs: Record<string, OnboardingWorkflowConfig> = {
-      ...(draft.workflowConfigs ?? {}),
-    };
+    const updatedConfigs: Record<string, OnboardingWorkflowConfig> =
+      Object.fromEntries(
+        configs.map((config) => [config.externalWorkflowId, config]),
+      );
     const failures: string[] = [];
 
     for (const cfg of configs) {
