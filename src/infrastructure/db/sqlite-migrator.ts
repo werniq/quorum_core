@@ -40,6 +40,50 @@ function ensureMetaTables(sqlite: Database.Database): void {
   `);
 }
 
+function applyMigration(
+  sqlite: Database.Database,
+  tag: string,
+  appliedAt: string,
+): void {
+  const sql = readMigrationSql("sqlite", tag);
+  const statements = splitMigrationStatements(sql);
+  const controlsForeignKeys = statements.some((statement) =>
+    /^PRAGMA\s+foreign_keys\s*=\s*OFF\s*;?$/i.test(statement.trim()),
+  );
+  const executableStatements = controlsForeignKeys
+    ? statements.filter(
+        (statement) =>
+          !/^PRAGMA\s+foreign_keys\s*=\s*(?:ON|OFF)\s*;?$/i.test(
+            statement.trim(),
+          ),
+      )
+    : statements;
+  const foreignKeysWereEnabled = Boolean(
+    sqlite.pragma("foreign_keys", { simple: true }),
+  );
+
+  if (controlsForeignKeys) {
+    // SQLite ignores changes to foreign_keys after a transaction begins.
+    sqlite.pragma("foreign_keys = OFF");
+  }
+  try {
+    sqlite.transaction(() => {
+      for (const statement of executableStatements) {
+        sqlite.exec(statement);
+      }
+      sqlite
+        .prepare(
+          `INSERT INTO ${MIGRATIONS_TABLE} (tag, applied_at) VALUES (?, ?)`,
+        )
+        .run(tag, appliedAt);
+    })();
+  } finally {
+    if (controlsForeignKeys && foreignKeysWereEnabled) {
+      sqlite.pragma("foreign_keys = ON");
+    }
+  }
+}
+
 export function getAppliedSqliteMigrationTags(
   sqlite: Database.Database,
 ): string[] {
@@ -73,35 +117,28 @@ export function evaluateSqliteReadiness(
 
 export function migrateSqliteToLatest(sqlite: Database.Database): void {
   ensureMetaTables(sqlite);
-  const existingFailure = getSqliteMigrationFailure(sqlite);
-  if (existingFailure) {
-    throw new Error(
-      `Cannot migrate: previous migration failed: ${existingFailure}`,
-    );
-  }
-
   const applied = new Set(getAppliedSqliteMigrationTags(sqlite));
   const expected = listMigrationTags("sqlite");
+  const existingFailure = getSqliteMigrationFailure(sqlite);
+  if (existingFailure) {
+    const nextPending = expected.find((tag) => !applied.has(tag));
+    const isRecoverable0020Failure =
+      nextPending === "0020_effect_receipt_reconciliation" &&
+      existingFailure === "FOREIGN KEY constraint failed";
+    if (!isRecoverable0020Failure) {
+      throw new Error(
+        `Cannot migrate: previous migration failed: ${existingFailure}`,
+      );
+    }
+    sqlite.prepare(`DELETE FROM ${FAILURE_TABLE} WHERE id = 1`).run();
+  }
 
   for (const tag of expected) {
     if (applied.has(tag)) {
       continue;
     }
-    const sql = readMigrationSql("sqlite", tag);
-    const statements = splitMigrationStatements(sql);
-    const apply = sqlite.transaction(() => {
-      for (const statement of statements) {
-        sqlite.exec(statement);
-      }
-      sqlite
-        .prepare(
-          `INSERT INTO ${MIGRATIONS_TABLE} (tag, applied_at) VALUES (?, ?)`,
-        )
-        .run(tag, new Date().toISOString());
-    });
-
     try {
-      apply();
+      applyMigration(sqlite, tag, new Date().toISOString());
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Unknown migration failure";
@@ -133,18 +170,6 @@ export function migrateSqliteUpTo(
     if (applied.has(tag)) {
       continue;
     }
-    const sql = readMigrationSql("sqlite", tag);
-    const statements = splitMigrationStatements(sql);
-    const apply = sqlite.transaction(() => {
-      for (const statement of statements) {
-        sqlite.exec(statement);
-      }
-      sqlite
-        .prepare(
-          `INSERT INTO ${MIGRATIONS_TABLE} (tag, applied_at) VALUES (?, ?)`,
-        )
-        .run(tag, new Date().toISOString());
-    });
-    apply();
+    applyMigration(sqlite, tag, new Date().toISOString());
   }
 }

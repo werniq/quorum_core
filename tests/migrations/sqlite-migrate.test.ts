@@ -6,6 +6,7 @@ import type BetterSqliteDatabase from "better-sqlite3";
 import {
   evaluateSqliteReadiness,
   getAppliedSqliteMigrationTags,
+  getSqliteMigrationFailure,
   migrateSqliteToLatest,
   migrateSqliteUpTo,
   openSqliteDatabase,
@@ -369,6 +370,66 @@ describe("SQLite migrations", () => {
     expect(stateCols.map((c) => c.name)).toContain(
       "last_effect_reconciliation_status",
     );
+  });
+
+  it("retries the known pre-0020 foreign-key failure and preserves incident references", () => {
+    const sqlite = openTempSqlite();
+    migrateSqliteUpTo(sqlite, "0019_watchdog_unknown_freshness");
+    const now = new Date().toISOString();
+    const tenantId = createId();
+    const workflowId = createId();
+    const incidentId = createId();
+
+    sqlite
+      .prepare(
+        `INSERT INTO tenants (id, name, edition, created_at, updated_at)
+         VALUES (?, 'T', 'self_hosted', ?, ?)`,
+      )
+      .run(tenantId, now, now);
+    sqlite
+      .prepare(
+        `INSERT INTO workflows (
+           id, tenant_id, client_id, name, source_platform, external_workflow_id,
+           monitoring_method, is_active, created_at, updated_at
+         ) VALUES (?, ?, NULL, 'W', 'n8n', 'ext', 'poll', 1, ?, ?)`,
+      )
+      .run(workflowId, tenantId, now, now);
+    sqlite
+      .prepare(
+        `INSERT INTO incidents (
+           id, tenant_id, client_id, contract_kind, workflow_id,
+           outcome_contract_id, incident_type, severity, status, opened_at,
+           last_observed_at, notification_count, summary, created_at, updated_at
+         ) VALUES (?, ?, NULL, 'workflow', ?, NULL, 'silent_absence',
+           'warning', 'open', ?, ?, 0, 'Missing run', ?, ?)`,
+      )
+      .run(incidentId, tenantId, workflowId, now, now, now, now);
+    sqlite
+      .prepare(
+        `INSERT INTO notification_outbox (
+           id, tenant_id, incident_id, event_type, payload_json, available_at,
+           attempt_count, created_at
+         ) VALUES (?, ?, ?, 'opened', '{}', ?, 0, ?)`,
+      )
+      .run(createId(), tenantId, incidentId, now, now);
+    sqlite
+      .prepare(
+        `INSERT INTO __quorum_migration_failure (id, error, failed_at)
+         VALUES (1, 'FOREIGN KEY constraint failed', ?)`,
+      )
+      .run(now);
+
+    expect(() => migrateSqliteToLatest(sqlite)).not.toThrow();
+    expect(getSqliteMigrationFailure(sqlite)).toBeNull();
+    expect(getAppliedSqliteMigrationTags(sqlite)).toContain(
+      "0020_effect_receipt_reconciliation",
+    );
+    expect(
+      sqlite
+        .prepare(`SELECT incident_id FROM notification_outbox LIMIT 1`)
+        .get(),
+    ).toEqual({ incident_id: incidentId });
+    expect(sqlite.pragma("foreign_keys", { simple: true })).toBe(1);
   });
 
   it("enforces one active heartbeat contract per workflow at the database", () => {
