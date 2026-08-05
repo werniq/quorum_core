@@ -1,5 +1,7 @@
 # Quorum
 
+[Website](https://quorumwatch.com) · [GitHub](https://github.com/werniq/quorum_core)
+
 Define what each critical workflow should do. Quorum checks whether it ran, whether its reported volume stayed within the expected range, and how strong the evidence actually is.
 
 Quorum watches n8n workflows against explicit contracts. You define when a workflow should report in, what counts as success or failure, and how strong the evidence needs to be. Quorum opens incidents when reality drifts from that contract and resolves them when reporting recovers.
