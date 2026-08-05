@@ -1042,6 +1042,7 @@ export function renderWorkflowContractDetailPage(input: {
   role: "admin" | "operator" | "viewer";
   csrf: string;
   contract: {
+    workflowId: string;
     name: string;
     businessPurpose: string;
     cadence: string;
@@ -1051,6 +1052,7 @@ export function renderWorkflowContractDetailPage(input: {
     lastEvidence: string | null;
     nextDeadline: string | null;
     outputRule: string;
+    alertRules: string[];
     verified: string[];
     unverified: string[];
     raiseHint: string;
@@ -1114,6 +1116,14 @@ export function renderWorkflowContractDetailPage(input: {
           ${detailKvHtml("Activation", activationBadge)}
           ${detailKvHtml("Health", `${statusBadge(c.health)} ${evidenceLevelBadge(c.evidenceLevel)}`)}
         </div>
+        <div class="detail-kv-grid" style="margin-top:1rem">
+          ${detailKvFull("Enabled alert rules", c.alertRules.join("; ") || "None")}
+        </div>
+        ${
+          input.role === "viewer"
+            ? ""
+            : `<p style="margin:1rem 0 0"><a class="btn btn-secondary" href="/catalog/contracts/${escapeHtml(c.workflowId)}/edit">Edit monitoring settings</a></p>`
+        }
       </section>
       <section class="card detail-section" aria-labelledby="sec-evidence">
         <h2 class="section-title" id="sec-evidence">Current evidence</h2>
@@ -1165,6 +1175,54 @@ export function renderWorkflowContractDetailPage(input: {
       <p class="detail-back"><a class="btn btn-secondary" href="/catalog">Back to catalog</a></p>
       </div>
     `,
+  });
+}
+
+export function renderWorkflowMonitoringSettingsPage(input: {
+  demoMode?: boolean;
+  role: "admin" | "operator" | "viewer";
+  csrf: string;
+  workflowId: string;
+  workflowName: string;
+  cadenceType: string;
+  quietHours: number | null;
+  zeroOutputEnabled: boolean;
+}): string {
+  const eventDriven = input.cadenceType === "event_driven";
+  return layout({
+    demoMode: input.demoMode === true,
+    title: `Monitoring settings · ${input.workflowName}`,
+    nav: primaryNav({ loggedIn: true, current: "catalog", role: input.role }),
+    current: "catalog",
+    role: input.role,
+    pageTitle: "Edit monitoring settings",
+    body: `<div class="contract-detail">
+      <h1 class="page-title">Edit monitoring settings</h1>
+      <p class="page-subtitle">${escapeHtml(input.workflowName)}</p>
+      <form class="card stack" method="post" action="/catalog/contracts/${escapeHtml(input.workflowId)}/edit">
+        <input type="hidden" name="csrf" value="${escapeHtml(input.csrf)}" />
+        <div>
+          <strong>Execution failures</strong>
+          <p class="helper">Enabled for accepted heartbeat reports with a failure status.</p>
+        </div>
+        <label class="checkbox-row">
+          <input type="checkbox" name="zeroOutput" value="1"${input.zeroOutputEnabled ? " checked" : ""} />
+          <span><strong>Zero useful output</strong><br /><span class="helper">Open an incident when a successful execution processes zero useful items.</span></span>
+        </label>
+        ${
+          eventDriven
+            ? `<label><strong>Quiet window (hours)</strong>
+                <input name="quietHours" type="number" min="0.01" step="0.01" required value="${escapeHtml(String(input.quietHours ?? 24))}" />
+                <span class="helper">Open a silent-failure incident when no accepted heartbeat arrives within this window.</span>
+              </label>`
+            : `<p><strong>Schedule:</strong> ${escapeHtml(input.cadenceType)}</p>`
+        }
+        <div class="button-row">
+          <button class="btn btn-primary" type="submit">Save monitoring settings</button>
+          <a class="btn btn-secondary" href="/catalog/contracts/${escapeHtml(input.workflowId)}">Cancel</a>
+        </div>
+      </form>
+    </div>`,
   });
 }
 

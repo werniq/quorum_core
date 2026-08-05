@@ -112,6 +112,7 @@ describe("catalog card polish formatting", () => {
       role: "admin",
       csrf: "csrf",
       contract: {
+        workflowId: "workflow-1",
         name: "Lead sync monitoring",
         businessPurpose: "Monitor Lead sync",
         cadence: "event_driven:event@UTC",
@@ -122,6 +123,11 @@ describe("catalog card polish formatting", () => {
         nextDeadline: "2026-07-30T20:16:00.000Z",
         outputRule:
           "At least 1 useful item per successful report; zero opens an incident",
+        alertRules: [
+          "Execution failures",
+          "Zero useful output",
+          "Quiet window: 24 hours",
+        ],
         verified: [],
         unverified: [],
         raiseHint: "",
@@ -144,6 +150,10 @@ describe("catalog card polish formatting", () => {
     expect(html).not.toContain(
       'Output rule</span><div class="detail-value">Not configured',
     );
+    expect(html).toContain("Enabled alert rules");
+    expect(html).toContain("Zero useful output");
+    expect(html).toContain("Quiet window: 24 hours");
+    expect(html).toContain("Edit monitoring settings");
   });
 
   it("keeps watcher and connector health inside collapsible technical details", () => {

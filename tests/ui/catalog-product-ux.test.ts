@@ -62,6 +62,120 @@ afterEach(() => {
   }
 });
 
+describe("workflow monitoring settings", () => {
+  it("shows and edits enabled heartbeat alert rules", async () => {
+    const sqlite = openDb();
+    const clock = new FixedClock(new Date("2026-08-05T08:00:00.000Z"));
+    const { core, tenant, sessionId, csrf } = seedAdmin(sqlite, clock);
+    const workflow = core.createWorkflow(tenant.id, {
+      id: createId(),
+      clientId: null,
+      name: "CRM outcome sync",
+      externalWorkflowId: "crm-outcome-sync",
+      description: null,
+      monitoringMethod: "push",
+      isActive: true,
+      monitoringStartedAt: clock.now().toISOString(),
+    });
+    const contract = core.createWorkflowContract(tenant.id, {
+      id: createId(),
+      workflowId: workflow.id,
+      name: "CRM outcome contract",
+      businessPurpose: "Keep CRM current",
+      contractType: "heartbeat",
+      cadenceType: "event_driven",
+      cadenceValue: "event",
+      intervalMode: null,
+      scheduleAnchorAt: null,
+      timezone: "UTC",
+      allowedLatenessMinutes: 5,
+      maxQuietWindowMinutes: 1440,
+      initialGraceMinutes: 5,
+      emptyResultPolicy: "allowed",
+      countLessSuccessAllowed: true,
+      notificationBackoffMinutes: 30,
+      evidenceLevel: "basic",
+      schemaVersion: 1,
+      isActive: true,
+      activatedAt: clock.now().toISOString(),
+    });
+    core.upsertWorkflowState(tenant.id, {
+      tenantId: tenant.id,
+      workflowId: workflow.id,
+      lastExecutionAt: clock.now().toISOString(),
+      lastNonemptySuccessAt: clock.now().toISOString(),
+      lastAcceptableSuccessAt: clock.now().toISOString(),
+      lastFailureAt: null,
+      lastExternalExecutionRef: null,
+      lastStatus: "success",
+      nextExpectedAt: "2026-08-06T08:00:00.000Z",
+      overdueSince: null,
+      currentHealth: "healthy",
+      evidenceLevel: "basic",
+      evidenceSummaryCode: null,
+      unverifiedDimensionsJson: null,
+      consecutiveStaleChecks: 0,
+      updatedAt: clock.now().toISOString(),
+    });
+    const app = await bootApp(sqlite, clock);
+    const cookie = `${SESSION_COOKIE}=${sessionId}`;
+    const edit = await app.inject({
+      method: "GET",
+      url: `/catalog/contracts/${workflow.id}/edit`,
+      headers: { cookie },
+    });
+    expect(edit.statusCode).toBe(200);
+    expect(edit.body).toContain("Execution failures");
+    expect(edit.body).toContain("Zero useful output");
+    expect(edit.body).toContain('name="quietHours"');
+    expect(edit.body).not.toContain('name="zeroOutput" value="1" checked');
+
+    const saved = await app.inject({
+      method: "POST",
+      url: `/catalog/contracts/${workflow.id}/edit`,
+      headers: {
+        cookie,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      payload: `csrf=${encodeURIComponent(csrf)}&zeroOutput=1&quietHours=12`,
+    });
+    expect(saved.statusCode).toBe(302);
+    const persisted = sqlite
+      .prepare(
+        `SELECT empty_result_policy, count_less_success_allowed,
+                max_quiet_window_minutes
+         FROM workflow_contracts WHERE id = ?`,
+      )
+      .get(contract.id) as {
+      empty_result_policy: string;
+      count_less_success_allowed: number;
+      max_quiet_window_minutes: number;
+    };
+    expect(persisted).toEqual({
+      empty_result_policy: "failure",
+      count_less_success_allowed: 0,
+      max_quiet_window_minutes: 720,
+    });
+    expect(core.getWorkflowState(tenant.id, workflow.id)?.nextExpectedAt).toBe(
+      "2026-08-05T20:00:00.000Z",
+    );
+
+    const detail = await app.inject({
+      method: "GET",
+      url: `/catalog/contracts/${workflow.id}`,
+      headers: { cookie },
+    });
+    expect(detail.body).toContain("Enabled alert rules");
+    expect(detail.body).toContain("Execution failures");
+    expect(detail.body).toContain("Zero useful output");
+    expect(detail.body).toContain("Quiet window: 12 hours");
+    expect(detail.body).not.toContain(
+      'Output rule</span><div class="detail-value">Not configured',
+    );
+    await app.close();
+  });
+});
+
 async function bootApp(
   sqlite: BetterSqliteDatabase.Database,
   clock: FixedClock,

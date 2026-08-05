@@ -30,6 +30,7 @@ import {
   renderClientsPage,
   renderSimpleNavPage,
   renderWorkflowContractDetailPage,
+  renderWorkflowMonitoringSettingsPage,
 } from "../../../presentation/html/catalog-ui.js";
 import { renderIncidentsPage } from "../../../presentation/html/incidents-ui.js";
 import type { IncidentListRow } from "../../../presentation/html/incidents-ui.js";
@@ -38,6 +39,7 @@ import { formatHeartbeatHistoryRow } from "../../../domain/incidents/hard-failur
 import { createId } from "../../../domain/ids.js";
 import { toCatalogRowView } from "./catalog-row-view.js";
 import type { createOutboxProcessor } from "../../alerting/process-outbox.js";
+import { computeNextExpectedIso } from "../../ingestion/apply-heartbeat-state.js";
 
 type Session = {
   adminUserId: string;
@@ -72,6 +74,17 @@ export function registerProductUiRoutes(
   const pageShell = { demoMode: deps.env.QUORUM_DEMO_MODE };
   const core = new SqliteCoreRepositories(deps.sqlite);
   const alerting = new SqliteAlertingRepositories(deps.sqlite);
+
+  function formBody(request: FastifyRequest): Record<string, string> {
+    if (!request.body || typeof request.body !== "object") return {};
+    return Object.fromEntries(
+      Object.entries(request.body as Record<string, unknown>)
+        .filter((entry): entry is [string, string | number | boolean] =>
+          ["string", "number", "boolean"].includes(typeof entry[1]),
+        )
+        .map(([key, value]) => [key, String(value)]),
+    );
+  }
 
   function requireAdmin(session: Session, reply: FastifyReply): boolean {
     if (session.role === "viewer") {
@@ -596,6 +609,124 @@ export function registerProductUiRoutes(
     );
   });
 
+  app.get("/catalog/contracts/:workflowId/edit", async (request, reply) => {
+    const session = deps.requireSession(request, reply);
+    if (!session || !requireAdmin(session, reply)) return;
+    const workflowId = (request.params as { workflowId: string }).workflowId;
+    const tid = deps.tenantId();
+    const row = deps.sqlite
+      .prepare(
+        `SELECT w.name AS workflow_name, c.cadence_type,
+                c.max_quiet_window_minutes, c.empty_result_policy
+         FROM workflows w
+         JOIN workflow_contracts c
+           ON c.tenant_id = w.tenant_id AND c.workflow_id = w.id
+          AND c.contract_type = 'heartbeat'
+         WHERE w.tenant_id = ? AND w.id = ? LIMIT 1`,
+      )
+      .get(tid, workflowId) as
+      | {
+          workflow_name: string;
+          cadence_type: string;
+          max_quiet_window_minutes: number | null;
+          empty_result_policy: string;
+        }
+      | undefined;
+    if (!row)
+      return reply.code(404).type("text/html").send("Contract not found");
+    return reply.type("text/html").send(
+      renderWorkflowMonitoringSettingsPage({
+        ...pageShell,
+        role: session.role,
+        csrf: session.csrfToken,
+        workflowId,
+        workflowName: row.workflow_name,
+        cadenceType: row.cadence_type,
+        quietHours:
+          row.max_quiet_window_minutes == null
+            ? null
+            : row.max_quiet_window_minutes / 60,
+        zeroOutputEnabled:
+          row.empty_result_policy === "failure" ||
+          row.empty_result_policy === "warning",
+      }),
+    );
+  });
+
+  app.post("/catalog/contracts/:workflowId/edit", async (request, reply) => {
+    const session = deps.requireSession(request, reply);
+    if (
+      !session ||
+      !requireAdmin(session, reply) ||
+      !deps.assertCsrf(request, session, reply)
+    ) {
+      return;
+    }
+    const workflowId = (request.params as { workflowId: string }).workflowId;
+    const tid = deps.tenantId();
+    const contract = deps.sqlite
+      .prepare(
+        `SELECT * FROM workflow_contracts
+         WHERE tenant_id = ? AND workflow_id = ?
+           AND contract_type = 'heartbeat' LIMIT 1`,
+      )
+      .get(tid, workflowId) as Record<string, unknown> | undefined;
+    if (!contract)
+      return reply.code(404).type("text/html").send("Contract not found");
+    const body = formBody(request);
+    const zeroOutputEnabled = body.zeroOutput === "1";
+    let quietMinutes = contract.max_quiet_window_minutes as number | null;
+    if (String(contract.cadence_type) === "event_driven") {
+      const quietHours = Number(body.quietHours);
+      if (!Number.isFinite(quietHours) || quietHours <= 0) {
+        return reply
+          .code(400)
+          .type("text/html")
+          .send("Quiet window must be greater than zero.");
+      }
+      quietMinutes = Math.round(quietHours * 60);
+    }
+    const nowIso = deps.clock.now().toISOString();
+    deps.sqlite
+      .prepare(
+        `UPDATE workflow_contracts
+         SET empty_result_policy = ?, count_less_success_allowed = ?,
+             max_quiet_window_minutes = ?, updated_at = ?
+         WHERE tenant_id = ? AND id = ?`,
+      )
+      .run(
+        zeroOutputEnabled ? "failure" : "allowed",
+        zeroOutputEnabled ? 0 : 1,
+        quietMinutes,
+        nowIso,
+        tid,
+        contract.id,
+      );
+    const updatedContract = deps.sqlite
+      .prepare(
+        `SELECT * FROM workflow_contracts WHERE tenant_id = ? AND id = ?`,
+      )
+      .get(tid, contract.id) as Record<string, unknown>;
+    const state = deps.sqlite
+      .prepare(
+        `SELECT last_execution_at FROM workflow_states
+         WHERE tenant_id = ? AND workflow_id = ?`,
+      )
+      .get(tid, workflowId) as { last_execution_at: string | null } | undefined;
+    const nextExpectedAt = computeNextExpectedIso({
+      contract: updatedContract,
+      lastReportAt: state?.last_execution_at ?? nowIso,
+      clock: deps.clock,
+    });
+    deps.sqlite
+      .prepare(
+        `UPDATE workflow_states SET next_expected_at = ?, updated_at = ?
+         WHERE tenant_id = ? AND workflow_id = ?`,
+      )
+      .run(nextExpectedAt, nowIso, tid, workflowId);
+    return reply.redirect(`/catalog/contracts/${workflowId}`);
+  });
+
   app.get("/catalog/contracts/:workflowId", async (request, reply) => {
     const session = deps.requireSession(request, reply);
     if (!session) {
@@ -660,6 +791,7 @@ export function registerProductUiRoutes(
         role: session.role,
         csrf: session.csrfToken,
         contract: {
+          workflowId,
           name: String(contract?.name ?? row.businessPurposeName),
           businessPurpose: row.businessPurposeName,
           cadence: row.expectedCadenceOrWindow,
@@ -676,6 +808,18 @@ export function registerProductUiRoutes(
                 : volume
                   ? volume.expectedRange
                   : "Not configured",
+          alertRules: [
+            "Execution failures",
+            contract?.empty_result_policy === "failure"
+              ? "Zero useful output"
+              : contract?.empty_result_policy === "warning"
+                ? "Zero useful output (warning)"
+                : null,
+            contract?.cadence_type === "event_driven" &&
+            contract?.max_quiet_window_minutes != null
+              ? `Quiet window: ${Number(contract.max_quiet_window_minutes) / 60} hours`
+              : null,
+          ].filter((rule): rule is string => rule !== null),
           verified: plainVerifiedLabels(row.evidenceLevel),
           unverified: plainUnverifiedLabels(
             unverifiedDimensionsForEvidenceLevel(row.evidenceLevel),
