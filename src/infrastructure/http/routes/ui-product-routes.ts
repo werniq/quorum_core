@@ -635,10 +635,10 @@ export function registerProductUiRoutes(
       .all(tid, row.contractId) as Array<{ name: string; health: string }>;
     const events = deps.sqlite
       .prepare(
-        `SELECT received_at AS at, status, items_processed
+        `SELECT executed_at AS at, status, items_processed
          FROM heartbeat_events
          WHERE tenant_id = ? AND workflow_id = ?
-         ORDER BY received_at DESC LIMIT 8`,
+         ORDER BY executed_at DESC, received_at DESC LIMIT 8`,
       )
       .all(tid, workflowId) as Array<{
       at: string;
@@ -666,8 +666,16 @@ export function registerProductUiRoutes(
           isActive: row.isActive,
           evidenceLevel: row.evidenceLevel,
           health: row.health,
-          lastEvidence: row.lastAcceptableEvidenceAt,
+          lastEvidence: row.lastReportAt,
           nextDeadline: row.nextDeadlineAt,
+          outputRule:
+            contract?.empty_result_policy === "failure"
+              ? "At least 1 useful item per successful report; zero opens an incident"
+              : contract?.empty_result_policy === "warning"
+                ? "Zero useful items opens a warning"
+                : volume
+                  ? volume.expectedRange
+                  : "Not configured",
           verified: plainVerifiedLabels(row.evidenceLevel),
           unverified: plainUnverifiedLabels(
             unverifiedDimensionsForEvidenceLevel(row.evidenceLevel),

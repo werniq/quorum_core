@@ -26,7 +26,7 @@ import {
 } from "../../src/domain/evidence/empty-result.js";
 
 describe("nextExpectedAfterReport", () => {
-  it("advances the expected occurrence from the latest report", () => {
+  it("advances the event-driven quiet deadline from the latest report", () => {
     const contract: CadenceContractFields = {
       cadenceType: "event_driven",
       cadenceValue: "event",
@@ -44,7 +44,7 @@ describe("nextExpectedAfterReport", () => {
       isActive: true,
       clock: new FixedClock(new Date("2026-07-18T08:20:00.000Z")),
     });
-    expect(next?.toISOString()).toBe("2026-07-18T08:15:00.000Z");
+    expect(next?.toISOString()).toBe("2026-07-18T09:15:00.000Z");
   });
 
   it("returns null when the contract is inactive", () => {

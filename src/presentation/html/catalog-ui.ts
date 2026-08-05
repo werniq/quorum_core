@@ -465,7 +465,7 @@ export function renderContractCard(row: CatalogRowView): string {
         row.lastExternalExecutionRef ?? "—",
       )}</div>
       <div>${formatTimestampHint(row.nextDeadlineAt, "Expected next execution")}</div>`
-      : `<div>${formatTimestampHint(row.lastAcceptableEvidenceAt, "Last execution")}</div>
+      : `<div>${formatTimestampHint(row.lastReportAt, "Last execution")}</div>
       <div>${formatTimestampHint(row.nextDeadlineAt, "Expected next execution")}</div>
       <div>${escapeHtml(formatLateness(row.overdueDurationSeconds))}</div>`;
   const actions = contractCardActions(row)
@@ -1050,6 +1050,7 @@ export function renderWorkflowContractDetailPage(input: {
     health: string;
     lastEvidence: string | null;
     nextDeadline: string | null;
+    outputRule: string;
     verified: string[];
     unverified: string[];
     raiseHint: string;
@@ -1117,8 +1118,9 @@ export function renderWorkflowContractDetailPage(input: {
       <section class="card detail-section" aria-labelledby="sec-evidence">
         <h2 class="section-title" id="sec-evidence">Current evidence</h2>
         <div class="detail-kv-grid">
-          ${detailKv("Last checked", c.lastEvidence ?? "never")}
+          ${detailKv("Last execution", c.lastEvidence ?? "—")}
           ${detailKv("Next deadline", c.nextDeadline ?? "—")}
+          ${detailKvFull("Output rule", c.outputRule)}
           ${detailKvFull("Verified", c.verified.join("; ") || "none")}
           ${detailKvFull("Unverified", c.unverified.join("; ") || "none")}
         </div>

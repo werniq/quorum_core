@@ -3,6 +3,7 @@ import {
   formatCatalogTimestamp,
   formatExpectation,
   renderContractCard,
+  renderWorkflowContractDetailPage,
   type CatalogRowView,
 } from "../../src/presentation/html/catalog-ui.js";
 
@@ -87,6 +88,62 @@ describe("catalog card polish formatting", () => {
     expect(html).toContain('title="2026-07-29T20:16:00.000Z"');
     expect(html).toContain(">29 Jul 2026, 20:17</time>");
     expect(html).not.toContain("Last execution: 2026-07-29T20:16:00.000Z");
+  });
+
+  it("uses the latest accepted report for Last execution", () => {
+    const html = renderContractCard(
+      baseRow({
+        health: "healthy",
+        displayHealth: "healthy",
+        lastAcceptableEvidenceAt: null,
+        lastReportAt: "2026-07-29T20:16:00.000Z",
+        lastReportStatus: "success",
+        activeIncident: null,
+        overdueDurationSeconds: null,
+      }),
+    );
+    expect(html).toContain("Last execution");
+    expect(html).toContain(">29 Jul 2026, 20:16</time>");
+    expect(html).not.toContain("Last execution: —");
+  });
+
+  it("shows accepted execution time and the configured zero-output rule on detail", () => {
+    const html = renderWorkflowContractDetailPage({
+      role: "admin",
+      csrf: "csrf",
+      contract: {
+        name: "Lead sync monitoring",
+        businessPurpose: "Monitor Lead sync",
+        cadence: "event_driven:event@UTC",
+        isActive: true,
+        evidenceLevel: "basic",
+        health: "healthy",
+        lastEvidence: "2026-07-29T20:16:00.000Z",
+        nextDeadline: "2026-07-30T20:16:00.000Z",
+        outputRule:
+          "At least 1 useful item per successful report; zero opens an incident",
+        verified: [],
+        unverified: [],
+        raiseHint: "",
+      },
+      incidents: [],
+      channels: [],
+      recentEvents: [
+        {
+          at: "2026-07-29T20:16:00.000Z",
+          label: "29 Jul 2026, 20:16 · Success · 1 item",
+        },
+      ],
+    });
+    expect(html).toContain("Last execution");
+    expect(html).toContain("2026-07-29T20:16:00.000Z");
+    expect(html).toContain("Output rule");
+    expect(html).toContain(
+      "At least 1 useful item per successful report; zero opens an incident",
+    );
+    expect(html).not.toContain(
+      'Output rule</span><div class="detail-value">Not configured',
+    );
   });
 
   it("keeps watcher and connector health inside collapsible technical details", () => {

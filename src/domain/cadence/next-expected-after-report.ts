@@ -20,5 +20,10 @@ export function nextExpectedAfterReport(input: {
     },
     input.clock,
   );
-  return evaluation.expectedAt;
+  // Scheduled contracts expose their next expected occurrence. Event-driven
+  // contracts have no predictable occurrence, so the useful "next" value is
+  // the quiet-window deadline after the latest accepted report.
+  return input.contract.cadenceType === "event_driven"
+    ? evaluation.deadlineAt
+    : evaluation.expectedAt;
 }

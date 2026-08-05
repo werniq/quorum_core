@@ -180,6 +180,13 @@ describe("empty-result contract handling", () => {
   it("recovers normal → empty result → normal and recalculates next deadline", () => {
     const sqlite = openDb();
     const { workflowId, keyId, ingest } = seedWorkflow(sqlite, "failure");
+    sqlite
+      .prepare(
+        `UPDATE workflow_contracts
+         SET max_quiet_window_minutes = 1440
+         WHERE workflow_id = ?`,
+      )
+      .run(workflowId);
 
     ingestOk(ingest, workflowId, keyId, "ok-1", {
       schemaVersion: 1,
@@ -199,7 +206,7 @@ describe("empty-result contract handling", () => {
     expect(afterOk.last_status).toBe("success");
     expect(afterOk.current_health).toBe("healthy");
     expect(afterOk.last_nonempty_success_at).toBe("2026-07-18T08:00:00.000Z");
-    expect(afterOk.next_expected_at).toBeTruthy();
+    expect(afterOk.next_expected_at).toBe("2026-07-19T08:00:00.000Z");
     const deadlineAfterOk = afterOk.next_expected_at!;
 
     ingestOk(ingest, workflowId, keyId, "empty-1", {
@@ -227,7 +234,7 @@ describe("empty-result contract handling", () => {
     expect(afterEmpty.last_nonempty_success_at).toBe(
       "2026-07-18T08:00:00.000Z",
     );
-    expect(afterEmpty.next_expected_at).toBeTruthy();
+    expect(afterEmpty.next_expected_at).toBe("2026-07-19T08:15:00.000Z");
     expect(afterEmpty.next_expected_at).not.toBe(deadlineAfterOk);
 
     const emptyIncident = sqlite
