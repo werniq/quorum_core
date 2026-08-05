@@ -449,12 +449,84 @@ describe("UI redesign copy and primitives", () => {
       ],
     });
 
-    expect(html).toMatch(
-      /value="quorum-silent-48h" checked disabled[^>]*>[\s\S]*Already protected/,
+    expect(html).toContain(
+      '<div class="radio-card is-protected" aria-disabled="true"',
     );
+    expect(html).toContain('class="protected-status-icon"');
+    expect(html).toContain(
+      '<span class="badge badge-status-unknown">Already protected</span>',
+    );
+    expect(html).not.toContain('value="quorum-silent-48h"');
     expect(html).toContain('value="acme-lead-sync" checked');
     expect(html).toContain('value="soak-test"');
     expect(html).not.toContain('value="soak-test" checked');
+  });
+
+  it("explains Basic and Outcome monitoring and discloses cadence fields correctly", () => {
+    const html = renderSimplifiedOnboardingPage({
+      csrf: "csrf-token",
+      step: "configure_monitoring",
+      draft: {
+        selectedExternalWorkflowIds: ["scheduled", "event"],
+        workflowConfigs: {
+          scheduled: {
+            externalWorkflowId: "scheduled",
+            name: "Scheduled sync",
+            activeInN8n: true,
+            triggerSummary: "Every 15 minutes",
+            cadenceType: "interval",
+            cadenceValue: "15m",
+            timezone: "UTC",
+            quietHours: null,
+            monitorMissingRuns: true,
+            monitorFailures: true,
+            monitorEmptyResult: false,
+            monitorVolumeRange: false,
+            volumeMin: null,
+            volumeMax: null,
+            monitoringMethod: "poll",
+          },
+          event: {
+            externalWorkflowId: "event",
+            name: "Webhook sync",
+            activeInN8n: true,
+            triggerSummary: "Webhook",
+            cadenceType: "event_driven",
+            cadenceValue: "event",
+            timezone: "UTC",
+            quietHours: 24,
+            monitorMissingRuns: false,
+            monitorFailures: true,
+            monitorEmptyResult: true,
+            monitorVolumeRange: true,
+            volumeMin: 1,
+            volumeMax: 100,
+            monitoringMethod: "push",
+          },
+        },
+      },
+      clients: [],
+      connectors: [],
+      alertChannels: [],
+    });
+
+    expect(html).toContain("Basic monitoring");
+    expect(html).toContain(
+      "Connect Quorum to n8n using an API key. No workflow changes required.",
+    );
+    expect(html).toContain("Outcome monitoring");
+    expect(html).toContain("Zero useful output");
+    expect(html).toContain(
+      "does not independently verify the downstream destination",
+    );
+    expect(html).toContain('data-scheduled-fields="0"');
+    expect(html).toContain('data-event-fields="0" hidden');
+    expect(html).toContain('data-scheduled-fields="1" hidden');
+    expect(html).toContain('data-event-fields="1"');
+    expect(html).toContain("Alert if no event is received for");
+    expect(html).toContain(
+      "Requires outcome monitoring. The workflow reports how many useful items it produced.",
+    );
   });
 
   it("catalog empty state and status badges render", () => {

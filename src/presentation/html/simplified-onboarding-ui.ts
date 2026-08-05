@@ -35,12 +35,24 @@ export interface SimplifiedOnboardingPageInput {
   protectedExternalIds?: Set<string>;
   completionRows?: Array<{
     name: string;
+    monitoringMode: string;
+    alertRules: string[];
+    timingLabel: string;
+    outcomeThreshold: string | null;
+    heartbeatAccepted: boolean;
     statusLabel: string;
     connected: boolean;
     discovered: boolean;
     monitoring: boolean;
     alertTested: boolean | null;
     waitingFirst: boolean;
+  }>;
+  outcomeSetups?: Array<{
+    workflowName: string;
+    workflowId: string;
+    keyId: string;
+    secret: string;
+    ingestPath: string;
   }>;
 }
 
@@ -184,11 +196,22 @@ function renderSelectStep(input: SimplifiedOnboardingPageInput): string {
     .map((w) => {
       const already = protectedIds.has(w.externalWorkflowId);
       const state = w.active ? "Active" : "Inactive";
+      if (already) {
+        return `<div class="radio-card is-protected" aria-disabled="true" style="align-items:flex-start">
+          <span class="protected-status-icon" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 16 16" focusable="false"><path fill="currentColor" d="M4.5 6V4.5a3.5 3.5 0 0 1 7 0V6h.5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h.5Zm1.5 0h4V4.5a2 2 0 1 0-4 0V6Z"/></svg>
+          </span>
+          <span>
+            <span class="radio-card-title">${escapeHtml(w.name)} <span class="badge badge-status-unknown">Already protected</span></span>
+            <p class="radio-card-desc">${escapeHtml(state)} · ${escapeHtml(w.triggerSummary)}</p>
+          </span>
+        </div>`;
+      }
       return `<label class="radio-card" style="align-items:flex-start">
-        <input type="checkbox" name="externalWorkflowIds" value="${escapeHtml(w.externalWorkflowId)}"${already || selected.has(w.externalWorkflowId) ? " checked" : ""}${already ? " disabled" : ""} />
+        <input type="checkbox" name="externalWorkflowIds" value="${escapeHtml(w.externalWorkflowId)}"${selected.has(w.externalWorkflowId) ? " checked" : ""} />
         <span>
           <span class="radio-card-title">${escapeHtml(w.name)}</span>
-          <p class="radio-card-desc">${escapeHtml(state)} · ${escapeHtml(w.triggerSummary)}${already ? " · Already protected" : ""}</p>
+          <p class="radio-card-desc">${escapeHtml(state)} · ${escapeHtml(w.triggerSummary)}</p>
         </span>
       </label>`;
     })
@@ -242,43 +265,66 @@ function renderConfigureStep(input: SimplifiedOnboardingPageInput): string {
         <h3 class="card-title">${escapeHtml(cfg.name)}</h3>
         ${detected}
         <input type="hidden" name="wfid__${index}" value="${escapeHtml(cfg.externalWorkflowId)}" />
+        <fieldset class="stack" style="border:0;padding:0;margin:0">
+          <legend class="field-label">Integration mode</legend>
+          <div class="radio-card-group onboarding-mode-options">
+            <label class="radio-card">
+              <input type="radio" name="method__${index}" value="poll" data-monitoring-mode="${index}"${cfg.monitoringMethod !== "push" ? " checked" : ""} />
+              <span>
+                <span class="radio-card-title">Basic monitoring</span>
+                <p class="radio-card-desc">Connect Quorum to n8n using an API key. No workflow changes required.</p>
+                <p class="radio-card-desc">Missing expected runs · Recorded n8n execution failures · Recovery visibility</p>
+              </span>
+            </label>
+            <label class="radio-card">
+              <input type="radio" name="method__${index}" value="push" data-monitoring-mode="${index}"${cfg.monitoringMethod === "push" ? " checked" : ""} />
+              <span>
+                <span class="radio-card-title">Outcome monitoring</span>
+                <p class="radio-card-desc">Report useful output from inside the workflow to detect green executions that produced no useful result.</p>
+                <p class="radio-card-desc">Basic monitoring capabilities where applicable · Zero useful output · Item-count range violations · Workflow-reported outcome evidence</p>
+                <p class="radio-card-desc"><strong>Evidence note:</strong> workflow-reported evidence does not independently verify the downstream destination.</p>
+              </span>
+            </label>
+          </div>
+        </fieldset>
         <label class="field">
           <span class="field-label">How often should this workflow run?</span>
-          <select name="cadenceType__${index}">
+          <select name="cadenceType__${index}" data-cadence-select="${index}">
             <option value="interval"${cfg.cadenceType === "interval" ? " selected" : ""}>On an interval</option>
             <option value="cron"${cfg.cadenceType === "cron" ? " selected" : ""}>On a cron schedule</option>
             <option value="event_driven"${cfg.cadenceType === "event_driven" ? " selected" : ""}>Event-driven / quiet window</option>
           </select>
         </label>
-        <label class="field">
+        <label class="field" data-scheduled-fields="${index}"${cfg.cadenceType === "event_driven" ? " hidden" : ""}>
           <span class="field-label">Expected cadence</span>
           <input name="cadenceValue__${index}" value="${escapeHtml(cfg.cadenceValue)}" placeholder="15m or 0 9 * * 1" />
+          <p class="helper">Quorum expects execution evidence within this interval.</p>
         </label>
-        <label class="field">
-          <span class="field-label">Quiet hours (event-driven only)</span>
+        <label class="field" data-event-fields="${index}"${cfg.cadenceType !== "event_driven" ? " hidden" : ""}>
+          <span class="field-label">Alert if no event is received for</span>
           <input name="quietHours__${index}" type="number" min="1" value="${escapeHtml(String(cfg.quietHours ?? 24))}" />
-          <p class="helper">How long can it remain quiet before Quorum should alert you?</p>
+          <p class="helper">Use this for workflows that run when an external event occurs rather than on a fixed schedule. Enter hours.</p>
         </label>
         <fieldset class="stack" style="border:0;padding:0;margin:0">
           <legend class="field-label">Alert me when</legend>
+          <p class="helper"><strong>Schedule and execution</strong></p>
           <label class="check-row"><input type="checkbox" name="missing__${index}" value="1"${cfg.monitorMissingRuns ? " checked" : ""} /> It does not run on time</label>
           <label class="check-row"><input type="checkbox" name="failure__${index}" value="1"${cfg.monitorFailures ? " checked" : ""} /> An execution fails</label>
-          <label class="check-row"><input type="checkbox" name="empty__${index}" value="1"${cfg.monitorEmptyResult ? " checked" : ""} /> It processes zero items</label>
-          <label class="check-row"><input type="checkbox" name="volume__${index}" value="1"${cfg.monitorVolumeRange ? " checked" : ""} /> Its item count is outside an expected range</label>
+          <div class="stack outcome-rule-group" data-outcome-rules="${index}">
+            <p class="helper"><strong>Outcome</strong></p>
+            <label class="check-row"><input type="checkbox" name="empty__${index}" value="1"${cfg.monitorEmptyResult ? " checked" : ""} /> It processes zero items</label>
+            <p class="helper">Requires outcome monitoring. The workflow reports how many useful items it produced.</p>
+            <label class="check-row"><input type="checkbox" name="volume__${index}" value="1"${cfg.monitorVolumeRange ? " checked" : ""} /> Its item count is outside an expected range</label>
+            <p class="helper">Requires outcome monitoring. Quorum compares the workflow-reported useful-item total over a daily window.</p>
+            <div class="form-grid-2">
+              <label class="field"><span class="field-label">Minimum useful items</span><input name="vmin__${index}" type="number" min="0" value="${cfg.volumeMin ?? ""}" /></label>
+              <label class="field"><span class="field-label">Maximum useful items</span><input name="vmax__${index}" type="number" min="0" value="${cfg.volumeMax ?? ""}" /></label>
+            </div>
+          </div>
         </fieldset>
         <details>
           <summary>Advanced monitoring settings</summary>
-          <p class="helper">Verification strength stays at execution reporting (Basic). Push heartbeats provide more detailed execution information but require changing the n8n workflow.</p>
-          <label class="field">
-            <span class="field-label">Monitoring method</span>
-            <select name="method__${index}">
-              <option value="poll"${cfg.monitoringMethod !== "push" ? " selected" : ""}>Connect n8n (polling)</option>
-              <option value="push"${cfg.monitoringMethod === "push" ? " selected" : ""}>Push heartbeats</option>
-            </select>
-          </label>
           <label class="field"><span class="field-label">Timezone</span><input name="timezone__${index}" value="${escapeHtml(cfg.timezone ?? "UTC")}" /></label>
-          <label class="field"><span class="field-label">Min items</span><input name="vmin__${index}" type="number" value="${cfg.volumeMin ?? ""}" /></label>
-          <label class="field"><span class="field-label">Max items</span><input name="vmax__${index}" type="number" value="${cfg.volumeMax ?? ""}" /></label>
         </details>
       </div>`;
     })
@@ -333,18 +379,38 @@ function renderAlertsStep(input: SimplifiedOnboardingPageInput): string {
 }
 
 function renderCompleteStep(input: SimplifiedOnboardingPageInput): string {
+  const setups = (input.outcomeSetups ?? [])
+    .map(
+      (setup) => `<div class="card stack">
+        <h3 class="card-title">Activate Outcome monitoring for ${escapeHtml(setup.workflowName)}</h3>
+        <div class="flash is-error" role="alert">Copy the HMAC secret now. It is visible only once. Do not commit it to source control or exported workflow JSON.</div>
+        <div class="copy-value-row"><span><strong>Quorum workflow ID:</strong> <code>${escapeHtml(setup.workflowId)}</code></span><button type="button" class="btn-secondary" data-copy-value="${escapeHtml(setup.workflowId)}">Copy</button></div>
+        <p class="helper">Use this in the Quorum reporting step. This is not the workflow ID from the n8n URL.</p>
+        <div class="copy-value-row"><span><strong>Key ID:</strong> <code>${escapeHtml(setup.keyId)}</code></span><button type="button" class="btn-secondary" data-copy-value="${escapeHtml(setup.keyId)}">Copy</button></div>
+        <div class="copy-value-row"><span><strong>HMAC secret:</strong> <code>${escapeHtml(setup.secret)}</code></span><button type="button" class="btn-secondary" data-copy-value="${escapeHtml(setup.secret)}">Copy</button></div>
+        <div class="copy-value-row"><span><strong>Ingest endpoint:</strong> <code>POST ${escapeHtml(setup.ingestPath)}</code></span><button type="button" class="btn-secondary" data-copy-value="${escapeHtml(setup.ingestPath)}">Copy</button></div>
+        <p class="helper">Import the reusable Quorum Reporter template. Configure its Quorum base URL once and store the HMAC secret in n8n; the customer workflow supplies the Quorum workflow ID, Key ID, status, useful item count, and optional execution reference.</p>
+        <div class="row-actions" style="justify-content:flex-start">
+          <a class="btn btn-secondary" href="/onboarding/quorum-reporter.json">Download Quorum Reporter</a>
+          <form method="post" action="/onboarding/heartbeat/test">
+            <input type="hidden" name="csrf" value="${escapeHtml(input.csrf)}" />
+            <input type="hidden" name="workflowId" value="${escapeHtml(setup.workflowId)}" />
+            <button type="submit">Send test heartbeat</button>
+          </form>
+        </div>
+      </div>`,
+    )
+    .join("");
   const rows = (input.completionRows ?? [])
     .map(
       (row) => `<div class="card stack">
         <h3 class="card-title">${escapeHtml(row.name)}</h3>
         <p><strong>${escapeHtml(row.statusLabel)}</strong></p>
-        <ul class="stack-sm" style="list-style:none;padding:0;margin:0">
-          <li>${row.connected ? "✓" : "○"} Connected to n8n</li>
-          <li>${row.discovered ? "✓" : "○"} Workflow discovered</li>
-          <li>${row.monitoring ? "✓" : "○"} Monitoring activated</li>
-          <li>${row.alertTested === true ? "✓" : row.alertTested === false ? "○" : "–"} Test alert delivered</li>
-          <li>${row.waitingFirst ? "○ Waiting for the first workflow execution" : "✓ First execution observed"}</li>
-        </ul>
+        <p><strong>Mode:</strong> ${escapeHtml(row.monitoringMode)}</p>
+        <p><strong>Alert when:</strong> ${row.alertRules.length > 0 ? escapeHtml(row.alertRules.join(" · ")) : "No workflow rules selected"}</p>
+        <p><strong>Timing:</strong> ${escapeHtml(row.timingLabel)}</p>
+        ${row.outcomeThreshold ? `<p><strong>Outcome threshold:</strong> ${escapeHtml(row.outcomeThreshold)}</p>` : ""}
+        <p><strong>Heartbeat:</strong> ${row.monitoringMode === "Outcome monitoring" ? (row.heartbeatAccepted ? "Accepted" : "Not tested") : "Not required"}</p>
       </div>`,
     )
     .join("");
@@ -352,10 +418,11 @@ function renderCompleteStep(input: SimplifiedOnboardingPageInput): string {
     <div class="stack">
       <h2 class="section-title">Monitoring is set up</h2>
       <p class="helper">Workflows are not labelled healthy until Quorum has enough execution evidence.</p>
+      ${setups}
       ${rows}
       <div class="row-actions" style="justify-content:flex-start">
         <a class="btn" href="/catalog">Open Contract Catalog</a>
-        <a class="btn btn-secondary" href="/workflows">Advanced: push heartbeats</a>
+        <a class="btn btn-secondary" href="/workflows">Manage workflows</a>
         <form method="post" action="/onboarding/finish" style="display:inline">
           <input type="hidden" name="csrf" value="${escapeHtml(input.csrf)}" />
           <button type="submit" class="btn-secondary">Done</button>

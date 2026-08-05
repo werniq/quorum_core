@@ -648,6 +648,24 @@ input[aria-invalid="true"], select[aria-invalid="true"] {
   background: var(--brand-primary-subtle);
   box-shadow: 0 0 0 1px var(--brand-primary);
 }
+.radio-card.is-protected,
+.radio-card.is-protected:hover {
+  border-color: var(--border-default);
+  background: var(--background-muted);
+  box-shadow: none;
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+.radio-card.is-protected:active { transform: none; }
+.protected-status-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.05rem;
+  color: var(--text-muted);
+}
 .radio-card input { width: auto; min-height: 0; margin-top: 0.2rem; }
 .radio-card-title {
   display: flex;
@@ -662,6 +680,27 @@ input[aria-invalid="true"], select[aria-invalid="true"] {
   font-size: 13px;
   color: var(--text-secondary);
   font-weight: 400;
+}
+.form-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+.copy-value-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--background-muted);
+}
+.copy-value-row code { overflow-wrap: anywhere; }
+.outcome-rule-group.is-disabled { opacity: 0.58; }
+@media (max-width: 640px) {
+  .form-grid-2 { grid-template-columns: 1fr; }
+  .copy-value-row { align-items: flex-start; flex-direction: column; }
 }
 
 /* Buttons */
@@ -1409,6 +1448,56 @@ const SHELL_SCRIPT = `
         starCount.hidden = false;
       })
       .catch(function () { /* keep count hidden offline */ });
+  }
+
+  var cadenceSelects = document.querySelectorAll('[data-cadence-select]');
+  for (var cadenceIndex = 0; cadenceIndex < cadenceSelects.length; cadenceIndex++) {
+    (function (select) {
+      function updateCadenceFields() {
+        var key = select.getAttribute('data-cadence-select');
+        var scheduled = document.querySelector('[data-scheduled-fields="' + key + '"]');
+        var eventDriven = document.querySelector('[data-event-fields="' + key + '"]');
+        var isEvent = select.value === 'event_driven';
+        if (scheduled) scheduled.hidden = isEvent;
+        if (eventDriven) eventDriven.hidden = !isEvent;
+      }
+      select.addEventListener('change', updateCadenceFields);
+      updateCadenceFields();
+    })(cadenceSelects[cadenceIndex]);
+  }
+
+  var modeInputs = document.querySelectorAll('[data-monitoring-mode]');
+  function updateOutcomeRules(key) {
+    var selectedMode = document.querySelector('[data-monitoring-mode="' + key + '"]:checked');
+    var group = document.querySelector('[data-outcome-rules="' + key + '"]');
+    if (!group) return;
+    var enabled = selectedMode && selectedMode.value === 'push';
+    group.classList.toggle('is-disabled', !enabled);
+    var controls = group.querySelectorAll('input');
+    for (var controlIndex = 0; controlIndex < controls.length; controlIndex++) {
+      controls[controlIndex].disabled = !enabled;
+    }
+  }
+  for (var modeIndex = 0; modeIndex < modeInputs.length; modeIndex++) {
+    (function (input) {
+      var key = input.getAttribute('data-monitoring-mode');
+      input.addEventListener('change', function () { updateOutcomeRules(key); });
+      updateOutcomeRules(key);
+    })(modeInputs[modeIndex]);
+  }
+
+  var copyButtons = document.querySelectorAll('[data-copy-value]');
+  for (var copyIndex = 0; copyIndex < copyButtons.length; copyIndex++) {
+    copyButtons[copyIndex].addEventListener('click', function () {
+      var button = this;
+      var value = button.getAttribute('data-copy-value') || '';
+      if (!navigator.clipboard || !value) return;
+      navigator.clipboard.writeText(value).then(function () {
+        var previous = button.textContent;
+        button.textContent = 'Copied';
+        window.setTimeout(function () { button.textContent = previous; }, 1200);
+      }).catch(function () { /* leave button unchanged */ });
+    });
   }
 })();
 `;

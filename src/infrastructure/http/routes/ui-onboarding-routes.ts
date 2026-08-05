@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type Database from "better-sqlite3";
+import { randomBytes } from "node:crypto";
 import type { Clock } from "../../../domain/clock.js";
 import type { QuorumEnv } from "../../config/env.js";
 import { createId } from "../../../domain/ids.js";
@@ -12,6 +13,7 @@ import { SqliteN8nConnectorRepositories } from "../../db/repositories/sqlite-n8n
 import { SqliteAlertingRepositories } from "../../db/repositories/sqlite-alerting-repositories.js";
 import { SqliteOpsAuditRepositories } from "../../db/repositories/sqlite-ops-audit-repositories.js";
 import { SqliteOutboundDestinationRepositories } from "../../db/repositories/sqlite-outbound-destinations.js";
+import { SqliteVolumeRepositories } from "../../db/repositories/sqlite-volume-repositories.js";
 import { encryptCredentialSecret } from "../../security/credential-secrets.js";
 import { decryptCredentialSecret } from "../../security/credential-secrets.js";
 import { assertSelfHostedConnectorUrl } from "../../security/secure-outbound-http.js";
@@ -22,14 +24,23 @@ import {
 import { renderSimplifiedOnboardingPage } from "../../../presentation/html/simplified-onboarding-ui.js";
 import type { OnboardingDraft } from "../../../domain/onboarding/draft.js";
 import type { OnboardingWorkflowConfig } from "../../../domain/onboarding/draft.js";
-import { selectedWorkflowConfigs } from "../../../domain/onboarding/draft.js";
+import {
+  parseOnboardingDraft,
+  selectedWorkflowConfigs,
+} from "../../../domain/onboarding/draft.js";
 import type {
   CadenceType,
   MonitoringMethod,
 } from "../../../domain/contracts/types.js";
 import { validateWorkflowContract } from "../../../domain/contracts/validate-workflow-contract.js";
-import { parsePositiveDurationMinutes } from "../../../domain/cadence/duration.js";
 import type { DiscoveredWorkflow } from "../../../domain/n8n/discovered-workflow.js";
+import {
+  buildHeartbeatSigningPayload,
+  sha256Hex,
+  signHeartbeatHmacSha256,
+} from "../../security/heartbeat-hmac.js";
+import { quorumReporterTemplateJson } from "../../n8n/quorum-reporter-template.js";
+import { computeNextExpectedIso } from "../../ingestion/apply-heartbeat-state.js";
 
 const HTTP_TIMEOUTS = {
   connectTimeoutMs: 5_000,
@@ -125,7 +136,96 @@ export function registerSimplifiedOnboardingRoutes(
   const alerting = new SqliteAlertingRepositories(deps.sqlite);
   const opsAudit = new SqliteOpsAuditRepositories(deps.sqlite);
   const outbound = new SqliteOutboundDestinationRepositories(deps.sqlite);
+  const volume = new SqliteVolumeRepositories(deps.sqlite);
   const pageShell = { demoMode: deps.demoMode === true };
+
+  // Repairs contracts activated by the older simplified-onboarding path,
+  // which retained stale defaults when a workflow already had an inactive
+  // contract. The activation timestamp guard avoids overriding later edits.
+  const completedDrafts = deps.sqlite
+    .prepare(
+      `SELECT tenant_id, draft_json FROM onboarding_state
+       WHERE completed_at IS NOT NULL OR step = 'complete'`,
+    )
+    .all() as Array<{ tenant_id: string; draft_json: string }>;
+  for (const saved of completedDrafts) {
+    const draft = parseOnboardingDraft(saved.draft_json);
+    if (!draft.activatedAt) continue;
+    for (const config of selectedWorkflowConfigs(draft)) {
+      if (!config.workflowId || !config.contractId) continue;
+      const contract = deps.sqlite
+        .prepare(
+          `SELECT * FROM workflow_contracts
+           WHERE tenant_id = ? AND id = ? AND workflow_id = ?
+             AND activated_at = ? LIMIT 1`,
+        )
+        .get(
+          saved.tenant_id,
+          config.contractId,
+          config.workflowId,
+          draft.activatedAt,
+        ) as Record<string, unknown> | undefined;
+      if (!contract) continue;
+      const quietMinutes =
+        config.cadenceType === "event_driven"
+          ? Math.round((config.quietHours ?? 24) * 60)
+          : null;
+      const expectedEmptyPolicy = config.monitorEmptyResult
+        ? "failure"
+        : "allowed";
+      const needsRepair =
+        String(contract.cadence_type) !== config.cadenceType ||
+        String(contract.cadence_value) !== config.cadenceValue ||
+        (contract.max_quiet_window_minutes as number | null) !== quietMinutes ||
+        String(contract.empty_result_policy) !== expectedEmptyPolicy ||
+        Boolean(contract.count_less_success_allowed) ===
+          config.monitorEmptyResult;
+      if (!needsRepair) continue;
+      deps.sqlite
+        .prepare(
+          `UPDATE workflow_contracts
+           SET cadence_type = ?, cadence_value = ?, interval_mode = ?,
+               schedule_anchor_at = ?, timezone = ?,
+               max_quiet_window_minutes = ?, empty_result_policy = ?,
+               count_less_success_allowed = ?, updated_at = ?
+           WHERE tenant_id = ? AND id = ?`,
+        )
+        .run(
+          config.cadenceType,
+          config.cadenceValue,
+          config.cadenceType === "interval" ? "fixed_rate" : null,
+          config.cadenceType === "interval" ? draft.activatedAt : null,
+          config.timezone ?? "UTC",
+          quietMinutes,
+          expectedEmptyPolicy,
+          config.monitorEmptyResult ? 0 : 1,
+          deps.clock.now().toISOString(),
+          saved.tenant_id,
+          config.contractId,
+        );
+      const repairedContract = deps.sqlite
+        .prepare(`SELECT * FROM workflow_contracts WHERE id = ?`)
+        .get(config.contractId) as Record<string, unknown>;
+      const state = core.getWorkflowState(saved.tenant_id, config.workflowId);
+      const deadlineOrigin = state?.lastExecutionAt ?? draft.activatedAt;
+      const nextExpected = computeNextExpectedIso({
+        contract: repairedContract,
+        lastReportAt: deadlineOrigin,
+        clock: deps.clock,
+      });
+      deps.sqlite
+        .prepare(
+          `UPDATE workflow_states SET next_expected_at = ?, updated_at = ?
+           WHERE tenant_id = ? AND workflow_id = ?`,
+        )
+        .run(
+          nextExpected,
+          deps.clock.now().toISOString(),
+          saved.tenant_id,
+          config.workflowId,
+        );
+    }
+  }
 
   async function discover(
     tid: string,
@@ -185,6 +285,13 @@ export function registerSimplifiedOnboardingRoutes(
       flashTone?: "error" | "success";
       discovered?: DiscoveredWorkflow[];
       discoveryError?: string | null;
+      outcomeSetups?: Array<{
+        workflowName: string;
+        workflowId: string;
+        keyId: string;
+        secret: string;
+        ingestPath: string;
+      }>;
     } = {},
   ) {
     const state = onboarding.ensure(tid, deps.clock.now().toISOString());
@@ -230,6 +337,33 @@ export function registerSimplifiedOnboardingRoutes(
             }
             return {
               name: cfg.name,
+              monitoringMode:
+                cfg.monitoringMethod === "push"
+                  ? "Outcome monitoring"
+                  : "Basic monitoring",
+              alertRules: [
+                cfg.monitorMissingRuns ? "It does not run on time" : null,
+                cfg.monitorFailures ? "An execution fails" : null,
+                cfg.monitorEmptyResult ? "Useful output is zero" : null,
+                cfg.monitorVolumeRange
+                  ? "Useful item count is outside its range"
+                  : null,
+              ].filter((rule): rule is string => rule !== null),
+              timingLabel:
+                cfg.cadenceType === "event_driven"
+                  ? `Alert after ${String(cfg.quietHours ?? 24)} hours without an event`
+                  : `Expected cadence: ${cfg.cadenceValue}`,
+              outcomeThreshold: cfg.monitorVolumeRange
+                ? `${cfg.volumeMin ?? "no minimum"} to ${cfg.volumeMax ?? "no maximum"} useful items`
+                : cfg.monitorEmptyResult
+                  ? "At least 1 useful item"
+                  : null,
+              heartbeatAccepted: Boolean(
+                cfg.workflowId &&
+                  state.draft.heartbeatAcceptedWorkflowIds?.includes(
+                    cfg.workflowId,
+                  ),
+              ),
               statusLabel,
               connected: Boolean(state.draft.connectorId),
               discovered: true,
@@ -276,6 +410,9 @@ export function registerSimplifiedOnboardingRoutes(
     if (completionRows) {
       pageInput.completionRows = completionRows;
     }
+    if (extras.outcomeSetups) {
+      pageInput.outcomeSetups = extras.outcomeSetups;
+    }
     return reply
       .type("text/html")
       .send(renderSimplifiedOnboardingPage(pageInput));
@@ -299,6 +436,149 @@ export function registerSimplifiedOnboardingRoutes(
     return render(reply, session, tid, {
       flash: query.error ? query.error : null,
       flashTone: query.error ? "error" : "error",
+    });
+  });
+
+  app.get("/onboarding/quorum-reporter.json", async (request, reply) => {
+    const session = deps.requireSession(request, reply);
+    if (!session) return;
+    return reply
+      .header(
+        "content-disposition",
+        'attachment; filename="quorum-reporter.json"',
+      )
+      .type("application/json")
+      .send(quorumReporterTemplateJson());
+  });
+
+  app.post("/onboarding/heartbeat/test", async (request, reply) => {
+    const session = deps.requireSession(request, reply);
+    if (
+      !session ||
+      !deps.requireAdmin(session, reply) ||
+      !deps.assertCsrf(request, session, reply)
+    ) {
+      return;
+    }
+    const workflowId = (formBody(request).workflowId ?? "").trim();
+    const tid = deps.tenantId();
+    const workflow = deps.sqlite
+      .prepare(
+        `SELECT id FROM workflows WHERE tenant_id = ? AND id = ? LIMIT 1`,
+      )
+      .get(tid, workflowId) as { id: string } | undefined;
+    if (!workflow) {
+      return render(reply, session, tid, {
+        flash:
+          "Workflow not found. Return to workflow selection and try again.",
+      });
+    }
+    const credential = deps.sqlite
+      .prepare(
+        `SELECT key_id, encrypted_secret_or_verification_material
+         FROM workflow_credentials
+         WHERE tenant_id = ? AND workflow_id = ? AND status = 'active'
+         ORDER BY created_at DESC LIMIT 1`,
+      )
+      .get(tid, workflowId) as
+      | {
+          key_id: string;
+          encrypted_secret_or_verification_material: string;
+        }
+      | undefined;
+    if (!credential) {
+      return render(reply, session, tid, {
+        flash:
+          "Wrong Key ID or no active credential. Issue or rotate the Outcome monitoring credential and try again.",
+      });
+    }
+    let secret: string;
+    try {
+      secret = decryptCredentialSecret(
+        credential.encrypted_secret_or_verification_material,
+        deps.env.QUORUM_CREDENTIAL_KEK,
+      );
+    } catch {
+      return render(reply, session, tid, {
+        flash:
+          "The signing credential could not be read. Rotate it and try again.",
+      });
+    }
+    const path = `/api/v1/workflows/${workflowId}/heartbeats`;
+    const timestampSeconds = String(
+      Math.floor(deps.clock.now().getTime() / 1000),
+    );
+    const idempotencyKey = `onboarding-test-${createId()}`;
+    const rawBody = Buffer.from(
+      JSON.stringify({
+        schemaVersion: 1,
+        executedAt: deps.clock.now().toISOString(),
+        status: "success",
+        itemsProcessed: 1,
+        externalExecutionRef: idempotencyKey,
+      }),
+      "utf8",
+    );
+    const signature = signHeartbeatHmacSha256(
+      secret,
+      buildHeartbeatSigningPayload({
+        method: "POST",
+        path,
+        timestampSeconds,
+        idempotencyKey,
+        bodySha256Hex: sha256Hex(rawBody),
+      }),
+    );
+    let response;
+    try {
+      response = await app.inject({
+        method: "POST",
+        url: path,
+        headers: {
+          "content-type": "application/json",
+          "x-quorum-key-id": credential.key_id,
+          "x-quorum-timestamp": timestampSeconds,
+          "x-quorum-idempotency-key": idempotencyKey,
+          "x-quorum-signature": signature,
+        },
+        payload: rawBody,
+      });
+    } catch {
+      return render(reply, session, tid, {
+        flash:
+          "The ingest endpoint could not be reached. Check the Quorum service and try again.",
+      });
+    }
+    if (response.statusCode !== 202) {
+      const messages: Record<number, string> = {
+        401: "Invalid signature, wrong Key ID, or expired timestamp. Rotate the credential and retry.",
+        404: "Workflow not found. Check that you used the Quorum workflow ID, not the n8n workflow ID.",
+        409: "The workflow contract is inactive. Activate monitoring before sending a heartbeat.",
+        503: "The ingest endpoint is not ready. Check migration status and retry.",
+      };
+      return render(reply, session, tid, {
+        flash:
+          messages[response.statusCode] ??
+          `Heartbeat failed with HTTP ${response.statusCode}. Check the ingest response and retry.`,
+      });
+    }
+    const state = onboarding.ensure(tid, deps.clock.now().toISOString());
+    onboarding.saveDraft(
+      tid,
+      {
+        ...state.draft,
+        heartbeatAcceptedWorkflowIds: [
+          ...new Set([
+            ...(state.draft.heartbeatAcceptedWorkflowIds ?? []),
+            workflowId,
+          ]),
+        ],
+      },
+      deps.clock.now().toISOString(),
+    );
+    return render(reply, session, tid, {
+      flash: "Heartbeat accepted. Outcome monitoring is active.",
+      flashTone: "success",
     });
   });
 
@@ -711,7 +991,7 @@ export function registerSimplifiedOnboardingRoutes(
       const cadenceValue = (
         body[`cadenceValue__${i}`] ?? current.cadenceValue
       ).trim();
-      if (!cadenceValue) {
+      if (cadenceType !== "event_driven" && !cadenceValue) {
         return render(reply, session, tid, {
           flash: `Confirm the expected cadence for “${current.name}”.`,
         });
@@ -719,21 +999,60 @@ export function registerSimplifiedOnboardingRoutes(
       const quietHours = Number(
         body[`quietHours__${i}`] ?? current.quietHours ?? 24,
       );
+      if (
+        cadenceType === "event_driven" &&
+        (!Number.isFinite(quietHours) || quietHours <= 0)
+      ) {
+        return render(reply, session, tid, {
+          flash: `Enter how many quiet hours are allowed for “${current.name}”.`,
+        });
+      }
+      const monitoringMethod = (
+        body[`method__${i}`] === "push" ? "push" : "poll"
+      ) as MonitoringMethod;
+      const monitorEmptyResult = body[`empty__${i}`] === "1";
+      const monitorVolumeRange = body[`volume__${i}`] === "1";
+      if (
+        monitoringMethod !== "push" &&
+        (monitorEmptyResult || monitorVolumeRange)
+      ) {
+        return render(reply, session, tid, {
+          flash: `Choose Outcome monitoring for “${current.name}” to use useful-output rules.`,
+        });
+      }
+      const volumeMinRaw = (body[`vmin__${i}`] ?? "").trim();
+      const volumeMaxRaw = (body[`vmax__${i}`] ?? "").trim();
+      const volumeMin = volumeMinRaw === "" ? null : Number(volumeMinRaw);
+      const volumeMax = volumeMaxRaw === "" ? null : Number(volumeMaxRaw);
+      if (monitorVolumeRange && volumeMin === null && volumeMax === null) {
+        return render(reply, session, tid, {
+          flash: `Enter a minimum and/or maximum useful item count for “${current.name}”.`,
+        });
+      }
+      if (
+        (volumeMin !== null &&
+          (!Number.isInteger(volumeMin) || volumeMin < 0)) ||
+        (volumeMax !== null &&
+          (!Number.isInteger(volumeMax) || volumeMax < 0)) ||
+        (volumeMin !== null && volumeMax !== null && volumeMin > volumeMax)
+      ) {
+        return render(reply, session, tid, {
+          flash: `Enter a valid useful item range for “${current.name}”; minimum cannot exceed maximum.`,
+        });
+      }
       configs[externalId] = {
         ...current,
         cadenceType,
-        cadenceValue,
-        quietHours: Number.isFinite(quietHours) ? quietHours : 24,
+        cadenceValue: cadenceType === "event_driven" ? "event" : cadenceValue,
+        quietHours: cadenceType === "event_driven" ? quietHours : null,
         timezone: (body[`timezone__${i}`] ?? current.timezone ?? "UTC").trim(),
         monitorMissingRuns: body[`missing__${i}`] === "1",
         monitorFailures: body[`failure__${i}`] === "1",
-        monitorEmptyResult: body[`empty__${i}`] === "1",
-        monitorVolumeRange: body[`volume__${i}`] === "1",
-        volumeMin: body[`vmin__${i}`] ? Number(body[`vmin__${i}`]) : null,
-        volumeMax: body[`vmax__${i}`] ? Number(body[`vmax__${i}`]) : null,
-        monitoringMethod: (body[`method__${i}`] === "push"
-          ? "push"
-          : "poll") as MonitoringMethod,
+        monitorEmptyResult,
+        monitorVolumeRange,
+        volumeMin,
+        volumeMax,
+        monitoringMethod,
       };
     }
     onboarding.setStep(tid, "alerts_activate", nowIso, {
@@ -871,6 +1190,13 @@ export function registerSimplifiedOnboardingRoutes(
         configs.map((config) => [config.externalWorkflowId, config]),
       );
     const failures: string[] = [];
+    const outcomeSetups: Array<{
+      workflowName: string;
+      workflowId: string;
+      keyId: string;
+      secret: string;
+      ingestPath: string;
+    }> = [];
 
     for (const cfg of configs) {
       if (cfg.alreadyMonitored && cfg.contractId) {
@@ -940,17 +1266,32 @@ export function registerSimplifiedOnboardingRoutes(
             activatedAt: null,
           });
           contractId = created.id;
-        } else if (cfg.cadenceType === "interval") {
-          // Older onboarding drafts may have left fixed_rate without an anchor.
+        } else {
+          // Explicit onboarding choices replace an older inactive contract's
+          // defaults. Already-protected workflows never enter this flow.
           deps.sqlite
             .prepare(
               `UPDATE workflow_contracts
-               SET interval_mode = COALESCE(interval_mode, 'fixed_rate'),
-                   schedule_anchor_at = COALESCE(schedule_anchor_at, ?),
+               SET cadence_type = ?, cadence_value = ?, interval_mode = ?,
+                   schedule_anchor_at = ?, timezone = ?,
+                   max_quiet_window_minutes = ?, empty_result_policy = ?,
+                   count_less_success_allowed = ?,
                    updated_at = ?
                WHERE tenant_id = ? AND id = ?`,
             )
-            .run(nowIso, nowIso, tid, contractId);
+            .run(
+              cfg.cadenceType,
+              cfg.cadenceValue,
+              cfg.cadenceType === "interval" ? "fixed_rate" : null,
+              cfg.cadenceType === "interval" ? nowIso : null,
+              cfg.timezone ?? "UTC",
+              cfg.cadenceType === "event_driven" ? maxQuiet : null,
+              emptyPolicy,
+              cfg.monitorEmptyResult ? 0 : 1,
+              nowIso,
+              tid,
+              contractId,
+            );
         }
 
         if (channelId) {
@@ -1048,16 +1389,83 @@ export function registerSimplifiedOnboardingRoutes(
         deps.sqlite
           .prepare(
             `UPDATE workflows
-             SET is_active = 1, monitoring_started_at = COALESCE(monitoring_started_at, ?), updated_at = ?
+             SET is_active = 1, monitoring_method = ?,
+                 monitoring_started_at = COALESCE(monitoring_started_at, ?), updated_at = ?
              WHERE tenant_id = ? AND id = ?`,
           )
-          .run(nowIso, nowIso, tid, workflow.id);
+          .run(cfg.monitoringMethod, nowIso, nowIso, tid, workflow.id);
 
-        const minutes =
-          parsePositiveDurationMinutes(String(contractRow.cadence_value)) ?? 15;
-        const nextExpected = new Date(
-          deps.clock.now().getTime() + minutes * 60_000,
-        ).toISOString();
+        if (
+          cfg.monitorVolumeRange &&
+          volume.listActiveVolumeRulesForContract(tid, contractId).length === 0
+        ) {
+          volume.createVolumeRule(tid, {
+            id: createId(),
+            workflowContractId: contractId,
+            minimumCount: cfg.volumeMin ?? 0,
+            maximumCount: cfg.volumeMax,
+            windowType: "daily",
+            timezone: cfg.timezone ?? "UTC",
+            weekStartsOn: null,
+            evaluationGraceMinutes: 5,
+            violationSeverity: "warning",
+            activatedAt: nowIso,
+          });
+        }
+
+        if (cfg.monitoringMethod === "push") {
+          const activeCredential = deps.sqlite
+            .prepare(
+              `SELECT id FROM workflow_credentials
+               WHERE tenant_id = ? AND workflow_id = ? AND status = 'active'
+               LIMIT 1`,
+            )
+            .get(tid, workflow.id) as { id: string } | undefined;
+          if (!activeCredential) {
+            const secret = randomBytes(32).toString("base64url");
+            const keyId = `key_${createId().slice(0, 12)}`;
+            const credentialId = createId();
+            core.createCredential(tid, {
+              id: credentialId,
+              workflowId: workflow.id,
+              keyId,
+              encryptedSecretOrVerificationMaterial: encryptCredentialSecret(
+                secret,
+                deps.env.QUORUM_CREDENTIAL_KEK,
+              ),
+              status: "active",
+              rotatedFromId: null,
+              revokedAt: null,
+            });
+            opsAudit.recordOpsAudit({
+              tenantId: tid,
+              actorUserId: session.adminUserId,
+              action: "credential.created",
+              resourceType: "workflow_credential",
+              resourceId: credentialId,
+              details: { workflowId: workflow.id, keyId },
+              nowIso,
+            });
+            outcomeSetups.push({
+              workflowName: cfg.name,
+              workflowId: workflow.id,
+              keyId,
+              secret,
+              ingestPath: `/api/v1/workflows/${workflow.id}/heartbeats`,
+            });
+          }
+        }
+
+        const refreshedContractRow = deps.sqlite
+          .prepare(
+            `SELECT * FROM workflow_contracts WHERE tenant_id = ? AND id = ?`,
+          )
+          .get(tid, contractId) as Record<string, unknown>;
+        const nextExpected = computeNextExpectedIso({
+          contract: refreshedContractRow,
+          lastReportAt: nowIso,
+          clock: deps.clock,
+        });
         const existingState = core.getWorkflowState(tid, workflow.id);
         core.upsertWorkflowState(tid, {
           tenantId: tid,
@@ -1116,6 +1524,14 @@ export function registerSimplifiedOnboardingRoutes(
     if (failures.length > 0) {
       return render(reply, session, tid, {
         flash: `Some workflows could not be activated: ${failures.join(" · ")}`,
+      });
+    }
+    if (outcomeSetups.length > 0) {
+      return render(reply, session, tid, {
+        outcomeSetups,
+        flash:
+          "Monitoring is active. Complete the Outcome monitoring reporter setup and send a test heartbeat.",
+        flashTone: "success",
       });
     }
     return reply.redirect("/onboarding");

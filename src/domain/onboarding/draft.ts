@@ -38,6 +38,7 @@ export interface OnboardingDraft {
   channelName?: string;
   acknowledgedNoAlertMode?: boolean;
   alertTestOk?: boolean | null;
+  heartbeatAcceptedWorkflowIds?: string[];
   activatedAt?: string;
   search?: string;
 }

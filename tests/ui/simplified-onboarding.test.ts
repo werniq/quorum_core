@@ -16,6 +16,7 @@ import { loadEnv } from "../../src/infrastructure/config/env.js";
 import { encryptCredentialSecret } from "../../src/infrastructure/security/credential-secrets.js";
 import { SqliteN8nConnectorRepositories } from "../../src/infrastructure/db/repositories/sqlite-n8n-connector-repositories.js";
 import * as n8nClient from "../../src/infrastructure/n8n/n8n-api-client.js";
+import { createIngestHeartbeatHandler } from "../../src/infrastructure/ingestion/ingest-heartbeat.js";
 
 const openConnections: BetterSqliteDatabase.Database[] = [];
 const tempFiles: string[] = [];
@@ -283,5 +284,510 @@ describe("simplified onboarding", () => {
     });
     expect(bad.statusCode).toBe(403);
     await app.close();
+  });
+
+  it("accepts event-driven setup without cadence and validates outcome ranges", async () => {
+    const sqlite = openDb();
+    const clock = new FixedClock(new Date("2026-07-26T12:00:00.000Z"));
+    const core = new SqliteCoreRepositories(sqlite);
+    const tenant = core.ensureSelfHostedTenant();
+    const onboarding = new SqliteOnboardingRepositories(sqlite);
+    onboarding.setStep(
+      tenant.id,
+      "configure_monitoring",
+      clock.now().toISOString(),
+      {
+        draft: {
+          selectedExternalWorkflowIds: ["event-wf"],
+          workflowConfigs: {
+            "event-wf": {
+              externalWorkflowId: "event-wf",
+              name: "Event workflow",
+              activeInN8n: true,
+              triggerSummary: "Webhook",
+              cadenceType: "event_driven",
+              cadenceValue: "event",
+              timezone: "UTC",
+              quietHours: 24,
+              monitorMissingRuns: false,
+              monitorFailures: true,
+              monitorEmptyResult: false,
+              monitorVolumeRange: false,
+              volumeMin: null,
+              volumeMax: null,
+              monitoringMethod: "push",
+            },
+          },
+        },
+      },
+    );
+    const env = loadEnv({
+      NODE_ENV: "test",
+      QUORUM_UI_AUTH_ENABLED: "false",
+      QUORUM_CREDENTIAL_KEK: KEK,
+    });
+    const readiness = () => ({
+      status: "ready" as const,
+      appliedMigrations: [] as string[],
+    });
+    const app = await buildApp({
+      env,
+      clock,
+      sqlite,
+      enableUi: true,
+      getSchemaReadiness: readiness,
+      ingestHeartbeat: createIngestHeartbeatHandler({
+        sqlite,
+        env,
+        clock,
+        getSchemaReadiness: readiness,
+      }),
+    });
+    const page = await app.inject({ method: "GET", url: "/onboarding" });
+    const csrf = /name="csrf" value="([^"]+)"/.exec(page.body)?.[1];
+    const cookie = cookieFrom(page);
+    const missingRange = await app.inject({
+      method: "POST",
+      url: "/onboarding/configure",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        cookie,
+      },
+      payload: `csrf=${encodeURIComponent(csrf!)}&wfid__0=event-wf&cadenceType__0=event_driven&cadenceValue__0=&quietHours__0=24&failure__0=1&volume__0=1&method__0=push`,
+    });
+    expect(missingRange.statusCode).toBe(200);
+    expect(missingRange.body).toContain(
+      "Enter a minimum and/or maximum useful item count",
+    );
+
+    const valid = await app.inject({
+      method: "POST",
+      url: "/onboarding/configure",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        cookie,
+      },
+      payload: `csrf=${encodeURIComponent(csrf!)}&wfid__0=event-wf&cadenceType__0=event_driven&cadenceValue__0=&quietHours__0=24&failure__0=1&empty__0=1&volume__0=1&vmin__0=1&vmax__0=100&method__0=push`,
+    });
+    expect(valid.statusCode).toBe(302);
+    const saved = onboarding.get(tenant.id);
+    expect(saved?.step).toBe("alerts_activate");
+    expect(saved?.draft.workflowConfigs?.["event-wf"]?.cadenceValue).toBe(
+      "event",
+    );
+    expect(saved?.draft.workflowConfigs?.["event-wf"]?.volumeMin).toBe(1);
+    await app.close();
+  });
+
+  it("rejects outcome rules when Basic monitoring is selected", async () => {
+    const sqlite = openDb();
+    const clock = new FixedClock(new Date("2026-07-26T12:00:00.000Z"));
+    const core = new SqliteCoreRepositories(sqlite);
+    const tenant = core.ensureSelfHostedTenant();
+    const onboarding = new SqliteOnboardingRepositories(sqlite);
+    onboarding.setStep(
+      tenant.id,
+      "configure_monitoring",
+      clock.now().toISOString(),
+      {
+        draft: {
+          selectedExternalWorkflowIds: ["poll-wf"],
+          workflowConfigs: {
+            "poll-wf": {
+              externalWorkflowId: "poll-wf",
+              name: "Polling workflow",
+              activeInN8n: true,
+              triggerSummary: "Every 15 minutes",
+              cadenceType: "interval",
+              cadenceValue: "15m",
+              timezone: "UTC",
+              quietHours: null,
+              monitorMissingRuns: true,
+              monitorFailures: true,
+              monitorEmptyResult: false,
+              monitorVolumeRange: false,
+              volumeMin: null,
+              volumeMax: null,
+              monitoringMethod: "poll",
+            },
+          },
+        },
+      },
+    );
+    const env = loadEnv({
+      NODE_ENV: "test",
+      QUORUM_UI_AUTH_ENABLED: "false",
+      QUORUM_CREDENTIAL_KEK: KEK,
+    });
+    const readiness = () => ({
+      status: "ready" as const,
+      appliedMigrations: [] as string[],
+    });
+    const app = await buildApp({
+      env,
+      clock,
+      sqlite,
+      enableUi: true,
+      getSchemaReadiness: readiness,
+      ingestHeartbeat: createIngestHeartbeatHandler({
+        sqlite,
+        env,
+        clock,
+        getSchemaReadiness: readiness,
+      }),
+    });
+    const page = await app.inject({ method: "GET", url: "/onboarding" });
+    const csrf = /name="csrf" value="([^"]+)"/.exec(page.body)?.[1];
+    const response = await app.inject({
+      method: "POST",
+      url: "/onboarding/configure",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        cookie: cookieFrom(page),
+      },
+      payload: `csrf=${encodeURIComponent(csrf!)}&wfid__0=poll-wf&cadenceType__0=interval&cadenceValue__0=15m&missing__0=1&failure__0=1&empty__0=1&method__0=poll`,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain(
+      "Choose Outcome monitoring for “Polling workflow”",
+    );
+    await app.close();
+  });
+
+  it("sends a signed test heartbeat and does not redisplay the secret", async () => {
+    const sqlite = openDb();
+    const clock = new FixedClock(new Date("2026-07-26T12:00:00.000Z"));
+    const core = new SqliteCoreRepositories(sqlite);
+    const tenant = core.ensureSelfHostedTenant();
+    const workflowId = createId();
+    const contractId = createId();
+    const secret = "one-time-heartbeat-secret";
+    core.createWorkflow(tenant.id, {
+      id: workflowId,
+      clientId: null,
+      name: "Outcome workflow",
+      externalWorkflowId: "n8n-outcome",
+      description: null,
+      monitoringMethod: "push",
+      isActive: true,
+      monitoringStartedAt: clock.now().toISOString(),
+    });
+    core.createWorkflowContract(tenant.id, {
+      id: contractId,
+      workflowId,
+      name: "Outcome monitoring",
+      businessPurpose: "Verify useful output",
+      contractType: "heartbeat",
+      cadenceType: "event_driven",
+      cadenceValue: "event",
+      intervalMode: null,
+      scheduleAnchorAt: null,
+      timezone: "UTC",
+      allowedLatenessMinutes: 5,
+      maxQuietWindowMinutes: 1440,
+      initialGraceMinutes: 5,
+      emptyResultPolicy: "failure",
+      countLessSuccessAllowed: false,
+      notificationBackoffMinutes: 30,
+      evidenceLevel: "basic",
+      schemaVersion: 1,
+      isActive: true,
+      activatedAt: clock.now().toISOString(),
+    });
+    core.createCredential(tenant.id, {
+      id: createId(),
+      workflowId,
+      keyId: "key_test",
+      encryptedSecretOrVerificationMaterial: encryptCredentialSecret(
+        secret,
+        KEK,
+      ),
+      status: "active",
+      rotatedFromId: null,
+      revokedAt: null,
+    });
+    const onboarding = new SqliteOnboardingRepositories(sqlite);
+    onboarding.setStep(tenant.id, "complete", clock.now().toISOString(), {
+      draft: {
+        selectedExternalWorkflowIds: ["n8n-outcome"],
+        workflowConfigs: {
+          "n8n-outcome": {
+            externalWorkflowId: "n8n-outcome",
+            name: "Outcome workflow",
+            activeInN8n: true,
+            triggerSummary: "Webhook",
+            cadenceType: "event_driven",
+            cadenceValue: "event",
+            timezone: "UTC",
+            quietHours: 24,
+            monitorMissingRuns: false,
+            monitorFailures: true,
+            monitorEmptyResult: true,
+            monitorVolumeRange: false,
+            volumeMin: null,
+            volumeMax: null,
+            monitoringMethod: "push",
+            workflowId,
+            contractId,
+          },
+        },
+      },
+    });
+    const heartbeatEnv = loadEnv({
+      NODE_ENV: "test",
+      QUORUM_UI_AUTH_ENABLED: "false",
+      QUORUM_CREDENTIAL_KEK: KEK,
+    });
+    const heartbeatReadiness = () => ({
+      status: "ready" as const,
+      appliedMigrations: [] as string[],
+    });
+    const app = await buildApp({
+      env: heartbeatEnv,
+      clock,
+      sqlite,
+      enableUi: true,
+      getSchemaReadiness: heartbeatReadiness,
+      ingestHeartbeat: createIngestHeartbeatHandler({
+        sqlite,
+        env: heartbeatEnv,
+        clock,
+        getSchemaReadiness: heartbeatReadiness,
+      }),
+    });
+    const page = await app.inject({ method: "GET", url: "/onboarding" });
+    const csrf = /name="csrf" value="([^"]+)"/.exec(page.body)?.[1];
+    const response = await app.inject({
+      method: "POST",
+      url: "/onboarding/heartbeat/test",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        cookie: cookieFrom(page),
+      },
+      payload: `csrf=${encodeURIComponent(csrf!)}&workflowId=${encodeURIComponent(workflowId)}`,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain(
+      "Heartbeat accepted. Outcome monitoring is active.",
+    );
+    expect(response.body).toContain("<strong>Heartbeat:</strong> Accepted");
+    expect(response.body).not.toContain(secret);
+    expect(
+      onboarding
+        .get(tenant.id)
+        ?.draft.heartbeatAcceptedWorkflowIds?.includes(workflowId),
+    ).toBe(true);
+    await app.close();
+  });
+
+  it("activates Outcome monitoring with a one-time credential and daily range rule", async () => {
+    const sqlite = openDb();
+    const clock = new FixedClock(new Date("2026-07-26T12:00:00.000Z"));
+    const core = new SqliteCoreRepositories(sqlite);
+    const tenant = core.ensureSelfHostedTenant();
+    const existingWorkflowId = createId();
+    const existingContractId = createId();
+    core.createWorkflow(tenant.id, {
+      id: existingWorkflowId,
+      clientId: null,
+      name: "New outcome workflow",
+      externalWorkflowId: "n8n-outcome-new",
+      description: null,
+      monitoringMethod: "push",
+      isActive: false,
+      monitoringStartedAt: null,
+    });
+    core.createWorkflowContract(tenant.id, {
+      id: existingContractId,
+      workflowId: existingWorkflowId,
+      name: "Old monitoring defaults",
+      businessPurpose: "Old defaults",
+      contractType: "heartbeat",
+      cadenceType: "interval",
+      cadenceValue: "15m",
+      intervalMode: "fixed_rate",
+      scheduleAnchorAt: clock.now().toISOString(),
+      timezone: "UTC",
+      allowedLatenessMinutes: 5,
+      maxQuietWindowMinutes: null,
+      initialGraceMinutes: 5,
+      emptyResultPolicy: "allowed",
+      countLessSuccessAllowed: true,
+      notificationBackoffMinutes: 30,
+      evidenceLevel: "basic",
+      schemaVersion: 1,
+      isActive: false,
+      activatedAt: null,
+    });
+    const onboarding = new SqliteOnboardingRepositories(sqlite);
+    onboarding.setStep(
+      tenant.id,
+      "alerts_activate",
+      clock.now().toISOString(),
+      {
+        draft: {
+          selectedExternalWorkflowIds: ["n8n-outcome-new"],
+          workflowConfigs: {
+            "n8n-outcome-new": {
+              externalWorkflowId: "n8n-outcome-new",
+              name: "New outcome workflow",
+              activeInN8n: true,
+              triggerSummary: "Webhook",
+              cadenceType: "event_driven",
+              cadenceValue: "event",
+              timezone: "UTC",
+              quietHours: 24,
+              monitorMissingRuns: false,
+              monitorFailures: true,
+              monitorEmptyResult: true,
+              monitorVolumeRange: true,
+              volumeMin: 1,
+              volumeMax: 250,
+              monitoringMethod: "push",
+            },
+          },
+        },
+      },
+    );
+    const app = await buildApp({
+      env: loadEnv({
+        NODE_ENV: "test",
+        QUORUM_UI_AUTH_ENABLED: "false",
+        QUORUM_CREDENTIAL_KEK: KEK,
+      }),
+      clock,
+      sqlite,
+      enableUi: true,
+      getSchemaReadiness: () => ({ status: "ready", appliedMigrations: [] }),
+    });
+    const page = await app.inject({ method: "GET", url: "/onboarding" });
+    const csrf = /name="csrf" value="([^"]+)"/.exec(page.body)?.[1];
+    const cookie = cookieFrom(page);
+    const activated = await app.inject({
+      method: "POST",
+      url: "/onboarding/alerts",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        cookie,
+      },
+      payload: `csrf=${encodeURIComponent(csrf!)}&action=activate&acknowledgedNoAlertMode=1`,
+    });
+    expect(activated.statusCode).toBe(200);
+    expect(activated.body).toContain("Activate Outcome monitoring");
+    expect(activated.body).toContain("Quorum workflow ID:");
+    expect(activated.body).toContain("HMAC secret:");
+    expect(activated.body).toContain("Download Quorum Reporter");
+
+    const workflow = core.findWorkflowByExternalId(
+      tenant.id,
+      "n8n-outcome-new",
+    );
+    expect(workflow?.isActive).toBe(true);
+    const contract = sqlite
+      .prepare(
+        `SELECT cadence_type, cadence_value, max_quiet_window_minutes,
+                empty_result_policy, count_less_success_allowed
+         FROM workflow_contracts WHERE tenant_id = ? AND id = ?`,
+      )
+      .get(tenant.id, existingContractId) as {
+      cadence_type: string;
+      cadence_value: string;
+      max_quiet_window_minutes: number | null;
+      empty_result_policy: string;
+      count_less_success_allowed: number;
+    };
+    expect(contract).toEqual({
+      cadence_type: "event_driven",
+      cadence_value: "event",
+      max_quiet_window_minutes: 1440,
+      empty_result_policy: "failure",
+      count_less_success_allowed: 0,
+    });
+    expect(
+      core.getWorkflowState(tenant.id, existingWorkflowId)?.nextExpectedAt,
+    ).toBe("2026-07-27T12:00:00.000Z");
+    const credential = sqlite
+      .prepare(
+        `SELECT encrypted_secret_or_verification_material
+         FROM workflow_credentials WHERE tenant_id = ? AND workflow_id = ?`,
+      )
+      .get(tenant.id, workflow!.id) as {
+      encrypted_secret_or_verification_material: string;
+    };
+    expect(credential.encrypted_secret_or_verification_material).not.toContain(
+      "HMAC secret",
+    );
+    const volumeRule = sqlite
+      .prepare(
+        `SELECT minimum_count, maximum_count, window_type
+         FROM contract_volume_rules WHERE tenant_id = ?`,
+      )
+      .get(tenant.id) as {
+      minimum_count: number;
+      maximum_count: number;
+      window_type: string;
+    };
+    expect(volumeRule).toEqual({
+      minimum_count: 1,
+      maximum_count: 250,
+      window_type: "daily",
+    });
+
+    const refreshed = await app.inject({
+      method: "GET",
+      url: "/onboarding",
+      headers: { cookie },
+    });
+    expect(refreshed.body).not.toContain("HMAC secret:");
+    expect(refreshed.body).toContain("<strong>Heartbeat:</strong> Not tested");
+    await app.close();
+
+    // Simulate the stale state produced by the older activation path. A new
+    // process repairs only the contract tied to this onboarding activation.
+    sqlite
+      .prepare(
+        `UPDATE workflow_contracts
+         SET cadence_type = 'interval', cadence_value = '15m',
+             max_quiet_window_minutes = NULL, empty_result_policy = 'allowed',
+             count_less_success_allowed = 1
+         WHERE id = ?`,
+      )
+      .run(existingContractId);
+    sqlite
+      .prepare(
+        `UPDATE workflow_states SET next_expected_at = ?
+         WHERE workflow_id = ?`,
+      )
+      .run(clock.now().toISOString(), existingWorkflowId);
+    const repairedApp = await buildApp({
+      env: loadEnv({
+        NODE_ENV: "test",
+        QUORUM_UI_AUTH_ENABLED: "false",
+        QUORUM_CREDENTIAL_KEK: KEK,
+      }),
+      clock,
+      sqlite,
+      enableUi: true,
+      getSchemaReadiness: () => ({ status: "ready", appliedMigrations: [] }),
+    });
+    const repaired = sqlite
+      .prepare(
+        `SELECT cadence_type, max_quiet_window_minutes, empty_result_policy
+         FROM workflow_contracts WHERE id = ?`,
+      )
+      .get(existingContractId) as {
+      cadence_type: string;
+      max_quiet_window_minutes: number;
+      empty_result_policy: string;
+    };
+    expect(repaired).toEqual({
+      cadence_type: "event_driven",
+      max_quiet_window_minutes: 1440,
+      empty_result_policy: "failure",
+    });
+    expect(
+      core.getWorkflowState(tenant.id, existingWorkflowId)?.nextExpectedAt,
+    ).toBe("2026-07-27T12:00:00.000Z");
+    await repairedApp.close();
   });
 });
