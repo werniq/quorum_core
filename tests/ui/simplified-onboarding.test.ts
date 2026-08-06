@@ -733,6 +733,35 @@ describe("simplified onboarding", () => {
       window_type: "daily",
     });
 
+    const detail = await app.inject({
+      method: "GET",
+      url: `/catalog/contracts/${workflow!.id}`,
+      headers: { cookie },
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.body).toContain("Add to n8n");
+    expect(detail.body).toContain("Report result to Quorum");
+    expect(detail.body).toContain("Count incoming n8n items");
+    expect(detail.body).toContain("Numeric field or expression");
+
+    const reporter = await app.inject({
+      method: "GET",
+      url: `/catalog/contracts/${workflow!.id}/quorum-reporter.json`,
+      headers: { cookie },
+    });
+    expect(reporter.statusCode).toBe(200);
+    expect(reporter.headers["content-disposition"]).toContain("attachment");
+    const reporterJson = reporter.json() as {
+      meta: { quorumReporter: Record<string, unknown> };
+    };
+    expect(reporterJson.meta.quorumReporter).toMatchObject({
+      workflowId: workflow!.id,
+      ingestPath: `/api/v1/workflows/${workflow!.id}/heartbeats`,
+      outputMonitoringEnabled: true,
+      secretIncluded: false,
+    });
+    expect(reporter.body).not.toContain("one-time-heartbeat-secret");
+
     const refreshed = await app.inject({
       method: "GET",
       url: "/onboarding",

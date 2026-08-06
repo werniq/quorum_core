@@ -616,6 +616,24 @@ input[aria-invalid="true"], select[aria-invalid="true"] {
   margin: 0;
 }
 .check-row input { width: auto; min-height: 0; margin-top: 0.2rem; }
+.monitoring-rule-list {
+  display: grid;
+  gap: var(--space-3);
+}
+.monitoring-rule-row {
+  align-items: flex-start;
+  min-width: 0;
+}
+.monitoring-rule-row input[type="checkbox"] {
+  flex: 0 0 auto;
+  margin: 0.2rem 0 0;
+}
+.monitoring-rule-copy {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.monitoring-rule-copy .helper { margin: 0; }
 .filters {
   display: flex;
   flex-wrap: wrap;

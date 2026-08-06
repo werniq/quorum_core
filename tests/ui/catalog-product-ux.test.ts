@@ -117,6 +117,13 @@ describe("workflow monitoring settings", () => {
       consecutiveStaleChecks: 0,
       updatedAt: clock.now().toISOString(),
     });
+    insertAcceptedHeartbeat(sqlite, {
+      tenantId: tenant.id,
+      workflowId: workflow.id,
+      executedAt: "2026-08-05T07:45:00.000Z",
+      status: "empty_result",
+      itemsProcessed: 0,
+    });
     const app = await bootApp(sqlite, clock);
     const cookie = `${SESSION_COOKIE}=${sessionId}`;
     const edit = await app.inject({
@@ -127,6 +134,16 @@ describe("workflow monitoring settings", () => {
     expect(edit.statusCode).toBe(200);
     expect(edit.body).toContain("Execution failures");
     expect(edit.body).toContain("Zero useful output");
+    expect(
+      edit.body.match(/class="check-row monitoring-rule-row"/g),
+    ).toHaveLength(2);
+    expect(edit.body).toMatch(
+      /type="checkbox" checked disabled[^>]*>[\s\S]*?<strong>Execution failures<\/strong>[\s\S]*?id="execution-failures-description"/,
+    );
+    expect(edit.body).toMatch(
+      /name="zeroOutput"[^>]*>[\s\S]*?<strong>Zero useful output<\/strong>[\s\S]*?id="zero-output-description"/,
+    );
+    expect(edit.body).not.toContain('class="checkbox-row"');
     expect(edit.body).toContain('name="quietHours"');
     expect(edit.body).not.toContain('name="zeroOutput" value="1" checked');
 
@@ -156,6 +173,38 @@ describe("workflow monitoring settings", () => {
       count_less_success_allowed: 0,
       max_quiet_window_minutes: 720,
     });
+    expect(
+      (
+        sqlite
+          .prepare(
+            `SELECT COUNT(*) AS count FROM incidents
+             WHERE tenant_id = ? AND workflow_id = ?
+               AND incident_type = 'empty_result' AND status != 'resolved'`,
+          )
+          .get(tenant.id, workflow.id) as { count: number }
+      ).count,
+    ).toBe(1);
+    const savedAgain = await app.inject({
+      method: "POST",
+      url: `/catalog/contracts/${workflow.id}/edit`,
+      headers: {
+        cookie,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      payload: `csrf=${encodeURIComponent(csrf)}&zeroOutput=1&quietHours=12`,
+    });
+    expect(savedAgain.statusCode).toBe(302);
+    expect(
+      (
+        sqlite
+          .prepare(
+            `SELECT COUNT(*) AS count FROM incidents
+             WHERE tenant_id = ? AND workflow_id = ?
+               AND incident_type = 'empty_result'`,
+          )
+          .get(tenant.id, workflow.id) as { count: number }
+      ).count,
+    ).toBe(1);
     expect(core.getWorkflowState(tenant.id, workflow.id)?.nextExpectedAt).toBe(
       "2026-08-05T20:00:00.000Z",
     );
@@ -172,6 +221,153 @@ describe("workflow monitoring settings", () => {
     expect(detail.body).not.toContain(
       'Output rule</span><div class="detail-value">Not configured',
     );
+    const incident = new SqliteAlertingRepositories(sqlite).listIncidents(
+      tenant.id,
+    )[0]!;
+    new SqliteAlertingRepositories(sqlite).resolveIncident(
+      tenant.id,
+      incident.id,
+      {
+        actor: "system:heartbeat",
+        at: "2026-08-05T07:50:00.000Z",
+        recoveryEvidence: "success · 1 useful item",
+      },
+    );
+    const recoveredDetail = await app.inject({
+      method: "GET",
+      url: `/catalog/contracts/${workflow.id}`,
+      headers: { cookie },
+    });
+    expect(recoveredDetail.body).toContain("Healthy");
+    expect(recoveredDetail.body).toContain(
+      "1 recovered incident awaiting acknowledgment",
+    );
+    expect(recoveredDetail.body).toContain("Needs review");
+    expect(recoveredDetail.body).toContain(
+      "Recovered · Awaiting acknowledgment",
+    );
+    expect(recoveredDetail.body).toContain("success · 1 useful item");
+    const healthBeforeAcknowledgment = core.getWorkflowState(
+      tenant.id,
+      workflow.id,
+    )?.currentHealth;
+    const acknowledge = await app.inject({
+      method: "POST",
+      url: `/incidents/${incident.id}/acknowledge`,
+      headers: {
+        cookie,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      payload: `csrf=${encodeURIComponent(csrf)}&note=${encodeURIComponent("Reviewed with operations")}`,
+    });
+    expect(acknowledge.statusCode).toBe(302);
+    expect(core.getWorkflowState(tenant.id, workflow.id)?.currentHealth).toBe(
+      healthBeforeAcknowledgment,
+    );
+    expect(
+      new SqliteAlertingRepositories(sqlite).getIncident(
+        tenant.id,
+        incident.id,
+      ),
+    ).toMatchObject({
+      lifecycleStatus: "recovered",
+      acknowledgmentStatus: "acknowledged",
+      acknowledgedBy: expect.any(String),
+      acknowledgedAt: "2026-08-05T08:00:00.000Z",
+      acknowledgmentNote: "Reviewed with operations",
+    });
+    const reviewedDetail = await app.inject({
+      method: "GET",
+      url: `/catalog/contracts/${workflow.id}`,
+      headers: { cookie },
+    });
+    expect(reviewedDetail.body).toContain("Recovered · Acknowledged");
+    expect(reviewedDetail.body).toContain("Reviewed with operations");
+    await app.close();
+  });
+
+  it("does not backfill a zero-output incident after a later healthy execution", async () => {
+    const sqlite = openDb();
+    const clock = new FixedClock(new Date("2026-08-05T08:00:00.000Z"));
+    const { core, tenant, sessionId, csrf } = seedAdmin(sqlite, clock);
+    const workflow = core.createWorkflow(tenant.id, {
+      id: createId(),
+      clientId: null,
+      name: "Recovered CRM sync",
+      externalWorkflowId: "recovered-crm-sync",
+      description: null,
+      monitoringMethod: "push",
+      isActive: true,
+      monitoringStartedAt: clock.now().toISOString(),
+    });
+    core.createWorkflowContract(tenant.id, {
+      id: createId(),
+      workflowId: workflow.id,
+      name: "Recovered CRM contract",
+      businessPurpose: "Keep CRM current",
+      contractType: "heartbeat",
+      cadenceType: "event_driven",
+      cadenceValue: "event",
+      intervalMode: null,
+      scheduleAnchorAt: null,
+      timezone: "UTC",
+      allowedLatenessMinutes: 5,
+      maxQuietWindowMinutes: 1440,
+      initialGraceMinutes: 5,
+      emptyResultPolicy: "allowed",
+      countLessSuccessAllowed: true,
+      notificationBackoffMinutes: 30,
+      evidenceLevel: "basic",
+      schemaVersion: 1,
+      isActive: true,
+      activatedAt: clock.now().toISOString(),
+    });
+    insertAcceptedHeartbeat(sqlite, {
+      tenantId: tenant.id,
+      workflowId: workflow.id,
+      executedAt: "2026-08-05T07:00:00.000Z",
+      status: "empty_result",
+      itemsProcessed: 0,
+    });
+    insertAcceptedHeartbeat(sqlite, {
+      tenantId: tenant.id,
+      workflowId: workflow.id,
+      executedAt: "2026-08-05T07:30:00.000Z",
+      status: "success",
+      itemsProcessed: 1,
+    });
+    const app = await bootApp(sqlite, clock);
+    const saved = await app.inject({
+      method: "POST",
+      url: `/catalog/contracts/${workflow.id}/edit`,
+      headers: {
+        cookie: `${SESSION_COOKIE}=${sessionId}`,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      payload: `csrf=${encodeURIComponent(csrf)}&zeroOutput=1&quietHours=24`,
+    });
+    expect(saved.statusCode).toBe(302);
+    expect(
+      (
+        sqlite
+          .prepare(
+            `SELECT COUNT(*) AS count FROM incidents
+             WHERE tenant_id = ? AND workflow_id = ?
+               AND incident_type = 'empty_result'`,
+          )
+          .get(tenant.id, workflow.id) as { count: number }
+      ).count,
+    ).toBe(0);
+    expect(
+      (
+        sqlite
+          .prepare(
+            `SELECT empty_result_policy FROM workflow_contracts
+             WHERE tenant_id = ? AND workflow_id = ?`,
+          )
+          .get(tenant.id, workflow.id) as { empty_result_policy: string }
+      ).empty_result_policy,
+    ).toBe("failure");
     await app.close();
   });
 });
@@ -228,6 +424,38 @@ function seedAdmin(sqlite: BetterSqliteDatabase.Database, clock: FixedClock) {
     sessionId: login.sessionId,
     csrf: login.csrfToken,
   };
+}
+
+function insertAcceptedHeartbeat(
+  sqlite: BetterSqliteDatabase.Database,
+  input: {
+    tenantId: string;
+    workflowId: string;
+    executedAt: string;
+    status: "success" | "empty_result";
+    itemsProcessed: number;
+  },
+): void {
+  sqlite
+    .prepare(
+      `INSERT INTO heartbeat_events (
+         id, tenant_id, workflow_id, received_at, executed_at, status,
+         items_processed, external_execution_ref, idempotency_key,
+         payload_schema_version, metadata_json, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, '{}', ?)`,
+    )
+    .run(
+      createId(),
+      input.tenantId,
+      input.workflowId,
+      input.executedAt,
+      input.executedAt,
+      input.status,
+      input.itemsProcessed,
+      `execution-${createId()}`,
+      `idempotency-${createId()}`,
+      input.executedAt,
+    );
 }
 
 describe("catalog product UX domain helpers", () => {

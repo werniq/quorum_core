@@ -442,13 +442,38 @@ export function registerSimplifiedOnboardingRoutes(
   app.get("/onboarding/quorum-reporter.json", async (request, reply) => {
     const session = deps.requireSession(request, reply);
     if (!session) return;
+    const workflowId = String(
+      (request.query as { workflowId?: string }).workflowId ?? "",
+    ).trim();
+    const credential = deps.sqlite
+      .prepare(
+        `SELECT c.key_id, wc.empty_result_policy
+         FROM workflow_credentials c
+         JOIN workflow_contracts wc
+           ON wc.tenant_id = c.tenant_id AND wc.workflow_id = c.workflow_id
+         WHERE c.tenant_id = ? AND c.workflow_id = ? AND c.status = 'active'
+         ORDER BY c.created_at DESC LIMIT 1`,
+      )
+      .get(deps.tenantId(), workflowId) as
+      | { key_id: string; empty_result_policy: string }
+      | undefined;
+    if (!credential) {
+      return reply.code(404).type("text/plain").send("Reporter not available");
+    }
     return reply
       .header(
         "content-disposition",
         'attachment; filename="quorum-reporter.json"',
       )
       .type("application/json")
-      .send(quorumReporterTemplateJson());
+      .send(
+        quorumReporterTemplateJson({
+          quorumBaseUrl: deps.env.PUBLIC_BASE_URL,
+          workflowId,
+          keyId: credential.key_id,
+          outputMonitoringEnabled: credential.empty_result_policy !== "allowed",
+        }),
+      );
   });
 
   app.post("/onboarding/heartbeat/test", async (request, reply) => {

@@ -20,6 +20,7 @@ import {
   type ContractDimensions,
 } from "../../domain/health/contract-dimensions.js";
 import { SILENT_ABSENCE_MESSAGE } from "../../domain/n8n/workflow-editor-url.js";
+import { formatDurationSeconds } from "../../domain/incidents/hard-failure.js";
 
 export type CatalogRowView = {
   contractId: string;
@@ -1057,7 +1058,20 @@ export function renderWorkflowContractDetailPage(input: {
     unverified: string[];
     raiseHint: string;
   };
-  incidents: Array<{ summary: string; status: string; severity: string }>;
+  incidents: Array<{
+    id: string;
+    summary: string;
+    status: string;
+    severity: string;
+    lifecycleStatus: "active" | "recovered";
+    acknowledgmentStatus: "unacknowledged" | "acknowledged";
+    openedAt: string;
+    recoveredAt: string | null;
+    recoveryEvidence: string | null;
+    acknowledgedAt: string | null;
+    acknowledgedBy: string | null;
+    acknowledgmentNote: string | null;
+  }>;
   channels: Array<{ name: string; health: string }>;
   recentEvents: Array<{ at: string; label: string }>;
   volume?: {
@@ -1070,6 +1084,12 @@ export function renderWorkflowContractDetailPage(input: {
     verified: string[];
     unverified: string[];
   } | null;
+  reporterSetup?: {
+    workflowId: string;
+    keyId: string;
+    ingestPath: string;
+    downloadPath: string;
+  } | null;
 }): string {
   const c = input.contract;
   const activationBadge = c.isActive
@@ -1080,15 +1100,77 @@ export function renderWorkflowContractDetailPage(input: {
         .map((e) => detailListItem(`<span>${escapeHtml(e.label)}</span>`))
         .join("")
     : `<li class="detail-list-item helper">No meaningful transitions yet.</li>`;
-  const incidentItems = input.incidents.length
-    ? input.incidents
+  const activeIncidents = input.incidents.filter(
+    (incident) => incident.lifecycleStatus === "active",
+  );
+  const needsReview = input.incidents.filter(
+    (incident) =>
+      incident.lifecycleStatus === "recovered" &&
+      incident.acknowledgmentStatus === "unacknowledged",
+  );
+  const reviewedHistory = input.incidents.filter(
+    (incident) =>
+      incident.lifecycleStatus === "recovered" &&
+      incident.acknowledgmentStatus === "acknowledged",
+  );
+  const incidentItems = activeIncidents.length
+    ? activeIncidents
         .map((i) =>
           detailListItem(
-            `<span class="sev-${escapeHtml(i.severity)}"><strong>${escapeHtml(i.summary)}</strong></span><span class="helper">${escapeHtml(i.status)}</span>`,
+            `<span class="sev-${escapeHtml(i.severity)}"><strong>${escapeHtml(i.summary)}</strong></span><span class="helper">Active · ${i.acknowledgmentStatus === "acknowledged" ? "Acknowledged" : "Unacknowledged"}</span>`,
           ),
         )
         .join("")
     : `<li class="detail-list-item helper">No active incidents.</li>`;
+  const needsReviewItems = needsReview
+    .map((i) => {
+      const duration =
+        i.recoveredAt && Number.isFinite(Date.parse(i.openedAt))
+          ? formatDurationSeconds(
+              Math.max(
+                0,
+                Math.floor(
+                  (Date.parse(i.recoveredAt) - Date.parse(i.openedAt)) / 1000,
+                ),
+              ),
+            )
+          : "—";
+      return detailListItem(`<div class="stack-sm">
+        <strong>${escapeHtml(i.summary)}</strong>
+        <span class="helper">Recovered · Awaiting acknowledgment</span>
+        <span class="helper">Failure time: ${escapeHtml(i.openedAt)} · Recovery time: ${escapeHtml(i.recoveredAt ?? "—")} · Duration: ${escapeHtml(duration)}</span>
+        <span class="helper">Failure evidence: ${escapeHtml(i.summary)} · Recovery evidence: ${escapeHtml(i.recoveryEvidence ?? "Healthy evidence accepted")}</span>
+        <form method="post" action="/incidents/${escapeHtml(i.id)}/acknowledge" class="stack-sm">
+          <input type="hidden" name="csrf" value="${escapeHtml(input.csrf)}" />
+          <label class="field"><span class="field-label">Acknowledgment note (optional)</span><input type="text" name="note" maxlength="280" /></label>
+          <button class="btn btn-secondary" type="submit">Acknowledge</button>
+        </form>
+      </div>`);
+    })
+    .join("");
+  const reviewedItems = reviewedHistory
+    .map((i) => {
+      const duration =
+        i.recoveredAt && Number.isFinite(Date.parse(i.openedAt))
+          ? formatDurationSeconds(
+              Math.max(
+                0,
+                Math.floor(
+                  (Date.parse(i.recoveredAt) - Date.parse(i.openedAt)) / 1000,
+                ),
+              ),
+            )
+          : "—";
+      return detailListItem(`<div class="stack-sm">
+        <strong>${escapeHtml(i.summary)}</strong>
+        <span class="helper">Recovered · Acknowledged</span>
+        <span class="helper">Failure time: ${escapeHtml(i.openedAt)} · Recovery time: ${escapeHtml(i.recoveredAt ?? "—")} · Duration: ${escapeHtml(duration)}</span>
+        <span class="helper">Failure evidence: ${escapeHtml(i.summary)} · Recovery evidence: ${escapeHtml(i.recoveryEvidence ?? "—")}</span>
+        <span class="helper">Acknowledged by: ${escapeHtml(i.acknowledgedBy ?? "—")} · Acknowledged at: ${escapeHtml(i.acknowledgedAt ?? "—")}</span>
+        ${i.acknowledgmentNote ? `<span class="helper">Note: ${escapeHtml(i.acknowledgmentNote)}</span>` : ""}
+      </div>`);
+    })
+    .join("");
   const channelItems = input.channels.length
     ? input.channels
         .map((ch) =>
@@ -1110,6 +1192,7 @@ export function renderWorkflowContractDetailPage(input: {
       <div class="contract-detail">
       <h1 class="page-title">${escapeHtml(c.businessPurpose)}</h1>
       <p class="page-subtitle">${escapeHtml(c.name)} · ${escapeHtml(formatExpectation(c.cadence))}</p>
+      ${needsReview.length > 0 ? `<p class="banner" role="status"><strong>${escapeHtml(c.health === "healthy" ? "Healthy" : c.health)}</strong><br />${needsReview.length} recovered incident${needsReview.length === 1 ? "" : "s"} awaiting acknowledgment</p>` : ""}
       <section class="card detail-section" aria-labelledby="sec-contract">
         <h2 class="section-title" id="sec-contract">Contract</h2>
         <div class="detail-kv-grid">
@@ -1136,6 +1219,48 @@ export function renderWorkflowContractDetailPage(input: {
         </div>
         <p class="helper detail-hint">${escapeHtml(c.raiseHint)}</p>
       </section>
+      ${
+        input.reporterSetup
+          ? `<section class="card detail-section" aria-labelledby="sec-n8n">
+        <h2 class="section-title" id="sec-n8n">Add to n8n</h2>
+        <p class="helper">Your business workflow needs one visible Execute Sub-workflow step: <strong>Report result to Quorum</strong>. Signing and delivery stay inside the imported reporter.</p>
+        <ol>
+          <li>Download and import the Quorum Reporter workflow.</li>
+          <li>Store the one-time HMAC secret in its credential or <strong>Sign request</strong> Secret field.</li>
+          <li>Add an Execute Sub-workflow node after the business operation.</li>
+          <li>Select how useful output should be counted.</li>
+          <li>Run a test.</li>
+        </ol>
+        <div class="row-actions" style="justify-content:flex-start">
+          <a class="btn" href="${escapeHtml(input.reporterSetup.downloadPath)}">Download reporter workflow</a>
+          <button type="button" class="btn-secondary" data-copy-value="${escapeHtml(`Quorum workflow ID: ${input.reporterSetup.workflowId}\nKey ID: ${input.reporterSetup.keyId}\nEndpoint: POST ${input.reporterSetup.ingestPath}\nImport the reporter, store the HMAC secret, then call it from an Execute Sub-workflow node named Report result to Quorum.`)}">Copy reporter configuration</button>
+        </div>
+        <div class="copy-value-row"><span><strong>Workflow ID:</strong> <code>${escapeHtml(input.reporterSetup.workflowId)}</code></span><button type="button" class="btn-secondary" data-copy-value="${escapeHtml(input.reporterSetup.workflowId)}">Copy</button></div>
+        <div class="copy-value-row"><span><strong>Key ID:</strong> <code>${escapeHtml(input.reporterSetup.keyId)}</code></span><button type="button" class="btn-secondary" data-copy-value="${escapeHtml(input.reporterSetup.keyId)}">Copy</button></div>
+        <div class="copy-value-row"><span><strong>Ingest endpoint:</strong> <code>POST ${escapeHtml(input.reporterSetup.ingestPath)}</code></span><button type="button" class="btn-secondary" data-copy-value="${escapeHtml(input.reporterSetup.ingestPath)}">Copy</button></div>
+        <h3>Count incoming n8n items <span class="badge badge-rec">Recommended</span></h3>
+        <p class="helper">Use when each incoming item is one useful lead, invoice, order, contact, or other record.</p>
+        <pre><code>{
+  "status": "success",
+  "itemsProcessed": "={{ $input.all().length }}",
+  "externalExecutionRef": "={{ $execution.id }}"
+}</code></pre>
+        <h3>Numeric field or expression</h3>
+        <p class="helper">Use when one item contains an aggregate count.</p>
+        <pre><code>{
+  "status": "success",
+  "itemsProcessed": "={{ $json.crmRecordsCreated }}",
+  "externalExecutionRef": "={{ $execution.id }}"
+}</code></pre>
+        <button type="button" class="btn-secondary" data-copy-value="${escapeHtml(`{\n  "status": "success",\n  "itemsProcessed": "={{ $input.all().length }}",\n  "externalExecutionRef": "={{ $execution.id }}"\n}`)}">Copy Execute Sub-workflow input example</button>
+        <p class="helper">The secret is shown only when issued or rotated. It is never included in this download. Missing output evidence is rejected separately and is never interpreted as zero.</p>
+        <form method="post" action="/catalog/contracts/${escapeHtml(c.workflowId)}/heartbeat/test" style="margin-top:1rem">
+          <input type="hidden" name="csrf" value="${escapeHtml(input.csrf)}" />
+          <button type="submit" class="btn-secondary">Send test heartbeat</button>
+        </form>
+      </section>`
+          : ""
+      }
       ${
         input.volume
           ? `<section class="card detail-section" aria-labelledby="sec-volume">
@@ -1164,6 +1289,8 @@ export function renderWorkflowContractDetailPage(input: {
         <h2 class="section-title" id="sec-incident">Incidents</h2>
         <ul class="detail-list">${incidentItems}</ul>
       </section>
+      ${needsReview.length > 0 ? `<section class="card detail-section" aria-labelledby="sec-needs-review"><h2 class="section-title" id="sec-needs-review">Needs review</h2><ul class="detail-list">${needsReviewItems}</ul></section>` : ""}
+      ${reviewedHistory.length > 0 ? `<section class="card detail-section" aria-labelledby="sec-history"><h2 class="section-title" id="sec-history">Incident history</h2><ul class="detail-list">${reviewedItems}</ul></section>` : ""}
       <section class="card detail-section" aria-labelledby="sec-delivery">
         <h2 class="section-title" id="sec-delivery">Alert delivery</h2>
         <ul class="detail-list">${channelItems}</ul>
@@ -1201,14 +1328,22 @@ export function renderWorkflowMonitoringSettingsPage(input: {
       <p class="page-subtitle">${escapeHtml(input.workflowName)}</p>
       <form class="card stack" method="post" action="/catalog/contracts/${escapeHtml(input.workflowId)}/edit">
         <input type="hidden" name="csrf" value="${escapeHtml(input.csrf)}" />
-        <div>
-          <strong>Execution failures</strong>
-          <p class="helper">Enabled for accepted heartbeat reports with a failure status.</p>
+        <div class="monitoring-rule-list" aria-label="Execution alert rules">
+          <label class="check-row monitoring-rule-row">
+            <input type="checkbox" checked disabled aria-describedby="execution-failures-description" />
+            <span class="monitoring-rule-copy">
+              <strong>Execution failures</strong>
+              <span class="helper" id="execution-failures-description">Enabled for accepted heartbeat reports with a failure status.</span>
+            </span>
+          </label>
+          <label class="check-row monitoring-rule-row">
+            <input type="checkbox" name="zeroOutput" value="1"${input.zeroOutputEnabled ? " checked" : ""} aria-describedby="zero-output-description" />
+            <span class="monitoring-rule-copy">
+              <strong>Zero useful output</strong>
+              <span class="helper" id="zero-output-description">Open an incident when a successful execution processes zero useful items.</span>
+            </span>
+          </label>
         </div>
-        <label class="checkbox-row">
-          <input type="checkbox" name="zeroOutput" value="1"${input.zeroOutputEnabled ? " checked" : ""} />
-          <span><strong>Zero useful output</strong><br /><span class="helper">Open an incident when a successful execution processes zero useful items.</span></span>
-        </label>
         ${
           eventDriven
             ? `<label><strong>Quiet window (hours)</strong>

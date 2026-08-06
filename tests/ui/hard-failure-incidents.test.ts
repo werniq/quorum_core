@@ -79,6 +79,13 @@ describe("hard-failure incident UI", () => {
     summary: "Invoice sync: hard failure · 2 consecutive",
     openedAt: "2026-07-30T17:00:00.000Z",
     resolvedAt: null,
+    lifecycleStatus: "active",
+    acknowledgmentStatus: "unacknowledged",
+    recoveredAt: null,
+    recoveryEvidence: null,
+    acknowledgedAt: null,
+    acknowledgedBy: null,
+    acknowledgmentNote: null,
     detailsJson: JSON.stringify(
       buildHardFailureDetails({
         existing: buildHardFailureDetails({
@@ -114,7 +121,6 @@ describe("hard-failure incident UI", () => {
     expect(labels).toEqual([
       "Open workflow in n8n",
       "View latest report",
-      "Acknowledge incident",
       "View contract",
     ]);
     const html = renderHardFailureIncidentCard(row, "csrf-token");
@@ -126,7 +132,7 @@ describe("hard-failure incident UI", () => {
     expect(html).toContain("Items processed: 0");
     expect(html).toContain("exec-2");
     expect(html).toContain('href="/catalog/contracts/wf-1#sec-timeline"');
-    expect(html).toContain('action="/incidents/hf-1/acknowledge"');
+    expect(html).not.toContain('action="/incidents/hf-1/acknowledge"');
     expect(html).toContain('target="_blank"');
     expect(html).not.toContain("Heartbeat reported hard failure");
   });
@@ -140,6 +146,10 @@ describe("hard-failure incident UI", () => {
       ...row,
       status: "resolved",
       resolvedAt: "2026-07-30T17:12:00.000Z",
+      lifecycleStatus: "recovered",
+      acknowledgmentStatus: "unacknowledged",
+      recoveredAt: "2026-07-30T17:12:00.000Z",
+      recoveryEvidence: "Success · 1 item",
       summary: formatHardFailureRecoverySummary(details),
       detailsJson: JSON.stringify(details),
     };
@@ -147,6 +157,7 @@ describe("hard-failure incident UI", () => {
     expect(html).toContain("Recovered");
     expect(html).toContain("Incident duration:");
     expect(html).toContain("12m");
-    expect(html).not.toContain("Acknowledge incident");
+    expect(html).toContain("Recovered · Awaiting acknowledgment");
+    expect(html).toContain("Acknowledge");
   });
 });

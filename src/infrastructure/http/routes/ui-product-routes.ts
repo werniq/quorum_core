@@ -39,7 +39,17 @@ import { formatHeartbeatHistoryRow } from "../../../domain/incidents/hard-failur
 import { createId } from "../../../domain/ids.js";
 import { toCatalogRowView } from "./catalog-row-view.js";
 import type { createOutboxProcessor } from "../../alerting/process-outbox.js";
-import { computeNextExpectedIso } from "../../ingestion/apply-heartbeat-state.js";
+import {
+  computeNextExpectedIso,
+  openOrUpdateEmptyResultIncident,
+} from "../../ingestion/apply-heartbeat-state.js";
+import { quorumReporterTemplateJson } from "../../n8n/quorum-reporter-template.js";
+import { decryptCredentialSecret } from "../../security/credential-secrets.js";
+import {
+  buildHeartbeatSigningPayload,
+  sha256Hex,
+  signHeartbeatHmacSha256,
+} from "../../security/heartbeat-hmac.js";
 
 type Session = {
   adminUserId: string;
@@ -324,9 +334,6 @@ export function registerProductUiRoutes(
       return;
     }
     const tid = deps.tenantId();
-    const resolvedAfter = new Date(
-      deps.clock.now().getTime() - 24 * 60 * 60_000,
-    ).toISOString();
     const rawRows = deps.sqlite
       .prepare(
         `SELECT
@@ -336,6 +343,13 @@ export function registerProductUiRoutes(
            i.summary,
            i.opened_at,
            i.resolved_at,
+           i.lifecycle_status,
+           i.acknowledgment_status,
+           i.recovered_at,
+           i.recovery_evidence,
+           i.acknowledged_at,
+           i.acknowledged_by,
+           i.acknowledgment_note,
            i.details_json,
            i.incident_type,
            i.workflow_id,
@@ -354,27 +368,29 @@ export function registerProductUiRoutes(
          LEFT JOIN n8n_connectors nc
            ON nc.id = w.connector_id AND nc.tenant_id = w.tenant_id
          WHERE i.tenant_id = ?
-           AND (
-             i.status IN ('open', 'acknowledged')
-             OR (
-               i.incident_type = 'hard_failure'
-               AND i.status = 'resolved'
-               AND i.resolved_at IS NOT NULL
-               AND i.resolved_at >= ?
-             )
-           )
          ORDER BY
-           CASE i.status WHEN 'open' THEN 0 WHEN 'acknowledged' THEN 1 ELSE 2 END,
+           CASE
+             WHEN i.lifecycle_status = 'active' THEN 0
+             WHEN i.acknowledgment_status = 'unacknowledged' THEN 1
+             ELSE 2
+           END,
            i.opened_at DESC
          LIMIT 100`,
       )
-      .all(tid, resolvedAfter) as Array<{
+      .all(tid) as Array<{
       id: string;
       severity: string;
       status: string;
       summary: string;
       opened_at: string;
       resolved_at: string | null;
+      lifecycle_status: "active" | "recovered";
+      acknowledgment_status: "unacknowledged" | "acknowledged";
+      recovered_at: string | null;
+      recovery_evidence: string | null;
+      acknowledged_at: string | null;
+      acknowledged_by: string | null;
+      acknowledgment_note: string | null;
       details_json: string | null;
       incident_type: string;
       workflow_id: string | null;
@@ -397,6 +413,13 @@ export function registerProductUiRoutes(
           : r.summary,
       openedAt: r.opened_at,
       resolvedAt: r.resolved_at,
+      lifecycleStatus: r.lifecycle_status,
+      acknowledgmentStatus: r.acknowledgment_status,
+      recoveredAt: r.recovered_at,
+      recoveryEvidence: r.recovery_evidence,
+      acknowledgedAt: r.acknowledged_at,
+      acknowledgedBy: r.acknowledged_by,
+      acknowledgmentNote: r.acknowledgment_note,
       detailsJson: r.details_json,
       incidentType: r.incident_type,
       workflowId: r.workflow_id,
@@ -462,18 +485,23 @@ export function registerProductUiRoutes(
     }
     const incidentId = (request.params as { incidentId: string }).incidentId;
     const tid = deps.tenantId();
+    const body = formBody(request);
     try {
+      const before = alerting.getIncident(tid, incidentId);
       alerting.acknowledgeIncident(tid, incidentId, {
         actor: session.adminUserId,
         at: deps.clock.now().toISOString(),
+        note: body.note ?? null,
       });
-      alerting.enqueueOutbox(tid, {
-        id: createId(),
-        incidentId,
-        eventType: "acknowledged",
-        payloadJson: JSON.stringify({ incidentId }),
-        availableAt: deps.clock.now().toISOString(),
-      });
+      if (before?.acknowledgmentStatus !== "acknowledged") {
+        alerting.enqueueOutbox(tid, {
+          id: createId(),
+          incidentId,
+          eventType: "acknowledged",
+          payloadJson: JSON.stringify({ incidentId }),
+          availableAt: deps.clock.now().toISOString(),
+        });
+      }
     } catch {
       return reply.redirect("/incidents");
     }
@@ -675,6 +703,9 @@ export function registerProductUiRoutes(
       return reply.code(404).type("text/html").send("Contract not found");
     const body = formBody(request);
     const zeroOutputEnabled = body.zeroOutput === "1";
+    const zeroOutputWasEnabled =
+      contract.empty_result_policy === "failure" ||
+      contract.empty_result_policy === "warning";
     let quietMinutes = contract.max_quiet_window_minutes as number | null;
     if (String(contract.cadence_type) === "event_driven") {
       const quietHours = Number(body.quietHours);
@@ -702,6 +733,69 @@ export function registerProductUiRoutes(
         tid,
         contract.id,
       );
+    if (zeroOutputEnabled && !zeroOutputWasEnabled) {
+      const latestRelevant = deps.sqlite
+        .prepare(
+          `SELECT executed_at, received_at, status, items_processed,
+                  external_execution_ref
+           FROM heartbeat_events
+           WHERE tenant_id = ? AND workflow_id = ?
+             AND status IN ('success', 'empty_result')
+           ORDER BY executed_at DESC, received_at DESC LIMIT 1`,
+        )
+        .get(tid, workflowId) as
+        | {
+            executed_at: string;
+            received_at: string;
+            status: string;
+            items_processed: number | null;
+            external_execution_ref: string | null;
+          }
+        | undefined;
+      if (
+        latestRelevant?.status === "empty_result" &&
+        latestRelevant.items_processed === 0
+      ) {
+        const stateForReconciliation = deps.sqlite
+          .prepare(
+            `SELECT last_nonempty_success_at, consecutive_empty_results
+             FROM workflow_states
+             WHERE tenant_id = ? AND workflow_id = ?`,
+          )
+          .get(tid, workflowId) as
+          | {
+              last_nonempty_success_at: string | null;
+              consecutive_empty_results: number;
+            }
+          | undefined;
+        openOrUpdateEmptyResultIncident({
+          alerting,
+          sqlite: deps.sqlite,
+          tenantId: tid,
+          workflowId,
+          receivedAt: latestRelevant.received_at,
+          executedAt: latestRelevant.executed_at,
+          policy: "failure",
+          itemsProcessed: 0,
+          externalExecutionRef: latestRelevant.external_execution_ref,
+          lastNonEmptySuccessAt:
+            stateForReconciliation?.last_nonempty_success_at ?? null,
+          consecutiveEmpties: Math.max(
+            1,
+            stateForReconciliation?.consecutive_empty_results ?? 1,
+          ),
+          breachThreshold: 1,
+          enqueueOpened: (incidentId) =>
+            alerting.enqueueOutbox(tid, {
+              id: createId(),
+              incidentId,
+              eventType: "opened",
+              payloadJson: JSON.stringify({ incidentId }),
+              availableAt: nowIso,
+            }),
+        });
+      }
+    }
     const updatedContract = deps.sqlite
       .prepare(
         `SELECT * FROM workflow_contracts WHERE tenant_id = ? AND id = ?`,
@@ -744,16 +838,36 @@ export function registerProductUiRoutes(
         `SELECT * FROM workflow_contracts WHERE tenant_id = ? AND workflow_id = ? AND contract_type = 'heartbeat' LIMIT 1`,
       )
       .get(tid, workflowId) as Record<string, unknown> | undefined;
+    const reporterCredential = deps.sqlite
+      .prepare(
+        `SELECT key_id FROM workflow_credentials
+         WHERE tenant_id = ? AND workflow_id = ? AND status = 'active'
+         ORDER BY created_at DESC LIMIT 1`,
+      )
+      .get(tid, workflowId) as { key_id: string } | undefined;
     const incidents = deps.sqlite
       .prepare(
-        `SELECT summary, status, severity FROM incidents
+        `SELECT id, summary, status, severity, lifecycle_status,
+                acknowledgment_status, opened_at, recovered_at,
+                recovery_evidence, acknowledged_at, acknowledged_by,
+                acknowledgment_note
+         FROM incidents
          WHERE tenant_id = ? AND workflow_id = ?
          ORDER BY opened_at DESC LIMIT 10`,
       )
       .all(tid, workflowId) as Array<{
+      id: string;
       summary: string;
       status: string;
       severity: string;
+      lifecycle_status: "active" | "recovered";
+      acknowledgment_status: "unacknowledged" | "acknowledged";
+      opened_at: string;
+      recovered_at: string | null;
+      recovery_evidence: string | null;
+      acknowledged_at: string | null;
+      acknowledged_by: string | null;
+      acknowledgment_note: string | null;
     }>;
     const channels = deps.sqlite
       .prepare(
@@ -826,7 +940,20 @@ export function registerProductUiRoutes(
           ),
           raiseHint: evidenceRaiseConfidenceHint(row.evidenceLevel),
         },
-        incidents,
+        incidents: incidents.map((incident) => ({
+          id: incident.id,
+          summary: incident.summary,
+          status: incident.status,
+          severity: incident.severity,
+          lifecycleStatus: incident.lifecycle_status,
+          acknowledgmentStatus: incident.acknowledgment_status,
+          openedAt: incident.opened_at,
+          recoveredAt: incident.recovered_at,
+          recoveryEvidence: incident.recovery_evidence,
+          acknowledgedAt: incident.acknowledged_at,
+          acknowledgedBy: incident.acknowledged_by,
+          acknowledgmentNote: incident.acknowledgment_note,
+        })),
         channels,
         recentEvents: events.map((e) => ({
           at: e.at,
@@ -848,9 +975,142 @@ export function registerProductUiRoutes(
               unverified: volume.unverified,
             }
           : null,
+        reporterSetup:
+          reporterCredential && row.isActive
+            ? {
+                workflowId,
+                keyId: reporterCredential.key_id,
+                ingestPath: `/api/v1/workflows/${workflowId}/heartbeats`,
+                downloadPath: `/catalog/contracts/${workflowId}/quorum-reporter.json`,
+              }
+            : null,
       }),
     );
   });
+
+  app.get(
+    "/catalog/contracts/:workflowId/quorum-reporter.json",
+    async (request, reply) => {
+      const session = deps.requireSession(request, reply);
+      if (!session) return;
+      const workflowId = (request.params as { workflowId: string }).workflowId;
+      const credential = deps.sqlite
+        .prepare(
+          `SELECT c.key_id, wc.empty_result_policy
+           FROM workflow_credentials c
+           JOIN workflow_contracts wc
+             ON wc.tenant_id = c.tenant_id AND wc.workflow_id = c.workflow_id
+           WHERE c.tenant_id = ? AND c.workflow_id = ? AND c.status = 'active'
+             AND wc.is_active = 1 AND wc.contract_type = 'heartbeat'
+           ORDER BY c.created_at DESC LIMIT 1`,
+        )
+        .get(deps.tenantId(), workflowId) as
+        | { key_id: string; empty_result_policy: string }
+        | undefined;
+      if (!credential) {
+        return reply
+          .code(404)
+          .type("text/plain")
+          .send("Reporter not available");
+      }
+      return reply
+        .header(
+          "content-disposition",
+          `attachment; filename="quorum-reporter-${workflowId}.json"`,
+        )
+        .type("application/json")
+        .send(
+          quorumReporterTemplateJson({
+            quorumBaseUrl: deps.env.PUBLIC_BASE_URL,
+            workflowId,
+            keyId: credential.key_id,
+            outputMonitoringEnabled:
+              credential.empty_result_policy !== "allowed",
+          }),
+        );
+    },
+  );
+
+  app.post(
+    "/catalog/contracts/:workflowId/heartbeat/test",
+    async (request, reply) => {
+      const session = deps.requireSession(request, reply);
+      if (
+        !session ||
+        !requireAdmin(session, reply) ||
+        !deps.assertCsrf(request, session, reply)
+      ) {
+        return;
+      }
+      const workflowId = (request.params as { workflowId: string }).workflowId;
+      const credential = deps.sqlite
+        .prepare(
+          `SELECT key_id, encrypted_secret_or_verification_material
+           FROM workflow_credentials
+           WHERE tenant_id = ? AND workflow_id = ? AND status = 'active'
+           ORDER BY created_at DESC LIMIT 1`,
+        )
+        .get(deps.tenantId(), workflowId) as
+        | {
+            key_id: string;
+            encrypted_secret_or_verification_material: string;
+          }
+        | undefined;
+      if (!credential) return reply.code(404).send("Credential not found");
+      const path = `/api/v1/workflows/${workflowId}/heartbeats`;
+      const timestampSeconds = String(
+        Math.floor(deps.clock.now().getTime() / 1000),
+      );
+      const idempotencyKey = `ui-test-${createId()}`;
+      const rawBody = Buffer.from(
+        JSON.stringify({
+          schemaVersion: 1,
+          executedAt: deps.clock.now().toISOString(),
+          status: "success",
+          itemsProcessed: 1,
+          externalExecutionRef: idempotencyKey,
+        }),
+      );
+      let secret: string;
+      try {
+        secret = decryptCredentialSecret(
+          credential.encrypted_secret_or_verification_material,
+          deps.env.QUORUM_CREDENTIAL_KEK,
+        );
+      } catch {
+        return reply.code(409).send("Rotate the unreadable credential");
+      }
+      const signature = signHeartbeatHmacSha256(
+        secret,
+        buildHeartbeatSigningPayload({
+          method: "POST",
+          path,
+          timestampSeconds,
+          idempotencyKey,
+          bodySha256Hex: sha256Hex(rawBody),
+        }),
+      );
+      const response = await app.inject({
+        method: "POST",
+        url: path,
+        headers: {
+          "content-type": "application/json",
+          "x-quorum-key-id": credential.key_id,
+          "x-quorum-timestamp": timestampSeconds,
+          "x-quorum-idempotency-key": idempotencyKey,
+          "x-quorum-signature": signature,
+        },
+        payload: rawBody,
+      });
+      if (response.statusCode !== 202) {
+        return reply
+          .code(response.statusCode)
+          .type("text/plain")
+          .send(`Test heartbeat failed: ${response.body}`);
+      }
+      return reply.redirect(`/catalog/contracts/${workflowId}`);
+    },
+  );
 
   app.get("/alerts/:channelId", async (request, reply) => {
     const session = deps.requireSession(request, reply);

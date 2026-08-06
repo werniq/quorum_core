@@ -17,6 +17,13 @@ export type IncidentListRow = {
   summary: string;
   openedAt: string;
   resolvedAt: string | null;
+  lifecycleStatus: "active" | "recovered";
+  acknowledgmentStatus: "unacknowledged" | "acknowledged";
+  recoveredAt: string | null;
+  recoveryEvidence: string | null;
+  acknowledgedAt: string | null;
+  acknowledgedBy: string | null;
+  acknowledgmentNote: string | null;
   detailsJson: string | null;
   incidentType: string;
   workflowId: string | null;
@@ -137,18 +144,18 @@ export function hardFailureActions(
     label: "View latest report",
   });
 
-  if (row.status === "open" || row.status === "acknowledged") {
-    if (row.status === "open") {
+  if (row.lifecycleStatus === "active") {
+    actions.push({ href: contractHref, label: "View contract" });
+  } else {
+    if (row.acknowledgmentStatus === "unacknowledged") {
       actions.push({
-        label: "Acknowledge incident",
+        label: "Acknowledge",
         form: {
           action: `/incidents/${row.id}/acknowledge`,
           csrf,
         },
       });
     }
-    actions.push({ href: contractHref, label: "View contract" });
-  } else {
     actions.push({ href: contractHref, label: "View contract" });
   }
 
@@ -163,11 +170,17 @@ export function renderSilentAbsenceIncidentCard(
     ? `/catalog/contracts/${row.workflowId}`
     : "/catalog";
   const late = formatLateness(latenessSeconds(row, nowMs));
+  const displayStatus =
+    row.lifecycleStatus === "active"
+      ? "Active"
+      : row.acknowledgmentStatus === "acknowledged"
+        ? "Recovered · Acknowledged"
+        : "Recovered · Awaiting acknowledgment";
   return `<article class="contract-card is-overdue incident-card" data-incident-type="silent_absence">
     <div class="contract-card-header">
       <div>
         <h3 class="contract-card-title">${escapeHtml(row.workflowName ?? "Workflow")}</h3>
-        <div class="helper">${escapeHtml(row.severity)} · ${escapeHtml(row.status)} · opened ${escapeHtml(formatCatalogTimestamp(row.openedAt))}</div>
+        <div class="helper">${escapeHtml(row.severity)} · ${escapeHtml(displayStatus)} · opened ${escapeHtml(formatCatalogTimestamp(row.openedAt))}</div>
       </div>
       ${statusBadge("overdue")}
     </div>
@@ -198,9 +211,10 @@ function hardFailureMeta(
       ? "—"
       : String(details.itemsProcessed);
   const recovery =
-    row.status === "resolved" && details?.recoveredAt
-      ? `<div>${formatTimestamp(details.recoveredAt, "Recovered")}</div>
-      <div>Incident duration: ${escapeHtml(formatDurationSeconds(details.durationSeconds ?? null))}</div>`
+    row.lifecycleStatus === "recovered" &&
+    (row.recoveredAt || details?.recoveredAt)
+      ? `<div>${formatTimestamp(details?.recoveredAt ?? row.recoveredAt, "Recovered")}</div>
+      <div>Incident duration: ${escapeHtml(formatDurationSeconds(details?.durationSeconds ?? null))}</div>`
       : "";
   return `<div class="contract-card-meta">
       <div>Workflow: ${escapeHtml(details?.workflowName ?? row.workflowName ?? "—")}</div>
@@ -225,6 +239,11 @@ function hardFailureMeta(
           : ""
       }
       ${recovery}
+      <div>Failure evidence: ${escapeHtml(row.summary)}</div>
+      <div>Recovery evidence: ${escapeHtml(row.recoveryEvidence ?? "—")}</div>
+      <div>Acknowledged by: ${escapeHtml(row.acknowledgedBy ?? "—")}</div>
+      <div>${formatTimestamp(row.acknowledgedAt, "Acknowledged at")}</div>
+      ${row.acknowledgmentNote ? `<div>Acknowledgment note: ${escapeHtml(row.acknowledgmentNote)}</div>` : ""}
     </div>`;
 }
 
@@ -233,13 +252,14 @@ export function renderHardFailureIncidentCard(
   csrf: string,
 ): string {
   const details = parseHardFailureDetails(row.detailsJson);
-  const tone = row.status === "resolved" ? " is-healthy" : " is-overdue";
+  const tone =
+    row.lifecycleStatus === "recovered" ? " is-healthy" : " is-overdue";
   const badge =
-    row.status === "resolved"
+    row.lifecycleStatus === "recovered"
       ? statusBadge("healthy")
       : `<span class="badge badge-status-incident"><span class="sr-only">Health: </span>Hard failure</span>`;
   const message =
-    row.status === "resolved"
+    row.lifecycleStatus === "recovered"
       ? escapeHtml(row.summary)
       : escapeHtml(
           details
@@ -251,7 +271,7 @@ export function renderHardFailureIncidentCard(
     <div class="contract-card-header">
       <div>
         <h3 class="contract-card-title">${escapeHtml(details?.workflowName ?? row.workflowName ?? "Workflow")}</h3>
-        <div class="helper">${escapeHtml(row.severity)} · ${escapeHtml(row.status)} · opened ${escapeHtml(formatCatalogTimestamp(row.openedAt))}</div>
+        <div class="helper">${escapeHtml(row.severity)} · ${row.lifecycleStatus === "active" ? "Active" : row.acknowledgmentStatus === "acknowledged" ? "Recovered · Acknowledged" : "Recovered · Awaiting acknowledgment"} · opened ${escapeHtml(formatCatalogTimestamp(row.openedAt))}</div>
       </div>
       ${badge}
     </div>
@@ -263,12 +283,19 @@ export function renderHardFailureIncidentCard(
   </article>`;
 }
 
-function renderGenericIncidentRow(row: IncidentListRow): string {
+function renderGenericIncidentRow(row: IncidentListRow, csrf: string): string {
+  const displayStatus =
+    row.lifecycleStatus === "active"
+      ? "Active"
+      : row.acknowledgmentStatus === "acknowledged"
+        ? "Recovered · Acknowledged"
+        : "Recovered · Awaiting acknowledgment";
   return `<tr>
     <td data-label="Severity" class="sev-${escapeHtml(row.severity)}">${escapeHtml(row.severity)}</td>
-    <td data-label="Status">${escapeHtml(row.status)}</td>
+    <td data-label="Status">${escapeHtml(displayStatus)}</td>
     <td data-label="Summary">${escapeHtml(row.summary)}</td>
-    <td data-label="Opened" class="helper">${escapeHtml(row.openedAt)}</td>
+    <td data-label="Opened" class="helper">${escapeHtml(row.openedAt)}${row.lifecycleStatus === "recovered" ? `<br />Recovered: ${escapeHtml(row.recoveredAt ?? "—")}` : ""}</td>
+    <td data-label="Review">${row.lifecycleStatus === "recovered" && row.acknowledgmentStatus === "unacknowledged" ? renderActions([{ label: "Acknowledge", form: { action: `/incidents/${row.id}/acknowledge`, csrf } }]) : "—"}</td>
   </tr>`;
 }
 
@@ -298,12 +325,18 @@ export function renderIncidentsBody(input: {
     return `<div class="empty-state"><h2>No open incidents</h2><p>Define contracts proactively. Do not wait for failures.</p><a class="btn" href="/catalog">Open Contract Catalog</a></div>`;
   }
 
-  const isOpen = (r: IncidentListRow) =>
-    r.status === "open" || r.status === "acknowledged";
+  const isOpen = (r: IncidentListRow) => r.lifecycleStatus === "active";
 
   const openRows = input.rows.filter(isOpen);
-  const resolvedHard = input.rows.filter(
-    (r) => r.incidentType === "hard_failure" && r.status === "resolved",
+  const recoveredNeedsReview = input.rows.filter(
+    (r) =>
+      r.lifecycleStatus === "recovered" &&
+      r.acknowledgmentStatus === "unacknowledged",
+  );
+  const recoveredHistory = input.rows.filter(
+    (r) =>
+      r.lifecycleStatus === "recovered" &&
+      r.acknowledgmentStatus === "acknowledged",
   );
 
   const silent = openRows.filter((r) => r.incidentType === "silent_absence");
@@ -325,31 +358,56 @@ export function renderIncidentsBody(input: {
 
   const otherHtml =
     otherOpen.length > 0
-      ? `<div class="card table-wrap" style="padding:0;margin-top:var(--space-4)"><table class="responsive-cards"><thead><tr><th>Severity</th><th>Status</th><th>Summary</th><th>Opened</th></tr></thead><tbody>${otherOpen
-          .map(renderGenericIncidentRow)
+      ? `<div class="card table-wrap" style="padding:0;margin-top:var(--space-4)"><table class="responsive-cards"><thead><tr><th>Severity</th><th>Status</th><th>Summary</th><th>Opened</th><th>Review</th></tr></thead><tbody>${otherOpen
+          .map((row) => renderGenericIncidentRow(row, input.csrf))
           .join("")}</tbody></table></div>`
       : "";
 
+  const needsReviewHtml =
+    recoveredNeedsReview.length > 0
+      ? `<section style="margin-top:var(--space-6)"><h2 class="section-title">Needs review</h2><p class="helper">Recovered incidents awaiting acknowledgment.</p><div class="contract-grid">${recoveredNeedsReview
+          .filter((row) => row.incidentType === "hard_failure")
+          .map((row) => renderHardFailureIncidentCard(row, input.csrf))
+          .join("")}</div>${
+          recoveredNeedsReview.some(
+            (row) => row.incidentType !== "hard_failure",
+          )
+            ? `<div class="card table-wrap"><table class="responsive-cards"><thead><tr><th>Severity</th><th>Status</th><th>Summary</th><th>Opened</th><th>Review</th></tr></thead><tbody>${recoveredNeedsReview
+                .filter((row) => row.incidentType !== "hard_failure")
+                .map((row) => renderGenericIncidentRow(row, input.csrf))
+                .join("")}</tbody></table></div>`
+            : ""
+        }</section>`
+      : "";
   const historyHtml =
-    resolvedHard.length > 0
+    recoveredHistory.length > 0
       ? `<section style="margin-top:var(--space-6)">
-          <h2 class="section-title">Resolved hard failures</h2>
-          <p class="helper">Recent recoveries from the last 24 hours.</p>
-          <div class="contract-grid">${resolvedHard
+          <h2 class="section-title">Incident history</h2>
+          <p class="helper">Recovered and acknowledged incidents remain available.</p>
+          <div class="contract-grid">${recoveredHistory
+            .filter((row) => row.incidentType === "hard_failure")
             .map((r) => renderHardFailureIncidentCard(r, input.csrf))
             .join("")}</div>
+          ${
+            recoveredHistory.some((row) => row.incidentType !== "hard_failure")
+              ? `<div class="card table-wrap"><table class="responsive-cards"><thead><tr><th>Severity</th><th>Status</th><th>Summary</th><th>Opened</th><th>Review</th></tr></thead><tbody>${recoveredHistory
+                  .filter((row) => row.incidentType !== "hard_failure")
+                  .map((row) => renderGenericIncidentRow(row, input.csrf))
+                  .join("")}</tbody></table></div>`
+              : ""
+          }
         </section>`
       : "";
 
   if (
     openCards.length === 0 &&
     otherOpen.length === 0 &&
-    resolvedHard.length > 0
+    recoveredNeedsReview.length + recoveredHistory.length > 0
   ) {
-    return `${historyHtml}`;
+    return `${needsReviewHtml}${historyHtml}`;
   }
 
-  return `${openCardsHtml}${otherHtml}${historyHtml}`;
+  return `${openCardsHtml}${otherHtml}${needsReviewHtml}${historyHtml}`;
 }
 
 export function renderIncidentsPage(input: {

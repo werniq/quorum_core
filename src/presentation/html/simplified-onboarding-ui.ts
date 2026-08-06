@@ -391,7 +391,7 @@ function renderCompleteStep(input: SimplifiedOnboardingPageInput): string {
         <div class="copy-value-row"><span><strong>Ingest endpoint:</strong> <code>POST ${escapeHtml(setup.ingestPath)}</code></span><button type="button" class="btn-secondary" data-copy-value="${escapeHtml(setup.ingestPath)}">Copy</button></div>
         <p class="helper">Import the reusable Quorum Reporter template. Configure its Quorum base URL once and store the HMAC secret in n8n; the customer workflow supplies the Quorum workflow ID, Key ID, status, useful item count, and optional execution reference.</p>
         <div class="row-actions" style="justify-content:flex-start">
-          <a class="btn btn-secondary" href="/onboarding/quorum-reporter.json">Download Quorum Reporter</a>
+          <a class="btn btn-secondary" href="/onboarding/quorum-reporter.json?workflowId=${encodeURIComponent(setup.workflowId)}">Download Quorum Reporter</a>
           <form method="post" action="/onboarding/heartbeat/test">
             <input type="hidden" name="csrf" value="${escapeHtml(input.csrf)}" />
             <input type="hidden" name="workflowId" value="${escapeHtml(setup.workflowId)}" />
