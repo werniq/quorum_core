@@ -65,7 +65,7 @@ Wrong KEK after restore causes decrypt failures; Quorum never prints the key.
 
 ## Known limitations
 
-- **Beta** — rough edges; incomplete triage UI.
+- **Beta** — rough edges; advanced triage UI (assignment, severity edits) remains incomplete.
 - Heartbeat and volume-band evidence can be self-reported. They do not independently prove destination delivery.
 - HubSpot webinar → Zoom registrant outcome path is **Preview** only.
 - Hosted multi-tenant SaaS, Stripe checkout, and agency billing are **not** in this Community repository.

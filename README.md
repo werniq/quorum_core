@@ -71,7 +71,7 @@ More: [docs/security.md](docs/security.md) · [docs/operations.md](docs/operatio
 
 ## Limitations
 
-Heartbeat and volume-band evidence can be self-reported. They do not independently prove destination delivery. Incomplete triage UI; HubSpot → Zoom outcome path is **Preview** only; no hosted SaaS / billing in this Community tree. Contract Catalog, push heartbeats, and polling are **Available**. Zapier / Make and general outcome verification for all workflows are **Planned**. Full list: [docs/known-limitations.md](docs/known-limitations.md).
+Heartbeat and volume-band evidence can be self-reported. They do not independently prove destination delivery. Basic incident acknowledgement and post-recovery review are supported; advanced triage (assignment, severity edits, response targets) remains incomplete. HubSpot → Zoom outcome path is **Preview** only; no hosted SaaS / billing in this Community tree. Contract Catalog, push heartbeats, and polling are **Available**. Zapier / Make and general outcome verification for all workflows are **Planned**. Full list: [docs/known-limitations.md](docs/known-limitations.md).
 
 ## Development
 

@@ -38,7 +38,7 @@ if (suppliedCount !== undefined && suppliedCount !== null && suppliedCount !== '
   }
 }
 const executedAt = new Date().toISOString();
-const externalExecutionRef = String(input.externalExecutionRef || $execution.id);
+const externalExecutionRef = String($execution.id);
 const timestampSeconds = String(Math.floor(Date.now() / 1000));
 const idempotencyKey = String(input.idempotencyKey || ('n8n-' + externalExecutionRef));
 const body = { schemaVersion: 1, executedAt, status, externalExecutionRef };

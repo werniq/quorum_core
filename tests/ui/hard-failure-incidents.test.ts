@@ -121,6 +121,7 @@ describe("hard-failure incident UI", () => {
     expect(labels).toEqual([
       "Open workflow in n8n",
       "View latest report",
+      "Acknowledge",
       "View contract",
     ]);
     const html = renderHardFailureIncidentCard(row, "csrf-token");
@@ -132,7 +133,8 @@ describe("hard-failure incident UI", () => {
     expect(html).toContain("Items processed: 0");
     expect(html).toContain("exec-2");
     expect(html).toContain('href="/catalog/contracts/wf-1#sec-timeline"');
-    expect(html).not.toContain('action="/incidents/hf-1/acknowledge"');
+    expect(html).toContain('action="/incidents/hf-1/acknowledge"');
+    expect(html).toContain(">Acknowledge</button>");
     expect(html).toContain('target="_blank"');
     expect(html).not.toContain("Heartbeat reported hard failure");
   });
@@ -157,7 +159,8 @@ describe("hard-failure incident UI", () => {
     expect(html).toContain("Recovered");
     expect(html).toContain("Incident duration:");
     expect(html).toContain("12m");
-    expect(html).toContain("Recovered · Awaiting acknowledgment");
-    expect(html).toContain("Acknowledge");
+    expect(html).toContain("Recovered · Needs review");
+    expect(html).toContain("Mark reviewed");
+    expect(html).not.toContain(">Acknowledge</button>");
   });
 });

@@ -1,10 +1,7 @@
 import type Database from "better-sqlite3";
 import { nextAlertChannelHealth } from "../../../domain/alerting/alert-channel-health.js";
 import { sanitizeDeliveryErrorMessage } from "../../../domain/alerting/sanitize-delivery-error.js";
-import {
-  InvalidIncidentTransitionError,
-  transitionIncidentStatus,
-} from "../../../domain/incidents/lifecycle.js";
+import { transitionIncidentStatus } from "../../../domain/incidents/lifecycle.js";
 import { createId } from "../../../domain/ids.js";
 import type {
   AlertChannelRecord,
@@ -717,10 +714,11 @@ export class SqliteAlertingRepositories implements AlertingRepositories {
     if (current.acknowledgmentStatus === "acknowledged") {
       return current;
     }
-    if (current.lifecycleStatus !== "recovered") {
-      throw new InvalidIncidentTransitionError(current.status, "acknowledged");
-    }
     const at = input?.at ?? nowIso();
+    // Legacy status: active incidents become "acknowledged" (still unresolved).
+    // Recovered incidents stay "resolved". Never couple ack to recovery fields.
+    const legacyStatus =
+      current.lifecycleStatus === "active" ? "acknowledged" : "resolved";
     this.sqlite
       .prepare(
         `UPDATE incidents
@@ -730,7 +728,7 @@ export class SqliteAlertingRepositories implements AlertingRepositories {
          WHERE tenant_id = ? AND id = ?`,
       )
       .run(
-        "resolved",
+        legacyStatus,
         at,
         input?.actor ?? null,
         input?.note?.trim() || null,

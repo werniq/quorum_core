@@ -65,13 +65,18 @@ function incidentLabel(type: string): string {
 }
 
 function lifecycleLabel(row: IncidentListRow): string {
-  if (row.lifecycleStatus === "active") return "Active";
+  if (row.lifecycleStatus === "active") {
+    return row.acknowledgmentStatus === "acknowledged"
+      ? "Active · Acknowledged"
+      : "Active";
+  }
   return row.acknowledgmentStatus === "acknowledged"
-    ? "Recovered · Acknowledged"
-    : "Recovered · Awaiting acknowledgment";
+    ? "Recovered · Reviewed"
+    : "Recovered · Needs review";
 }
 
 function incidentBadge(row: IncidentListRow): string {
+  // Active incidents stay unhealthy-looking even after acknowledgement.
   const cls =
     row.lifecycleStatus === "active"
       ? "badge-status-incident"
@@ -79,6 +84,29 @@ function incidentBadge(row: IncidentListRow): string {
         ? "badge-status-healthy"
         : "badge-status-waiting";
   return `<span class="badge ${cls}">${escapeHtml(lifecycleLabel(row))}</span>`;
+}
+
+/** Primary acknowledgement action for active or recovered-unreviewed incidents. */
+export function acknowledgmentAction(
+  row: IncidentListRow,
+  csrf: string,
+): IncidentAction | null {
+  if (row.acknowledgmentStatus === "acknowledged") {
+    return null;
+  }
+  if (row.lifecycleStatus === "active") {
+    return {
+      label: "Acknowledge",
+      form: { action: `/incidents/${row.id}/acknowledge`, csrf },
+    };
+  }
+  if (row.lifecycleStatus === "recovered") {
+    return {
+      label: "Mark reviewed",
+      form: { action: `/incidents/${row.id}/acknowledge`, csrf },
+    };
+  }
+  return null;
 }
 
 function time(iso: string | null): string {
@@ -154,6 +182,7 @@ function traceabilityActions(row: IncidentListRow): IncidentAction[] {
   }
   const executionUrl = buildN8nExecutionUrl({
     baseUrl: row.connectorBaseUrl,
+    externalWorkflowId: row.externalWorkflowId,
     externalExecutionRef: executionRef(row),
   });
   if (executionUrl) {
@@ -209,6 +238,14 @@ export function hardFailureActions(
     row.acknowledgmentStatus === "unacknowledged"
   ) {
     actions.push({
+      label: "Mark reviewed",
+      form: { action: `/incidents/${row.id}/acknowledge`, csrf },
+    });
+  } else if (
+    row.lifecycleStatus === "active" &&
+    row.acknowledgmentStatus === "unacknowledged"
+  ) {
+    actions.push({
       label: "Acknowledge",
       form: { action: `/incidents/${row.id}/acknowledge`, csrf },
     });
@@ -238,7 +275,11 @@ function evidenceCopy(row: IncidentListRow): {
   return { failure, recovery };
 }
 
-function detailPanel(row: IncidentListRow, nowMs: number): string {
+function detailPanel(
+  row: IncidentListRow,
+  nowMs: number,
+  csrf: string,
+): string {
   const data = details(row);
   const ref = executionRef(row);
   const items = data.itemsProcessed;
@@ -249,6 +290,7 @@ function detailPanel(row: IncidentListRow, nowMs: number): string {
   });
   const executionUrl = buildN8nExecutionUrl({
     baseUrl: row.connectorBaseUrl,
+    externalWorkflowId: row.externalWorkflowId,
     externalExecutionRef: ref,
   });
   const copy = evidenceCopy(row);
@@ -264,7 +306,15 @@ function detailPanel(row: IncidentListRow, nowMs: number): string {
     </dl></section>
     <section class="incident-detail-group" aria-labelledby="review-${escapeHtml(row.id)}"><h4 id="review-${escapeHtml(row.id)}">Review</h4><dl class="incident-detail-grid">
       <div><dt>Acknowledged by</dt><dd>${escapeHtml(row.acknowledgedBy ?? "—")}</dd></div><div><dt>Acknowledged at</dt><dd>${time(row.acknowledgedAt)}</dd></div><div class="incident-detail-wide"><dt>Acknowledgment note</dt><dd>${escapeHtml(row.acknowledgmentNote ?? "—")}</dd></div>
-    </dl></section>
+    </dl>${
+      row.acknowledgmentStatus === "unacknowledged" && csrf
+        ? `<form method="post" action="/incidents/${escapeHtml(row.id)}/acknowledge" class="stack-sm" style="margin-top:0.75rem">
+      <input type="hidden" name="csrf" value="${escapeHtml(csrf)}" />
+      <label class="field"><span class="field-label">Note (optional)</span><input type="text" name="note" maxlength="280" /></label>
+      <button class="btn btn-secondary" type="submit">${row.lifecycleStatus === "active" ? "Acknowledge" : "Mark reviewed"}</button>
+    </form>`
+        : ""
+    }</section>
     <div class="incident-secondary-actions">${row.workflowId ? `<a href="/catalog/contracts/${escapeHtml(row.workflowId)}#sec-timeline">View latest report</a><a href="/catalog/contracts/${escapeHtml(row.workflowId)}">View contract</a>` : ""}</div>
   </div>`;
 }
@@ -276,18 +326,11 @@ function compactIncident(
 ): string {
   const executionUrl = buildN8nExecutionUrl({
     baseUrl: row.connectorBaseUrl,
+    externalWorkflowId: row.externalWorkflowId,
     externalExecutionRef: executionRef(row),
   });
-  const acknowledge =
-    row.lifecycleStatus === "recovered" &&
-    row.acknowledgmentStatus === "unacknowledged"
-      ? renderActions([
-          {
-            label: "Acknowledge",
-            form: { action: `/incidents/${row.id}/acknowledge`, csrf },
-          },
-        ])
-      : "";
+  const acknowledge = acknowledgmentAction(row, csrf);
+  const acknowledgeHtml = acknowledge ? renderActions([acknowledge]) : "";
   const elapsed = row.recoveredAt
     ? `Recovered after ${duration(row)}`
     : `Open for ${currentDuration(row, nowMs)}`;
@@ -297,22 +340,24 @@ function compactIncident(
       <div class="incident-badges"><span class="badge sev-${escapeHtml(row.severity)}">${escapeHtml(row.severity)}</span>${incidentBadge(row)}</div>
     </div>
     <p class="incident-summary-time">Opened ${time(row.openedAt)} · ${escapeHtml(elapsed)}</p>
-    <div class="incident-collapsed-actions"><button class="btn btn-secondary incident-detail-toggle" type="button" aria-expanded="false" aria-controls="incident-panel-${escapeHtml(row.id)}" data-incident-toggle="${escapeHtml(row.id)}"><span class="incident-chevron" aria-hidden="true">›</span> View details</button>${executionUrl ? `<a class="btn btn-ghost" href="${escapeHtml(executionUrl)}" target="_blank" rel="noopener noreferrer">Inspect execution</a>` : ""}${acknowledge}</div>
-    ${detailPanel(row, nowMs)}
+    <div class="incident-collapsed-actions"><button class="btn btn-secondary incident-detail-toggle" type="button" aria-expanded="false" aria-controls="incident-panel-${escapeHtml(row.id)}" data-incident-toggle="${escapeHtml(row.id)}"><span class="incident-chevron" aria-hidden="true">›</span> View details</button>${executionUrl ? `<a class="btn btn-ghost" href="${escapeHtml(executionUrl)}" target="_blank" rel="noopener noreferrer">Inspect execution</a>` : ""}${acknowledgeHtml}</div>
+    ${detailPanel(row, nowMs, csrf)}
   </article>`;
 }
 
-function activeRow(row: IncidentListRow, nowMs: number): string {
+function activeRow(row: IncidentListRow, nowMs: number, csrf: string): string {
   const execution = traceabilityActions(row).find(
     (a) => a.label === "Inspect execution in n8n",
   );
   const executionAction = execution ? renderActions([execution]) : "";
+  const acknowledge = acknowledgmentAction(row, csrf);
+  const acknowledgeHtml = acknowledge ? renderActions([acknowledge]) : "";
   return `<tr class="incident-active-row" data-workflow="${escapeHtml(row.workflowId ?? "")}" data-type="${escapeHtml(row.incidentType)}">
     <td data-label="Severity"><span class="badge sev-${escapeHtml(row.severity)}">${escapeHtml(row.severity)}</span></td>
     <td data-label="Workflow"><strong>${escapeHtml(row.workflowName ?? "Workflow unavailable")}</strong>${row.workflowId ? `<a href="/catalog/contracts/${escapeHtml(row.workflowId)}">Open workflow in Quorum</a>` : ""}${row.externalWorkflowId ? `<span class="helper">n8n: ${escapeHtml(row.n8nWorkflowName ?? row.externalWorkflowId)}</span>` : ""}${buildN8nWorkflowEditorUrl({ baseUrl: row.connectorBaseUrl, externalWorkflowId: row.externalWorkflowId }) ? `<a href="${escapeHtml(buildN8nWorkflowEditorUrl({ baseUrl: row.connectorBaseUrl, externalWorkflowId: row.externalWorkflowId })!)}" target="_blank" rel="noopener noreferrer">Open workflow in n8n</a>` : ""}</td>
     <td data-label="Incident"><strong>${escapeHtml(incidentLabel(row.incidentType))}</strong><span class="helper">${escapeHtml(row.incidentType === "hard_failure" ? `${String(details(row).consecutiveFailures ?? "—")} consecutive failures` : row.incidentType === "silent_absence" ? SILENT_ABSENCE_MESSAGE : "Technical evidence available in incident details")}</span></td>
-    <td data-label="Opened">${time(row.openedAt)}</td><td data-label="Status">${incidentBadge(row)}</td><td data-label="Actions"><div class="incident-actions"><button class="btn btn-secondary incident-detail-toggle" type="button" aria-expanded="false" aria-controls="incident-panel-${escapeHtml(row.id)}" data-incident-toggle="${escapeHtml(row.id)}">View incident</button>${executionAction}</div></td>
-  </tr><tr class="incident-active-detail"><td colspan="6">${detailPanel(row, nowMs)}</td></tr>`;
+    <td data-label="Opened">${time(row.openedAt)}</td><td data-label="Status">${incidentBadge(row)}</td><td data-label="Actions"><div class="incident-actions"><button class="btn btn-secondary incident-detail-toggle" type="button" aria-expanded="false" aria-controls="incident-panel-${escapeHtml(row.id)}" data-incident-toggle="${escapeHtml(row.id)}"><span class="incident-chevron" aria-hidden="true">›</span> View details</button>${acknowledgeHtml}${executionAction}</div></td>
+  </tr><tr class="incident-active-detail"><td colspan="6">${detailPanel(row, nowMs, csrf)}</td></tr>`;
 }
 
 export function renderSilentAbsenceIncidentCard(
@@ -338,7 +383,7 @@ function filters(rows: IncidentListRow[]): string {
     ).entries(),
   ];
   const types = [...new Set(rows.map((r) => r.incidentType))];
-  return `<nav class="incident-filters" aria-label="Incident filters"><button class="btn btn-secondary" type="button" data-incident-filter="active">Active</button><button class="btn btn-ghost" type="button" data-incident-filter="needs-review">Needs review</button><button class="btn btn-ghost" type="button" data-incident-filter="acknowledged">Acknowledged</button><button class="btn btn-ghost" type="button" data-incident-filter="all">All history</button><label>Workflow <select id="incident-workflow-filter"><option value="">All workflows</option>${workflows.map(([id, name]) => `<option value="${escapeHtml(id)}">${escapeHtml(name)}</option>`).join("")}</select></label><label>Incident type <select id="incident-type-filter"><option value="">All types</option>${types.map((type) => `<option value="${escapeHtml(type)}">${escapeHtml(incidentLabel(type))}</option>`).join("")}</select></label></nav>`;
+  return `<nav class="incident-filters" aria-label="Incident filters"><button class="btn btn-secondary" type="button" data-incident-filter="active">Active</button><button class="btn btn-ghost" type="button" data-incident-filter="needs-review">Needs review</button><button class="btn btn-ghost" type="button" data-incident-filter="acknowledged">Reviewed history</button><button class="btn btn-ghost" type="button" data-incident-filter="all">All history</button><label>Workflow <select id="incident-workflow-filter"><option value="">All workflows</option>${workflows.map(([id, name]) => `<option value="${escapeHtml(id)}">${escapeHtml(name)}</option>`).join("")}</select></label><label>Incident type <select id="incident-type-filter"><option value="">All types</option>${types.map((type) => `<option value="${escapeHtml(type)}">${escapeHtml(incidentLabel(type))}</option>`).join("")}</select></label></nav>`;
 }
 
 export function renderIncidentsBody(input: {
@@ -368,9 +413,9 @@ export function renderIncidentsBody(input: {
       r.acknowledgmentStatus === "acknowledged",
   );
   return `${filters(input.rows)}
-    <section class="incident-section" data-incident-section="active"><div class="incident-section-heading"><h2>Active incidents</h2><span class="helper">${active.length} open</span></div>${active.length ? `<div class="card table-wrap incident-active-table"><table class="responsive-cards"><thead><tr><th>Severity</th><th>Workflow</th><th>Incident</th><th>Opened</th><th>Status</th><th>Actions</th></tr></thead><tbody>${active.map((row) => activeRow(row, input.nowMs)).join("")}</tbody></table></div>` : `<p class="empty-section">No active incidents.</p>`}</section>
-    <section class="incident-section" data-incident-section="needs-review"><div class="incident-section-heading"><h2>Needs review</h2><span class="helper">Recovered incidents awaiting acknowledgment</span></div><div class="incident-history-list">${review.map((r) => compactIncident(r, input.csrf, input.nowMs)).join("") || `<p class="empty-section">No incidents need review.</p>`}</div></section>
-    <section class="incident-section" data-incident-section="acknowledged"><div class="incident-section-heading"><h2>Resolved history <span class="sr-only">Incident history</span></h2><span class="helper">Recovered and acknowledged incidents</span></div><div class="incident-history-list">${history.map((r) => compactIncident(r, input.csrf, input.nowMs)).join("") || `<p class="empty-section">No acknowledged incidents yet.</p>`}</div></section>
+    <section class="incident-section" data-incident-section="active"><div class="incident-section-heading"><h2>Active incidents</h2><span class="helper">${active.length} open · includes acknowledged while still unhealthy</span></div>${active.length ? `<div class="card table-wrap incident-active-table"><table class="responsive-cards"><thead><tr><th>Severity</th><th>Workflow</th><th>Incident</th><th>Opened</th><th>Status</th><th>Actions</th></tr></thead><tbody>${active.map((row) => activeRow(row, input.nowMs, input.csrf)).join("")}</tbody></table></div>` : `<p class="empty-section">No active incidents.</p>`}</section>
+    <section class="incident-section" data-incident-section="needs-review"><div class="incident-section-heading"><h2>Needs review</h2><span class="helper">Recovered incidents awaiting review</span></div><div class="incident-history-list">${review.map((r) => compactIncident(r, input.csrf, input.nowMs)).join("") || `<p class="empty-section">No incidents need review.</p>`}</div></section>
+    <section class="incident-section" data-incident-section="acknowledged"><div class="incident-section-heading"><h2>Reviewed history <span class="sr-only">Incident history</span></h2><span class="helper">Recovered incidents that were acknowledged or reviewed</span></div><div class="incident-history-list">${history.map((r) => compactIncident(r, input.csrf, input.nowMs)).join("") || `<p class="empty-section">No reviewed incidents yet.</p>`}</div></section>
     <script>(()=>{let mode='active';const apply=()=>{const wf=document.querySelector('#incident-workflow-filter')?.value||'';const type=document.querySelector('#incident-type-filter')?.value||'';document.querySelectorAll('[data-incident-section]').forEach(s=>{const key=s.dataset.incidentSection;s.hidden=mode!=='all'&&key!==mode;});document.querySelectorAll('[data-workflow][data-type]').forEach(r=>{r.hidden=!!((wf&&r.dataset.workflow!==wf)||(type&&r.dataset.type!==type));});};document.querySelectorAll('[data-incident-filter]').forEach(b=>b.addEventListener('click',()=>{mode=b.dataset.incidentFilter;apply();}));document.querySelectorAll('#incident-workflow-filter,#incident-type-filter').forEach(s=>s.addEventListener('change',apply));const setExpanded=(button,expanded)=>{button.setAttribute('aria-expanded',String(expanded));const panel=document.getElementById(button.getAttribute('aria-controls'));if(panel)panel.hidden=!expanded;const label=button.querySelector('span')?.nextSibling;if(label)label.textContent=expanded?' Hide details':' View details';};document.querySelectorAll('[data-incident-toggle]').forEach(button=>{const key='quorum:incident-expanded:'+button.dataset.incidentToggle;let expanded=false;try{expanded=sessionStorage.getItem(key)==='1';}catch{}setExpanded(button,expanded);button.addEventListener('click',()=>{const next=button.getAttribute('aria-expanded')!=='true';setExpanded(button,next);try{sessionStorage.setItem(key,next?'1':'0');}catch{}});});apply();})();</script>`;
 }
 

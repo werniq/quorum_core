@@ -55,4 +55,17 @@ Returns `{ "incident": { … } }` for incidents visible to the local tenant. Mis
 curl "http://localhost:3000/api/v1/incidents/<incidentId>"
 ```
 
-Acknowledge / resolve remain `POST /api/v1/incidents/:incidentId/acknowledge` and `…/resolve`.
+## Acknowledge and resolve
+
+Acknowledgement and recovery are separate dimensions:
+
+| Action                         | Endpoint                                         | Effect                                                                                                                                                                                                                                                                            |
+| ------------------------------ | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Acknowledge / mark reviewed    | `POST /api/v1/incidents/:incidentId/acknowledge` | Sets `acknowledgmentStatus=acknowledged` with actor/timestamp/optional note. Does **not** recover the incident. Active incidents stay `lifecycleStatus=active` and unhealthy. Recovered + unacknowledged incidents can use the same endpoint as post-recovery review. Idempotent. |
+| Resolve (operational recovery) | `POST /api/v1/incidents/:incidentId/resolve`     | Sets `lifecycleStatus=recovered` and recovery timestamps/evidence. Preserves any existing acknowledgement metadata. Automatic recovery from healthy evidence uses the same repository path.                                                                                       |
+
+```bash
+curl -X POST "http://localhost:3000/api/v1/incidents/<incidentId>/acknowledge" \
+  -H "content-type: application/json" \
+  -d '{"note":"Investigating with ops"}'
+```

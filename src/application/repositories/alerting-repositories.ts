@@ -291,6 +291,7 @@ export interface AlertingRepositories {
       actor?: string | null;
       at?: string;
       edition?: "self_hosted" | "saas";
+      note?: string | null;
     },
   ): IncidentRecord;
   resolveIncident(

@@ -23,7 +23,7 @@ function incident(overrides: Partial<IncidentListRow> = {}): IncidentListRow {
     acknowledgmentNote: null,
     detailsJson: JSON.stringify({
       consecutiveFailures: 2,
-      externalExecutionRef: "exec-42",
+      externalExecutionRef: "9760",
     }),
     incidentType: "hard_failure",
     workflowId: "quorum-wf-1",
@@ -53,7 +53,7 @@ describe("incident traceability and history", () => {
       'href="https://trusted-n8n.example/workflow/n8n-wf-9"',
     );
     expect(html).toContain(
-      'href="https://trusted-n8n.example/execution/exec-42"',
+      'href="https://trusted-n8n.example/workflow/n8n-wf-9/executions/9760"',
     );
   });
 
@@ -61,6 +61,7 @@ describe("incident traceability and history", () => {
     expect(
       buildN8nExecutionUrl({
         baseUrl: "https://trusted-n8n.example",
+        externalWorkflowId: "n8n-wf-9",
         externalExecutionRef: "https://attacker.example/execution/1",
       }),
     ).toBeNull();
@@ -79,6 +80,31 @@ describe("incident traceability and history", () => {
       overdueCount: 0,
     });
     expect(html).not.toContain('attacker.example/x"');
+  });
+
+  it("hides execution actions for legacy timestamp refs and invalid identifiers", () => {
+    for (const row of [
+      incident({
+        detailsJson: JSON.stringify({
+          externalExecutionRef: "n8n-1785994558556",
+        }),
+      }),
+      incident({ externalWorkflowId: "bad workflow!" }),
+      incident({
+        detailsJson: JSON.stringify({ externalExecutionRef: "exec-42" }),
+      }),
+    ]) {
+      const html = renderIncidentsBody({
+        rows: [row],
+        nowMs: Date.now(),
+        csrf: "csrf",
+        attentionCount: 0,
+        warningCount: 0,
+        overdueCount: 0,
+      });
+      expect(html).not.toContain("Inspect execution");
+      expect(html).not.toContain("/executions/");
+    }
   });
 
   it("separates review from acknowledged history and collapses evidence", () => {
@@ -103,9 +129,10 @@ describe("incident traceability and history", () => {
       overdueCount: 0,
     });
     expect(html).toContain("Needs review");
-    expect(html).toContain("Resolved history");
-    expect(html).toContain("Recovered · Awaiting acknowledgment");
-    expect(html).toContain("Recovered · Acknowledged");
+    expect(html).toContain("Reviewed history");
+    expect(html).toContain("Recovered · Needs review");
+    expect(html).toContain("Recovered · Reviewed");
+    expect(html).toContain(">Mark reviewed</button>");
     expect(html).toContain('class="incident-detail-panel"');
     expect(html).toContain(
       'class="incident-detail-panel" id="incident-panel-review" hidden',
@@ -135,7 +162,7 @@ describe("incident traceability and history", () => {
     );
     expect(collapsed).toContain("View details");
     expect(collapsed).toContain("Inspect execution");
-    expect(collapsed).toContain("Acknowledge");
+    expect(collapsed).toContain("Mark reviewed");
     expect(collapsed).not.toContain("View contract");
     expect(collapsed).not.toContain("View latest report");
     expect(html).toContain("Incident timeline");
@@ -171,7 +198,68 @@ describe("incident traceability and history", () => {
     expect(html).toContain('aria-expanded="false"');
     expect(html).toContain("sessionStorage.getItem");
     expect(html).toContain("sessionStorage.setItem");
+    expect(html).toContain("button.addEventListener('click'");
     expect(html).not.toContain("localStorage");
+  });
+
+  it("shows Acknowledge for active unacknowledged and Mark reviewed for recovered", () => {
+    const render = (row: IncidentListRow) =>
+      renderIncidentsBody({
+        rows: [row],
+        nowMs: Date.now(),
+        csrf: "csrf",
+        attentionCount: 0,
+        warningCount: 0,
+        overdueCount: 0,
+      });
+    const activeHtml = render(incident());
+    expect(activeHtml).toContain(">Acknowledge</button>");
+    expect(activeHtml).toContain("Active");
+    expect(activeHtml).not.toContain(">Mark reviewed</button>");
+
+    const recoveredHtml = render(
+      incident({
+        lifecycleStatus: "recovered",
+        recoveredAt: "2026-07-30T17:01:00.000Z",
+      }),
+    );
+    expect(recoveredHtml).toContain(">Mark reviewed</button>");
+    expect(recoveredHtml).not.toContain(">Acknowledge</button>");
+    expect(recoveredHtml).toContain("Recovered · Needs review");
+
+    const ackedActive = render(
+      incident({
+        acknowledgmentStatus: "acknowledged",
+        acknowledgedAt: "2026-07-30T17:02:00.000Z",
+        acknowledgedBy: "admin",
+      }),
+    );
+    expect(ackedActive).toContain("Active · Acknowledged");
+    expect(ackedActive).toContain("badge-status-incident");
+    expect(ackedActive).not.toContain(">Acknowledge</button>");
+    expect(ackedActive).not.toContain(">Mark reviewed</button>");
+    expect(ackedActive).toContain('data-incident-section="active"');
+
+    expect(
+      render(
+        incident({
+          lifecycleStatus: "recovered",
+          acknowledgmentStatus: "acknowledged",
+          recoveredAt: "2026-07-30T17:01:00.000Z",
+          acknowledgedAt: "2026-07-30T17:02:00.000Z",
+        }),
+      ),
+    ).not.toContain(">Acknowledge</button>");
+    expect(
+      render(
+        incident({
+          lifecycleStatus: "recovered",
+          acknowledgmentStatus: "acknowledged",
+          recoveredAt: "2026-07-30T17:01:00.000Z",
+          acknowledgedAt: "2026-07-30T17:02:00.000Z",
+        }),
+      ),
+    ).not.toContain(">Mark reviewed</button>");
   });
 
   it("stacks detail metadata and actions at the mobile breakpoint", () => {

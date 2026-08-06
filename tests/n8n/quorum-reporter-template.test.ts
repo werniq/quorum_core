@@ -61,6 +61,9 @@ describe("generated Quorum Reporter workflow", () => {
       (node) => node.name === "Build and validate report",
     )?.parameters.jsCode;
     expect(code).toContain("$execution.id");
+    expect(code).toContain("externalExecutionRef = String($execution.id)");
+    expect(code).not.toContain("input.externalExecutionRef ||");
+    expect(code).not.toContain("externalExecutionRef = `n8n-${Date.now()}`");
     expect(code).toContain("Output evidence missing");
     expect(code).toContain("Number.isInteger(itemsProcessed)");
     expect(code).toContain("itemsProcessed < 0");

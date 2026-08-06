@@ -240,12 +240,11 @@ describe("workflow monitoring settings", () => {
     });
     expect(recoveredDetail.body).toContain("Healthy");
     expect(recoveredDetail.body).toContain(
-      "1 recovered incident awaiting acknowledgment",
+      "1 recovered incident awaiting review",
     );
     expect(recoveredDetail.body).toContain("Needs review");
-    expect(recoveredDetail.body).toContain(
-      "Recovered · Awaiting acknowledgment",
-    );
+    expect(recoveredDetail.body).toContain("Recovered · Needs review");
+    expect(recoveredDetail.body).toContain("Mark reviewed");
     expect(recoveredDetail.body).toContain("success · 1 useful item");
     const healthBeforeAcknowledgment = core.getWorkflowState(
       tenant.id,
@@ -283,6 +282,132 @@ describe("workflow monitoring settings", () => {
     });
     expect(reviewedDetail.body).toContain("Recovered · Acknowledged");
     expect(reviewedDetail.body).toContain("Reviewed with operations");
+    await app.close();
+  });
+
+  it("acknowledges active incidents from the UI without recovering them", async () => {
+    const sqlite = openDb();
+    const clock = new FixedClock(new Date("2026-08-05T08:00:00.000Z"));
+    const { core, tenant, sessionId, csrf } = seedAdmin(sqlite, clock);
+    const workflow = core.createWorkflow(tenant.id, {
+      id: createId(),
+      clientId: null,
+      name: "Active CRM sync",
+      externalWorkflowId: "active-crm-sync",
+      description: null,
+      monitoringMethod: "push",
+      isActive: true,
+      monitoringStartedAt: clock.now().toISOString(),
+    });
+    core.createWorkflowContract(tenant.id, {
+      id: createId(),
+      workflowId: workflow.id,
+      name: "Active CRM contract",
+      businessPurpose: "Keep CRM current",
+      contractType: "heartbeat",
+      cadenceType: "event_driven",
+      cadenceValue: "event",
+      intervalMode: null,
+      scheduleAnchorAt: null,
+      timezone: "UTC",
+      allowedLatenessMinutes: 5,
+      maxQuietWindowMinutes: 1440,
+      initialGraceMinutes: 5,
+      emptyResultPolicy: "failure",
+      countLessSuccessAllowed: false,
+      notificationBackoffMinutes: 30,
+      evidenceLevel: "basic",
+      schemaVersion: 1,
+      isActive: true,
+      activatedAt: clock.now().toISOString(),
+    });
+    core.upsertWorkflowState(tenant.id, {
+      tenantId: tenant.id,
+      workflowId: workflow.id,
+      lastExecutionAt: clock.now().toISOString(),
+      lastNonemptySuccessAt: null,
+      lastAcceptableSuccessAt: null,
+      lastFailureAt: clock.now().toISOString(),
+      lastExternalExecutionRef: null,
+      lastStatus: "empty_result",
+      nextExpectedAt: "2026-08-06T08:00:00.000Z",
+      overdueSince: null,
+      currentHealth: "overdue",
+      evidenceLevel: "basic",
+      evidenceSummaryCode: null,
+      unverifiedDimensionsJson: null,
+      consecutiveStaleChecks: 0,
+      updatedAt: clock.now().toISOString(),
+    });
+    const alerting = new SqliteAlertingRepositories(sqlite);
+    const incident = alerting.openOrObserveIncident(tenant.id, {
+      id: createId(),
+      contractKind: "workflow",
+      workflowId: workflow.id,
+      incidentType: "empty_result",
+      severity: "critical",
+      summary: "zero useful output",
+      observedAt: clock.now().toISOString(),
+    });
+    const app = await bootApp(sqlite, clock);
+    const cookie = `${SESSION_COOKIE}=${sessionId}`;
+    const detail = await app.inject({
+      method: "GET",
+      url: `/catalog/contracts/${workflow.id}`,
+      headers: { cookie },
+    });
+    expect(detail.body).toContain(">Acknowledge</button>");
+    expect(detail.body).toContain("Active · Unacknowledged");
+    const badCsrf = await app.inject({
+      method: "POST",
+      url: `/incidents/${incident.id}/acknowledge`,
+      headers: {
+        cookie,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      payload: `csrf=wrong&note=${encodeURIComponent("should fail")}`,
+    });
+    expect(badCsrf.statusCode).toBe(403);
+    expect(alerting.getIncident(tenant.id, incident.id)).toMatchObject({
+      acknowledgmentStatus: "unacknowledged",
+      lifecycleStatus: "active",
+    });
+    const acknowledge = await app.inject({
+      method: "POST",
+      url: `/incidents/${incident.id}/acknowledge`,
+      headers: {
+        cookie,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      payload: `csrf=${encodeURIComponent(csrf)}&note=${encodeURIComponent("Investigating now")}`,
+    });
+    expect(acknowledge.statusCode).toBe(302);
+    expect(core.getWorkflowState(tenant.id, workflow.id)?.currentHealth).toBe(
+      "overdue",
+    );
+    expect(alerting.getIncident(tenant.id, incident.id)).toMatchObject({
+      lifecycleStatus: "active",
+      acknowledgmentStatus: "acknowledged",
+      acknowledgmentNote: "Investigating now",
+      recoveredAt: null,
+      resolvedAt: null,
+    });
+    const after = await app.inject({
+      method: "GET",
+      url: `/catalog/contracts/${workflow.id}`,
+      headers: { cookie },
+    });
+    expect(after.body).toContain("Active · Acknowledged");
+    expect(after.body).not.toContain(">Acknowledge</button>");
+    expect(after.body).not.toContain(">Mark reviewed</button>");
+    const incidentsPage = await app.inject({
+      method: "GET",
+      url: "/incidents",
+      headers: { cookie },
+    });
+    expect(incidentsPage.body).toContain("Active · Acknowledged");
+    expect(incidentsPage.body).toContain('data-incident-section="active"');
+    expect(incidentsPage.body).not.toContain(">Acknowledge</button>");
     await app.close();
   });
 

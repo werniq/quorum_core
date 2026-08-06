@@ -1115,11 +1115,19 @@ export function renderWorkflowContractDetailPage(input: {
   );
   const incidentItems = activeIncidents.length
     ? activeIncidents
-        .map((i) =>
-          detailListItem(
-            `<span class="sev-${escapeHtml(i.severity)}"><strong>${escapeHtml(i.summary)}</strong></span><span class="helper">Active · ${i.acknowledgmentStatus === "acknowledged" ? "Acknowledged" : "Unacknowledged"}</span>`,
-          ),
-        )
+        .map((i) => {
+          const ackForm =
+            i.acknowledgmentStatus === "unacknowledged"
+              ? `<form method="post" action="/incidents/${escapeHtml(i.id)}/acknowledge" class="stack-sm">
+          <input type="hidden" name="csrf" value="${escapeHtml(input.csrf)}" />
+          <label class="field"><span class="field-label">Note (optional)</span><input type="text" name="note" maxlength="280" /></label>
+          <button class="btn btn-secondary" type="submit">Acknowledge</button>
+        </form>`
+              : "";
+          return detailListItem(
+            `<div class="stack-sm"><span class="sev-${escapeHtml(i.severity)}"><strong>${escapeHtml(i.summary)}</strong></span><span class="helper">Active · ${i.acknowledgmentStatus === "acknowledged" ? "Acknowledged" : "Unacknowledged"}</span>${ackForm}</div>`,
+          );
+        })
         .join("")
     : `<li class="detail-list-item helper">No active incidents.</li>`;
   const needsReviewItems = needsReview
@@ -1137,13 +1145,13 @@ export function renderWorkflowContractDetailPage(input: {
           : "—";
       return detailListItem(`<div class="stack-sm">
         <strong>${escapeHtml(i.summary)}</strong>
-        <span class="helper">Recovered · Awaiting acknowledgment</span>
+        <span class="helper">Recovered · Needs review</span>
         <span class="helper">Failure time: ${escapeHtml(i.openedAt)} · Recovery time: ${escapeHtml(i.recoveredAt ?? "—")} · Duration: ${escapeHtml(duration)}</span>
         <span class="helper">Failure evidence: ${escapeHtml(i.summary)} · Recovery evidence: ${escapeHtml(i.recoveryEvidence ?? "Healthy evidence accepted")}</span>
         <form method="post" action="/incidents/${escapeHtml(i.id)}/acknowledge" class="stack-sm">
           <input type="hidden" name="csrf" value="${escapeHtml(input.csrf)}" />
           <label class="field"><span class="field-label">Acknowledgment note (optional)</span><input type="text" name="note" maxlength="280" /></label>
-          <button class="btn btn-secondary" type="submit">Acknowledge</button>
+          <button class="btn btn-secondary" type="submit">Mark reviewed</button>
         </form>
       </div>`);
     })
@@ -1192,7 +1200,7 @@ export function renderWorkflowContractDetailPage(input: {
       <div class="contract-detail">
       <h1 class="page-title">${escapeHtml(c.businessPurpose)}</h1>
       <p class="page-subtitle">${escapeHtml(c.name)} · ${escapeHtml(formatExpectation(c.cadence))}</p>
-      ${needsReview.length > 0 ? `<p class="banner" role="status"><strong>${escapeHtml(c.health === "healthy" ? "Healthy" : c.health)}</strong><br />${needsReview.length} recovered incident${needsReview.length === 1 ? "" : "s"} awaiting acknowledgment</p>` : ""}
+      ${needsReview.length > 0 ? `<p class="banner" role="status"><strong>${escapeHtml(c.health === "healthy" ? "Healthy" : c.health)}</strong><br />${needsReview.length} recovered incident${needsReview.length === 1 ? "" : "s"} awaiting review</p>` : ""}
       <section class="card detail-section" aria-labelledby="sec-contract">
         <h2 class="section-title" id="sec-contract">Contract</h2>
         <div class="detail-kv-grid">

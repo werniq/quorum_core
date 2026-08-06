@@ -13,7 +13,7 @@ Updated 2026-07-31 after Community beta.5 verification ([release-verification.md
 6. Zapier and Make are **Planned** only.
 7. Public copy must not claim general outcome verification across the entire n8n estate.
 8. Volume rules are created in the data model and evaluated by the watcher. There is no Protect-wizard step for volume rules yet.
-9. Incident triage fields exist in the database and repositories. Full triage UI is not complete.
+9. Basic acknowledgement and post-recovery review are supported (operators can acknowledge active incidents without marking them recovered, and mark recovered incidents as reviewed). Advanced triage — assignment, severity changes, response targets, and editable resolution notes — remains incomplete.
 10. Hosted multi-tenant SaaS, Stripe checkout, and agency billing are **not** in the Community Apache-2.0 tree. Hosted production remains **NO-GO**.
 11. A zero-item run can be legitimate. Empty-result handling is per-contract (`allowed` / `warning` / `failure`) with an optional consecutive-breach threshold — not a global `items >= 1` rule.
 12. When the n8n poll connector is unreachable, Catalog shows **Monitor unknown** and does not open new silent-absence incidents for that reason alone. An already-open schedule breach remains visible (dimensions + incident); the badge still reads Monitor unknown until the connector recovers.

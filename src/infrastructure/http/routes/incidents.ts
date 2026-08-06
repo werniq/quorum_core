@@ -16,6 +16,7 @@ import {
   decodeIncidentListCursor,
   encodeIncidentListCursor,
 } from "../incident-list-cursor.js";
+import { isValidN8nExecutionId } from "../../../domain/n8n/workflow-editor-url.js";
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
@@ -128,6 +129,10 @@ export function registerIncidentRoutes(
       n8nWorkflowId: workflow?.external_workflow_id ?? null,
       n8nWorkflowName: workflow?.name ?? null,
       externalExecutionRef,
+      n8nExecutionId:
+        externalExecutionRef && isValidN8nExecutionId(externalExecutionRef)
+          ? externalExecutionRef
+          : null,
     };
   }
 

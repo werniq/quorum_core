@@ -12,10 +12,10 @@ export function isValidN8nExternalWorkflowId(id: string): boolean {
   return /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(trimmed);
 }
 
-/** Execution ids use the same opaque, path-safe alphabet as workflow ids. */
+/** n8n execution ids are positive decimal identifiers. */
 export function isValidN8nExecutionId(id: string): boolean {
   const trimmed = id.trim();
-  return /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(trimmed);
+  return /^[1-9]\d{0,19}$/.test(trimmed);
 }
 
 function trustedN8nBaseUrl(baseUrl: string | null | undefined): string | null {
@@ -62,10 +62,18 @@ export function buildN8nWorkflowEditorUrl(input: {
 /** Build an execution link exclusively from connector configuration and a stored id. */
 export function buildN8nExecutionUrl(input: {
   baseUrl: string | null | undefined;
+  externalWorkflowId: string | null | undefined;
   externalExecutionRef: string | null | undefined;
 }): string | null {
+  const workflowId = input.externalWorkflowId?.trim() ?? "";
   const executionId = input.externalExecutionRef?.trim() ?? "";
   const base = trustedN8nBaseUrl(input.baseUrl);
-  if (!base || !isValidN8nExecutionId(executionId)) return null;
-  return `${base}/execution/${encodeURIComponent(executionId)}`;
+  if (
+    !base ||
+    !isValidN8nExternalWorkflowId(workflowId) ||
+    !isValidN8nExecutionId(executionId)
+  ) {
+    return null;
+  }
+  return `${base}/workflow/${encodeURIComponent(workflowId)}/executions/${encodeURIComponent(executionId)}`;
 }

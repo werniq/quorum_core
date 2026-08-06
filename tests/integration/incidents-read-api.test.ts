@@ -528,4 +528,79 @@ describe("GET /api/v1/incidents", () => {
     ).toBe(1);
     await app.close();
   });
+
+  it("acknowledges active incidents without recovering them", async () => {
+    const sqlite = openDb();
+    const core = new SqliteCoreRepositories(sqlite);
+    const alerting = new SqliteAlertingRepositories(sqlite);
+    const tenant = core.ensureSelfHostedTenant();
+    const workflow = seedWorkflow(core, tenant.id);
+    const incident = alerting.openOrObserveIncident(tenant.id, {
+      id: createId(),
+      contractKind: "workflow",
+      workflowId: workflow,
+      incidentType: "hard_failure",
+      severity: "critical",
+      summary: "active fail",
+      observedAt: "2026-07-26T12:00:00.000Z",
+    });
+
+    const app = await buildTestApp(sqlite);
+    const ack = await app.inject({
+      method: "POST",
+      url: `/api/v1/incidents/${incident.id}/acknowledge`,
+      payload: { note: "On it" },
+    });
+    expect(ack.statusCode).toBe(200);
+    expect(ack.json()).toMatchObject({
+      incident: {
+        id: incident.id,
+        status: "acknowledged",
+        lifecycleStatus: "active",
+        acknowledgmentStatus: "acknowledged",
+        acknowledgedBy: "api:authenticated",
+        acknowledgmentNote: "On it",
+        recoveredAt: null,
+        resolvedAt: null,
+      },
+    });
+    const repeated = await app.inject({
+      method: "POST",
+      url: `/api/v1/incidents/${incident.id}/acknowledge`,
+      payload: { note: "Overwrite" },
+    });
+    expect(repeated.statusCode).toBe(200);
+    expect(repeated.json()).toMatchObject({
+      incident: {
+        acknowledgmentNote: "On it",
+        lifecycleStatus: "active",
+      },
+    });
+    expect(
+      (
+        sqlite
+          .prepare(
+            `SELECT COUNT(*) AS count FROM notification_outbox
+             WHERE incident_id = ? AND event_type = 'acknowledged'`,
+          )
+          .get(incident.id) as { count: number }
+      ).count,
+    ).toBe(1);
+
+    const recovered = await app.inject({
+      method: "POST",
+      url: `/api/v1/incidents/${incident.id}/resolve`,
+      payload: {},
+    });
+    expect(recovered.statusCode).toBe(200);
+    expect(recovered.json()).toMatchObject({
+      incident: {
+        lifecycleStatus: "recovered",
+        acknowledgmentStatus: "acknowledged",
+        acknowledgedBy: "api:authenticated",
+        acknowledgmentNote: "On it",
+      },
+    });
+    await app.close();
+  });
 });

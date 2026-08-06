@@ -137,7 +137,7 @@ describe("alerting schema repositories", () => {
   });
 
   it("keeps recovery operationally separate from idempotent acknowledgment", () => {
-    const { core, alerting } = openRepos();
+    const { sqlite, core, alerting } = openRepos();
     const tenant = core.ensureSelfHostedTenant();
     const now = "2026-08-05T08:00:00.000Z";
     const workflowId = createId();
@@ -164,12 +164,98 @@ describe("alerting schema repositories", () => {
       lifecycleStatus: "active",
       acknowledgmentStatus: "unacknowledged",
     });
-    expect(() =>
+    const activeAck = alerting.acknowledgeIncident(tenant.id, opened.id, {
+      actor: "admin-user",
+      at: "2026-08-05T08:01:00.000Z",
+      note: "Seen — investigating",
+    });
+    expect(activeAck).toMatchObject({
+      status: "acknowledged",
+      lifecycleStatus: "active",
+      acknowledgmentStatus: "acknowledged",
+      acknowledgedBy: "admin-user",
+      acknowledgedAt: "2026-08-05T08:01:00.000Z",
+      acknowledgmentNote: "Seen — investigating",
+      recoveredAt: null,
+      resolvedAt: null,
+    });
+    expect(
       alerting.acknowledgeIncident(tenant.id, opened.id, {
-        actor: "admin-user",
-        at: "2026-08-05T08:01:00.000Z",
+        actor: "different-user",
+        at: "2026-08-05T08:02:00.000Z",
+        note: "should not overwrite",
       }),
-    ).toThrow(/Invalid incident transition/);
+    ).toEqual(activeAck);
+    const audits = sqlite
+      .prepare(
+        `SELECT COUNT(*) AS n FROM incident_audit_events
+         WHERE incident_id = ? AND event_type = 'acknowledged'`,
+      )
+      .get(opened.id) as { n: number };
+    expect(audits.n).toBe(1);
+
+    const stillOpen = alerting.getUnresolvedIncident(
+      tenant.id,
+      "workflow",
+      workflowId,
+      "empty_result",
+    );
+    expect(stillOpen?.id).toBe(opened.id);
+
+    const observedAgain = alerting.openOrObserveIncident(tenant.id, {
+      id: createId(),
+      contractKind: "workflow",
+      workflowId,
+      incidentType: "empty_result",
+      severity: "critical",
+      summary: "zero useful output again",
+      observedAt: "2026-08-05T08:03:00.000Z",
+    });
+    expect(observedAgain.id).toBe(opened.id);
+    expect(observedAgain.acknowledgmentStatus).toBe("acknowledged");
+    expect(observedAgain.acknowledgedBy).toBe("admin-user");
+
+    const recovered = alerting.resolveIncident(tenant.id, opened.id, {
+      actor: "system:heartbeat",
+      at: "2026-08-05T08:05:00.000Z",
+      recoveryEvidence: "success · 1 item",
+    });
+    expect(recovered).toMatchObject({
+      status: "resolved",
+      lifecycleStatus: "recovered",
+      acknowledgmentStatus: "acknowledged",
+      acknowledgedBy: "admin-user",
+      acknowledgedAt: "2026-08-05T08:01:00.000Z",
+      acknowledgmentNote: "Seen — investigating",
+      recoveredAt: "2026-08-05T08:05:00.000Z",
+      recoveryEvidence: "success · 1 item",
+    });
+  });
+
+  it("marks recovered unacknowledged incidents as reviewed without changing recovery", () => {
+    const { core, alerting } = openRepos();
+    const tenant = core.ensureSelfHostedTenant();
+    const now = "2026-08-05T08:00:00.000Z";
+    const workflowId = createId();
+    core.createWorkflow(tenant.id, {
+      id: workflowId,
+      clientId: null,
+      name: "Invoice sync",
+      externalWorkflowId: "n8n-1",
+      description: null,
+      monitoringMethod: "push",
+      isActive: true,
+      monitoringStartedAt: now,
+    });
+    const opened = alerting.openOrObserveIncident(tenant.id, {
+      id: createId(),
+      contractKind: "workflow",
+      workflowId,
+      incidentType: "empty_result",
+      severity: "critical",
+      summary: "zero useful output",
+      observedAt: now,
+    });
     const recovered = alerting.resolveIncident(tenant.id, opened.id, {
       actor: "system:heartbeat",
       at: "2026-08-05T08:05:00.000Z",
