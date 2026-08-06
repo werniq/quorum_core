@@ -12,6 +12,33 @@ export function isValidN8nExternalWorkflowId(id: string): boolean {
   return /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(trimmed);
 }
 
+/** Execution ids use the same opaque, path-safe alphabet as workflow ids. */
+export function isValidN8nExecutionId(id: string): boolean {
+  const trimmed = id.trim();
+  return /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(trimmed);
+}
+
+function trustedN8nBaseUrl(baseUrl: string | null | undefined): string | null {
+  const baseRaw = baseUrl?.trim() ?? "";
+  if (!baseRaw) return null;
+  let url: URL;
+  try {
+    url = new URL(baseRaw);
+  } catch {
+    return null;
+  }
+  if (
+    (url.protocol !== "http:" && url.protocol !== "https:") ||
+    url.username ||
+    url.password ||
+    !url.hostname
+  ) {
+    return null;
+  }
+  const path = url.pathname.replace(/\/+$/, "");
+  return `${url.protocol}//${url.host}${path}`;
+}
+
 /**
  * Build an n8n workflow editor URL, or null when the base URL / external id
  * cannot be trusted for a browser navigation.
@@ -20,33 +47,25 @@ export function buildN8nWorkflowEditorUrl(input: {
   baseUrl: string | null | undefined;
   externalWorkflowId: string | null | undefined;
 }): string | null {
-  const baseRaw = input.baseUrl?.trim() ?? "";
   const externalId = input.externalWorkflowId?.trim() ?? "";
-  if (!baseRaw || !externalId) {
+  const base = trustedN8nBaseUrl(input.baseUrl);
+  if (!base || !externalId) {
     return null;
   }
   if (!isValidN8nExternalWorkflowId(externalId)) {
     return null;
   }
 
-  let url: URL;
-  try {
-    url = new URL(baseRaw);
-  } catch {
-    return null;
-  }
+  return `${base}/workflow/${encodeURIComponent(externalId)}`;
+}
 
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    return null;
-  }
-  if (url.username || url.password) {
-    return null;
-  }
-  if (!url.hostname) {
-    return null;
-  }
-
-  const path = url.pathname.replace(/\/+$/, "");
-  const originAndPath = `${url.protocol}//${url.host}${path}`;
-  return `${originAndPath}/workflow/${encodeURIComponent(externalId)}`;
+/** Build an execution link exclusively from connector configuration and a stored id. */
+export function buildN8nExecutionUrl(input: {
+  baseUrl: string | null | undefined;
+  externalExecutionRef: string | null | undefined;
+}): string | null {
+  const executionId = input.externalExecutionRef?.trim() ?? "";
+  const base = trustedN8nBaseUrl(input.baseUrl);
+  if (!base || !isValidN8nExecutionId(executionId)) return null;
+  return `${base}/execution/${encodeURIComponent(executionId)}`;
 }

@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type Database from "better-sqlite3";
 import { SqliteAlertingRepositories } from "../../db/repositories/sqlite-alerting-repositories.js";
 import { createId } from "../../../domain/ids.js";
 import { InvalidIncidentTransitionError } from "../../../domain/incidents/lifecycle.js";
@@ -78,6 +79,7 @@ export function registerIncidentRoutes(
   app: FastifyInstance,
   deps: {
     alerting: SqliteAlertingRepositories;
+    sqlite: Database.Database;
     env: QuorumEnv;
     resolveTenantId: (
       request: FastifyRequest,
@@ -85,6 +87,50 @@ export function registerIncidentRoutes(
     ) => string | null;
   },
 ): void {
+  function presentIncident(
+    tenantId: string,
+    incident: ReturnType<
+      SqliteAlertingRepositories["getIncident"]
+    > extends infer T
+      ? NonNullable<T>
+      : never,
+  ) {
+    const workflow = incident.workflowId
+      ? (deps.sqlite
+          .prepare(
+            `SELECT w.id, w.name, w.external_workflow_id FROM workflows w WHERE w.tenant_id = ? AND w.id = ?`,
+          )
+          .get(tenantId, incident.workflowId) as
+          | { id: string; name: string; external_workflow_id: string }
+          | undefined)
+      : undefined;
+    let externalExecutionRef: string | null = null;
+    if (incident.detailsJson) {
+      try {
+        const parsed: unknown = JSON.parse(incident.detailsJson);
+        if (
+          parsed &&
+          typeof parsed === "object" &&
+          typeof (parsed as Record<string, unknown>).externalExecutionRef ===
+            "string"
+        ) {
+          externalExecutionRef =
+            (parsed as Record<string, string>).externalExecutionRef ?? null;
+        }
+      } catch {
+        // Historical details may be absent or malformed; structured fields still render.
+      }
+    }
+    return {
+      ...incident,
+      quorumWorkflowId: workflow?.id ?? incident.workflowId,
+      quorumWorkflowName: workflow?.name ?? null,
+      n8nWorkflowId: workflow?.external_workflow_id ?? null,
+      n8nWorkflowName: workflow?.name ?? null,
+      externalExecutionRef,
+    };
+  }
+
   app.get("/api/v1/incidents", async (request, reply) => {
     const tenantId = deps.resolveTenantId(request, reply);
     if (!tenantId) {
@@ -162,7 +208,9 @@ export function registerIncidentRoutes(
 
     const result = deps.alerting.queryIncidents(tenantId, listQuery);
     return reply.send({
-      items: result.items,
+      items: result.items.map((incident) =>
+        presentIncident(tenantId, incident),
+      ),
       nextCursor: result.nextCursor
         ? encodeIncidentListCursor(result.nextCursor)
         : null,
@@ -179,7 +227,7 @@ export function registerIncidentRoutes(
     if (!incident) {
       return reply.code(404).send({ error: "not_found" });
     }
-    return reply.send({ incident });
+    return reply.send({ incident: presentIncident(tenantId, incident) });
   });
 
   app.post(
@@ -211,7 +259,7 @@ export function registerIncidentRoutes(
             availableAt: new Date().toISOString(),
           });
         }
-        return reply.send({ incident });
+        return reply.send({ incident: presentIncident(tenantId, incident) });
       } catch (error) {
         if (error instanceof InvalidIncidentTransitionError) {
           return reply.code(409).send({ error: "invalid_transition" });
@@ -243,7 +291,7 @@ export function registerIncidentRoutes(
         payloadJson: JSON.stringify({ incidentId }),
         availableAt: new Date().toISOString(),
       });
-      return reply.send({ incident });
+      return reply.send({ incident: presentIncident(tenantId, incident) });
     } catch (error) {
       if (error instanceof InvalidIncidentTransitionError) {
         return reply.code(409).send({ error: "invalid_transition" });

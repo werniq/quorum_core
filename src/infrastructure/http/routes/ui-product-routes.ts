@@ -359,6 +359,7 @@ export function registerProductUiRoutes(
            s.last_acceptable_success_at,
            s.next_expected_at,
            s.overdue_since,
+           s.current_health AS workflow_health,
            nc.base_url AS connector_base_url
          FROM incidents i
          LEFT JOIN workflows w
@@ -400,6 +401,7 @@ export function registerProductUiRoutes(
       last_acceptable_success_at: string | null;
       next_expected_at: string | null;
       overdue_since: string | null;
+      workflow_health: string | null;
       connector_base_url: string | null;
     }>;
 
@@ -430,6 +432,7 @@ export function registerProductUiRoutes(
           : null,
       externalWorkflowId: r.external_workflow_id,
       connectorBaseUrl: r.connector_base_url,
+      workflowHealth: r.workflow_health,
       lastAcceptableEvidenceAt: r.last_acceptable_success_at,
       nextExpectedAt: r.next_expected_at,
       overdueSince: r.overdue_since,

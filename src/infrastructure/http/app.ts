@@ -220,6 +220,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
     registerIncidentRoutes(app, {
       alerting,
+      sqlite,
       env: deps.env,
       resolveTenantId,
     });

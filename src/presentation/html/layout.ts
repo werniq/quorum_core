@@ -993,6 +993,43 @@ td form button {
 .contract-card:active {
   transform: translateY(0);
 }
+.incident-filters { display:flex; flex-wrap:wrap; gap:var(--space-2); align-items:end; margin:var(--space-5) 0; }
+.incident-filters label { display:grid; gap:0.25rem; font-size:12px; color:var(--text-muted); }
+.incident-filters select { min-width:11rem; }
+.incident-section { margin-top:var(--space-7); }
+.incident-section + .incident-section { padding-top:var(--space-6); border-top:1px solid var(--border-default); }
+.incident-section-heading { display:flex; justify-content:space-between; align-items:baseline; gap:var(--space-3); margin-bottom:var(--space-3); }
+.incident-section-heading h2 { margin:0; }
+.incident-active-table { padding:0; overflow-x:auto; }
+.incident-active-row td { vertical-align:top; }
+.incident-active-row td > strong, .incident-active-row td > a, .incident-active-row td > span { display:block; margin-bottom:0.25rem; }
+.incident-active-detail td { padding-top:0; }
+.incident-history-list { display:grid; gap:var(--space-3); }
+.incident-history-item { padding:var(--space-4); border:1px solid var(--border-default); border-radius:var(--radius-md); background:var(--background-surface); transition:border-color 160ms ease,box-shadow 160ms ease; }
+.incident-history-item.is-active { border-left:3px solid var(--status-danger); box-shadow:var(--shadow-sm); }
+.incident-history-item:hover, .incident-history-item:focus-within { border-color:var(--border-strong); box-shadow:var(--shadow-sm); outline:none; }
+.incident-history-main { display:flex; justify-content:space-between; gap:var(--space-3); align-items:start; }
+.incident-history-main h3 { margin:0 0 0.2rem; font-size:1rem; }
+.incident-badges, .incident-actions { display:flex; flex-wrap:wrap; gap:0.5rem; align-items:center; }
+.incident-summary-time { color:var(--text-secondary); font-size:13px; margin:var(--space-3) 0; }
+.incident-collapsed-actions { display:flex; flex-wrap:wrap; gap:var(--space-2); align-items:center; }
+.incident-collapsed-actions form { margin:0; }
+.incident-detail-toggle[aria-expanded="true"] .incident-chevron { transform:rotate(90deg); }
+.incident-chevron { display:inline-block; transition:transform 160ms ease; font-size:1.15em; }
+.incident-detail-panel { border-top:1px solid var(--border-default); margin-top:var(--space-4); padding-top:var(--space-2); animation:accordion-in 160ms ease-out both; }
+.incident-detail-panel[hidden] { display:none; }
+.incident-detail-group { padding:var(--space-3) 0; }
+.incident-detail-group + .incident-detail-group { border-top:1px solid var(--border-default); }
+.incident-detail-group h4 { font-size:13px; margin:0 0 var(--space-3); }
+.incident-detail-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:var(--space-3); margin:0; }
+.incident-detail-grid div { min-width:0; }
+.incident-detail-grid .incident-detail-wide { grid-column:span 2; }
+.incident-detail-grid dt { color:var(--text-muted); font-size:12px; font-weight:600; }
+.incident-detail-grid dd { margin:0.2rem 0 0; overflow-wrap:anywhere; }
+.incident-secondary-actions { display:flex; gap:var(--space-4); flex-wrap:wrap; padding:var(--space-3) 0 var(--space-1); border-top:1px solid var(--border-default); font-size:13px; }
+.evidence-block { padding:var(--space-3); margin-top:var(--space-3); border:1px solid var(--border-default); border-radius:var(--radius-sm); background:var(--background-subtle); }
+.evidence-block p { margin:0.35rem 0 0; white-space:pre-wrap; overflow-wrap:anywhere; }
+.empty-section { color:var(--text-muted); padding:var(--space-4); border:1px dashed var(--border-default); border-radius:var(--radius-md); }
 .contract-card-header {
   display: flex;
   flex-wrap: wrap;
@@ -1302,6 +1339,13 @@ code {
     font-size: 12px;
     font-weight: 600;
   }
+  .incident-filters, .incident-filters label, .incident-filters select { width:100%; min-width:0; }
+  .incident-history-main { display:grid; }
+  .incident-detail-grid { grid-template-columns:1fr; }
+  .incident-detail-grid .incident-detail-wide { grid-column:auto; }
+  .incident-collapsed-actions, .incident-collapsed-actions .btn, .incident-collapsed-actions form, .incident-collapsed-actions button { width:100%; }
+  .incident-active-table { overflow-x:visible; }
+  .incident-active-detail { margin-top:calc(-1 * var(--space-3)) !important; }
 }
 `;
 
