@@ -141,6 +141,13 @@
       "when": 1752900019000,
       "tag": "0020_effect_receipt_reconciliation",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1785940000000,
+      "tag": "0021_incident_recovery_acknowledgment",
+      "breakpoints": true
     }
   ]
 }

@@ -708,4 +708,123 @@ describe("SQLite migrations", () => {
       )
       .run(createId(), tenantId, channelId, outboxId, now);
   });
+
+  it("migrates legacy incident lifecycle and review state without losing history", () => {
+    const sqlite = openTempSqlite();
+    migrateSqliteUpTo(sqlite, "0020_effect_receipt_reconciliation");
+    const tenantId = createId();
+    const workflowId = createId();
+    const acknowledgedWorkflowId = createId();
+    const openedAt = "2026-08-05T07:00:00.000Z";
+    const resolvedAt = "2026-08-05T07:10:00.000Z";
+    sqlite
+      .prepare(
+        `INSERT INTO tenants (id, name, edition, created_at, updated_at)
+         VALUES (?, 'T', 'self_hosted', ?, ?)`,
+      )
+      .run(tenantId, openedAt, openedAt);
+    sqlite
+      .prepare(
+        `INSERT INTO workflows (
+           id, tenant_id, name, source_platform, external_workflow_id,
+           monitoring_method, is_active, created_at, updated_at
+         ) VALUES (?, ?, 'W', 'n8n', 'legacy-workflow', 'push', 1, ?, ?)`,
+      )
+      .run(workflowId, tenantId, openedAt, openedAt);
+    sqlite
+      .prepare(
+        `INSERT INTO workflows (
+           id, tenant_id, name, source_platform, external_workflow_id,
+           monitoring_method, is_active, created_at, updated_at
+         ) VALUES (?, ?, 'W2', 'n8n', 'legacy-ack-workflow', 'push', 1, ?, ?)`,
+      )
+      .run(acknowledgedWorkflowId, tenantId, openedAt, openedAt);
+    const insert = sqlite.prepare(
+      `INSERT INTO incidents (
+         id, tenant_id, contract_kind, workflow_id, incident_type, severity,
+         status, opened_at, resolved_at, last_observed_at,
+         notification_count, summary, details_json, created_at, updated_at
+       ) VALUES (?, ?, 'workflow', ?, 'hard_failure', 'critical', ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
+    );
+    const openId = createId();
+    const acknowledgedId = createId();
+    const resolvedId = createId();
+    insert.run(
+      openId,
+      tenantId,
+      workflowId,
+      "open",
+      openedAt,
+      null,
+      openedAt,
+      "still failing",
+      '{"failure":"status=failure"}',
+      openedAt,
+      openedAt,
+    );
+    insert.run(
+      acknowledgedId,
+      tenantId,
+      acknowledgedWorkflowId,
+      "acknowledged",
+      openedAt,
+      null,
+      openedAt,
+      "legacy acknowledged active incident",
+      null,
+      openedAt,
+      openedAt,
+    );
+    sqlite
+      .prepare(`UPDATE incidents SET acknowledged_at = ? WHERE id = ?`)
+      .run("2026-08-05T07:05:00.000Z", acknowledgedId);
+    insert.run(
+      resolvedId,
+      tenantId,
+      workflowId,
+      "resolved",
+      openedAt,
+      resolvedAt,
+      resolvedAt,
+      "recovered",
+      '{"recoveredAt":"2026-08-05T07:10:00.000Z"}',
+      openedAt,
+      resolvedAt,
+    );
+
+    migrateSqliteToLatest(sqlite);
+    const rows = sqlite
+      .prepare(
+        `SELECT id, lifecycle_status, acknowledgment_status, recovered_at,
+                acknowledged_at, acknowledged_by, status, details_json
+         FROM incidents ORDER BY id`,
+      )
+      .all() as Array<Record<string, unknown>>;
+    const active = rows.find((row) => row.id === openId);
+    const legacyAcknowledged = rows.find((row) => row.id === acknowledgedId);
+    const recovered = rows.find((row) => row.id === resolvedId);
+    expect(active).toMatchObject({
+      lifecycle_status: "active",
+      acknowledgment_status: "unacknowledged",
+      recovered_at: null,
+      acknowledged_by: null,
+      status: "open",
+    });
+    expect(recovered).toMatchObject({
+      lifecycle_status: "recovered",
+      acknowledgment_status: "acknowledged",
+      recovered_at: resolvedAt,
+      acknowledged_at: resolvedAt,
+      acknowledged_by: "migration:legacy-status",
+      status: "resolved",
+      details_json: '{"recoveredAt":"2026-08-05T07:10:00.000Z"}',
+    });
+    expect(legacyAcknowledged).toMatchObject({
+      lifecycle_status: "active",
+      acknowledgment_status: "acknowledged",
+      acknowledged_at: "2026-08-05T07:05:00.000Z",
+      acknowledged_by: "migration:legacy-status",
+      status: "open",
+    });
+  });
 });

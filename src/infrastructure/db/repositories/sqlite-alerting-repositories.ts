@@ -1,7 +1,10 @@
 import type Database from "better-sqlite3";
 import { nextAlertChannelHealth } from "../../../domain/alerting/alert-channel-health.js";
 import { sanitizeDeliveryErrorMessage } from "../../../domain/alerting/sanitize-delivery-error.js";
-import { transitionIncidentStatus } from "../../../domain/incidents/lifecycle.js";
+import {
+  InvalidIncidentTransitionError,
+  transitionIncidentStatus,
+} from "../../../domain/incidents/lifecycle.js";
 import { createId } from "../../../domain/ids.js";
 import type {
   AlertChannelRecord,
@@ -153,6 +156,12 @@ export class SqliteAlertingRepositories implements AlertingRepositories {
       openedAt: createdAt,
       acknowledgedAt: null,
       resolvedAt: null,
+      lifecycleStatus: "active",
+      acknowledgmentStatus: "unacknowledged",
+      recoveredAt: null,
+      recoveryEvidence: null,
+      acknowledgedBy: null,
+      acknowledgmentNote: null,
       lastObservedAt: observedAt,
       lastNotifiedAt: null,
       notificationCount: 0,
@@ -701,18 +710,34 @@ export class SqliteAlertingRepositories implements AlertingRepositories {
       actor?: string | null;
       at?: string;
       edition?: "self_hosted" | "saas";
+      note?: string | null;
     },
   ): IncidentRecord {
     const current = this.requireIncident(tenantId, incidentId);
-    const next = transitionIncidentStatus(current.status, "acknowledged");
+    if (current.acknowledgmentStatus === "acknowledged") {
+      return current;
+    }
+    if (current.lifecycleStatus !== "recovered") {
+      throw new InvalidIncidentTransitionError(current.status, "acknowledged");
+    }
     const at = input?.at ?? nowIso();
     this.sqlite
       .prepare(
         `UPDATE incidents
-         SET status = ?, acknowledged_at = ?, updated_at = ?
+         SET status = ?, acknowledgment_status = 'acknowledged',
+             acknowledged_at = ?, acknowledged_by = ?,
+             acknowledgment_note = ?, updated_at = ?
          WHERE tenant_id = ? AND id = ?`,
       )
-      .run(next, at, at, tenantId, incidentId);
+      .run(
+        "resolved",
+        at,
+        input?.actor ?? null,
+        input?.note?.trim() || null,
+        at,
+        tenantId,
+        incidentId,
+      );
     this.recordAudit(
       tenantId,
       incidentId,
@@ -733,6 +758,7 @@ export class SqliteAlertingRepositories implements AlertingRepositories {
       edition?: "self_hosted" | "saas";
       resolutionNote?: string | null;
       clientSafeResolutionNote?: string | null;
+      recoveryEvidence?: string | null;
     },
   ): IncidentRecord {
     const current = this.requireIncident(tenantId, incidentId);
@@ -742,6 +768,8 @@ export class SqliteAlertingRepositories implements AlertingRepositories {
       .prepare(
         `UPDATE incidents
          SET status = ?, resolved_at = ?, updated_at = ?,
+             lifecycle_status = 'recovered', recovered_at = ?,
+             recovery_evidence = COALESCE(?, recovery_evidence),
              resolution_note = COALESCE(?, resolution_note),
              client_safe_resolution_note = COALESCE(?, client_safe_resolution_note)
          WHERE tenant_id = ? AND id = ?`,
@@ -750,6 +778,10 @@ export class SqliteAlertingRepositories implements AlertingRepositories {
         next,
         at,
         at,
+        at,
+        input?.recoveryEvidence ??
+          input?.resolutionNote ??
+          `Operational recovery recorded at ${at}`,
         input?.resolutionNote ?? null,
         input?.clientSafeResolutionNote ?? null,
         tenantId,
@@ -1046,6 +1078,16 @@ function mapIncident(row: Record<string, unknown>): IncidentRecord {
     openedAt: String(row.opened_at),
     acknowledgedAt: (row.acknowledged_at as string | null) ?? null,
     resolvedAt: (row.resolved_at as string | null) ?? null,
+    lifecycleStatus:
+      row.lifecycle_status === "recovered" ? "recovered" : "active",
+    acknowledgmentStatus:
+      row.acknowledgment_status === "acknowledged"
+        ? "acknowledged"
+        : "unacknowledged",
+    recoveredAt: (row.recovered_at as string | null) ?? null,
+    recoveryEvidence: (row.recovery_evidence as string | null) ?? null,
+    acknowledgedBy: (row.acknowledged_by as string | null) ?? null,
+    acknowledgmentNote: (row.acknowledgment_note as string | null) ?? null,
     lastObservedAt: String(row.last_observed_at),
     lastNotifiedAt: (row.last_notified_at as string | null) ?? null,
     notificationCount: Number(row.notification_count),

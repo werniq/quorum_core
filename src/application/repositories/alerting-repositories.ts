@@ -46,6 +46,12 @@ export interface IncidentRecord {
   openedAt: string;
   acknowledgedAt: string | null;
   resolvedAt: string | null;
+  lifecycleStatus: "active" | "recovered";
+  acknowledgmentStatus: "unacknowledged" | "acknowledged";
+  recoveredAt: string | null;
+  recoveryEvidence: string | null;
+  acknowledgedBy: string | null;
+  acknowledgmentNote: string | null;
   lastObservedAt: string;
   lastNotifiedAt: string | null;
   notificationCount: number;
@@ -193,6 +199,7 @@ export interface AlertingRepositories {
       assigneeUserId: string | null;
       actor?: string | null;
       edition?: "self_hosted" | "saas";
+      note?: string | null;
     },
   ): IncidentRecord;
   updateIncidentTriage(
@@ -202,6 +209,7 @@ export interface AlertingRepositories {
       severity?: IncidentSeverity;
       resolutionNote?: string | null;
       clientSafeResolutionNote?: string | null;
+      recoveryEvidence?: string | null;
       actor?: string | null;
       edition?: "self_hosted" | "saas";
     },

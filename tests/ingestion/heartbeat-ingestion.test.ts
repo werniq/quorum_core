@@ -531,10 +531,14 @@ describe("secure heartbeat ingestion", () => {
 
     const openRows = sqlite
       .prepare(
-        `SELECT status, incident_type, summary, details_json FROM incidents WHERE workflow_id = ?`,
+        `SELECT status, lifecycle_status, acknowledgment_status,
+                incident_type, summary, details_json
+         FROM incidents WHERE workflow_id = ?`,
       )
       .all(workflowId) as Array<{
       status: string;
+      lifecycle_status: string;
+      acknowledgment_status: string;
       incident_type: string;
       summary: string;
       details_json: string;
@@ -542,6 +546,8 @@ describe("secure heartbeat ingestion", () => {
     expect(openRows).toHaveLength(1);
     expect(openRows[0]).toMatchObject({
       status: "open",
+      lifecycle_status: "active",
+      acknowledgment_status: "unacknowledged",
       incident_type: "hard_failure",
     });
     expect(openRows[0]!.summary).toContain("2 consecutive");
@@ -599,15 +605,25 @@ describe("secure heartbeat ingestion", () => {
 
     const resolved = sqlite
       .prepare(
-        `SELECT status, summary, details_json, resolved_at FROM incidents WHERE workflow_id = ? AND incident_type = 'hard_failure'`,
+        `SELECT status, lifecycle_status, acknowledgment_status, summary,
+                details_json, resolved_at, recovered_at, recovery_evidence
+         FROM incidents WHERE workflow_id = ? AND incident_type = 'hard_failure'`,
       )
       .get(workflowId) as {
       status: string;
+      lifecycle_status: string;
+      acknowledgment_status: string;
       summary: string;
       details_json: string;
       resolved_at: string;
+      recovered_at: string;
+      recovery_evidence: string;
     };
     expect(resolved.status).toBe("resolved");
+    expect(resolved.lifecycle_status).toBe("recovered");
+    expect(resolved.acknowledgment_status).toBe("unacknowledged");
+    expect(resolved.recovered_at).toBeTruthy();
+    expect(resolved.recovery_evidence).toContain("Accepted healthy evidence");
     expect(resolved.summary).toContain("recovered");
     expect(resolved.resolved_at).toBeTruthy();
     expect(JSON.parse(resolved.details_json).recoveredAt).toBeTruthy();
@@ -621,6 +637,47 @@ describe("secure heartbeat ingestion", () => {
       )
       .get() as { c: number };
     expect(outbox.c).toBe(2);
+
+    const recoveredHealth = sqlite
+      .prepare(
+        `SELECT current_health FROM workflow_states WHERE workflow_id = ?`,
+      )
+      .get(workflowId) as { current_health: string };
+    expect(recoveredHealth.current_health).toBe("healthy");
+
+    const laterFailure = signedRequest({
+      workflowId,
+      keyId,
+      idempotencyKey: "fail-after-recovery",
+      body: {
+        schemaVersion: 1,
+        executedAt: "2026-07-18T08:02:00Z",
+        status: "failure",
+        itemsProcessed: 0,
+      },
+    });
+    expect(
+      ingest({
+        workflowId,
+        method: "POST",
+        path: laterFailure.path,
+        keyId,
+        timestampSeconds: laterFailure.timestampSeconds,
+        idempotencyKey: "fail-after-recovery",
+        signatureHex: laterFailure.signature,
+        rawBody: laterFailure.rawBody,
+      }),
+    ).toMatchObject({ status: "accepted" });
+    expect(
+      (
+        sqlite
+          .prepare(
+            `SELECT COUNT(*) AS count FROM incidents
+             WHERE workflow_id = ? AND incident_type = 'hard_failure'`,
+          )
+          .get(workflowId) as { count: number }
+      ).count,
+    ).toBe(2);
   });
 
   it("resolves silent_absence on failure heartbeat and recovers hard_failure on success", () => {

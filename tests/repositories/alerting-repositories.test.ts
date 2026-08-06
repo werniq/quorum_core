@@ -136,6 +136,73 @@ describe("alerting schema repositories", () => {
     expect(second.detailsJson).toContain("checks");
   });
 
+  it("keeps recovery operationally separate from idempotent acknowledgment", () => {
+    const { core, alerting } = openRepos();
+    const tenant = core.ensureSelfHostedTenant();
+    const now = "2026-08-05T08:00:00.000Z";
+    const workflowId = createId();
+    core.createWorkflow(tenant.id, {
+      id: workflowId,
+      clientId: null,
+      name: "Recovery workflow",
+      externalWorkflowId: "recovery-workflow",
+      description: null,
+      monitoringMethod: "push",
+      isActive: true,
+      monitoringStartedAt: now,
+    });
+    const opened = alerting.openOrObserveIncident(tenant.id, {
+      id: createId(),
+      contractKind: "workflow",
+      workflowId,
+      incidentType: "empty_result",
+      severity: "critical",
+      summary: "zero useful output",
+      observedAt: now,
+    });
+    expect(opened).toMatchObject({
+      lifecycleStatus: "active",
+      acknowledgmentStatus: "unacknowledged",
+    });
+    expect(() =>
+      alerting.acknowledgeIncident(tenant.id, opened.id, {
+        actor: "admin-user",
+        at: "2026-08-05T08:01:00.000Z",
+      }),
+    ).toThrow(/Invalid incident transition/);
+    const recovered = alerting.resolveIncident(tenant.id, opened.id, {
+      actor: "system:heartbeat",
+      at: "2026-08-05T08:05:00.000Z",
+      recoveryEvidence: "success · 1 item",
+    });
+    expect(recovered).toMatchObject({
+      status: "resolved",
+      lifecycleStatus: "recovered",
+      acknowledgmentStatus: "unacknowledged",
+      recoveredAt: "2026-08-05T08:05:00.000Z",
+      recoveryEvidence: "success · 1 item",
+    });
+    const acknowledged = alerting.acknowledgeIncident(tenant.id, opened.id, {
+      actor: "admin-user",
+      at: "2026-08-05T08:10:00.000Z",
+      note: "Reviewed with operations",
+    });
+    expect(acknowledged).toMatchObject({
+      status: "resolved",
+      lifecycleStatus: "recovered",
+      acknowledgmentStatus: "acknowledged",
+      acknowledgedBy: "admin-user",
+      acknowledgedAt: "2026-08-05T08:10:00.000Z",
+      acknowledgmentNote: "Reviewed with operations",
+    });
+    expect(
+      alerting.acknowledgeIncident(tenant.id, opened.id, {
+        actor: "different-user",
+        at: "2026-08-05T08:20:00.000Z",
+      }),
+    ).toEqual(acknowledged);
+  });
+
   it("isolates incidents and channels by tenant", () => {
     const { sqlite, core, alerting } = openRepos();
     const tenantA = core.ensureSelfHostedTenant();

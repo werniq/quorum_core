@@ -163,20 +163,20 @@ describe("incident lifecycle", () => {
       ).c,
     ).toBe(1);
 
-    alerting.acknowledgeIncident(tenant.id, first.id, {
-      actor: "ops@example.com",
+    alerting.resolveIncident(tenant.id, first.id, {
+      actor: "system:recovery",
       edition: "saas",
       at: "2026-07-18T09:10:00.000Z",
     });
-    alerting.resolveIncident(tenant.id, first.id, {
+    alerting.acknowledgeIncident(tenant.id, first.id, {
       actor: "ops@example.com",
       edition: "saas",
       at: "2026-07-18T09:20:00.000Z",
     });
     const audit = alerting.listAuditEvents(tenant.id, first.id);
     expect(audit.map((row) => row.eventType)).toEqual([
-      "acknowledged",
       "resolved",
+      "acknowledged",
     ]);
   });
 });

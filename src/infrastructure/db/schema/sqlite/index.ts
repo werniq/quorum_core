@@ -317,6 +317,20 @@ export const incidents = sqliteTable("incidents", {
   openedAt: text("opened_at").notNull(),
   acknowledgedAt: text("acknowledged_at"),
   resolvedAt: text("resolved_at"),
+  lifecycleStatus: text("lifecycle_status", {
+    enum: ["active", "recovered"],
+  })
+    .notNull()
+    .default("active"),
+  acknowledgmentStatus: text("acknowledgment_status", {
+    enum: ["unacknowledged", "acknowledged"],
+  })
+    .notNull()
+    .default("unacknowledged"),
+  recoveredAt: text("recovered_at"),
+  recoveryEvidence: text("recovery_evidence"),
+  acknowledgedBy: text("acknowledged_by"),
+  acknowledgmentNote: text("acknowledgment_note"),
   lastObservedAt: text("last_observed_at").notNull(),
   lastNotifiedAt: text("last_notified_at"),
   notificationCount: integer("notification_count").notNull(),

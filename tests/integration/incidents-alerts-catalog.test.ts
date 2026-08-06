@@ -373,13 +373,19 @@ describe("incident suite", () => {
     );
     expect(incidentB?.id).not.toBe(incidentA.id);
 
+    a.alerting.resolveIncident(a.tenant.id, incidentA.id, {
+      actor: "system:recovery",
+      edition: "saas",
+    });
     a.alerting.acknowledgeIncident(a.tenant.id, incidentA.id, {
       actor: "ops",
       edition: "saas",
     });
     expect(
-      a.alerting.listAuditEvents(a.tenant.id, incidentA.id)[0]?.eventType,
-    ).toBe("acknowledged");
+      a.alerting
+        .listAuditEvents(a.tenant.id, incidentA.id)
+        .map((event) => event.eventType),
+    ).toEqual(["resolved", "acknowledged"]);
   });
 });
 

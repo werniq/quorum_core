@@ -305,6 +305,7 @@ export function resolveOpenIncidentsOfTypes(input: {
           : row.incident_type === "silent_absence"
             ? "Reporting resumed"
             : null,
+      recoveryEvidence: `Accepted healthy evidence at ${input.at}`,
     });
     input.alerting.enqueueOutbox(input.tenantId, {
       id: createId(),

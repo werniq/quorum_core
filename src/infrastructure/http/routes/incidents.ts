@@ -190,23 +190,27 @@ export function registerIncidentRoutes(
         return;
       }
       const incidentId = (request.params as { incidentId: string }).incidentId;
-      const body = (request.body ?? {}) as { actor?: string };
+      const body = (request.body ?? {}) as { note?: string };
       try {
+        const before = deps.alerting.getIncident(tenantId, incidentId);
         const incident = deps.alerting.acknowledgeIncident(
           tenantId,
           incidentId,
           {
-            actor: body.actor ?? null,
+            actor: "api:authenticated",
+            note: body.note ?? null,
             edition: deps.env.QUORUM_EDITION,
           },
         );
-        deps.alerting.enqueueOutbox(tenantId, {
-          id: createId(),
-          incidentId,
-          eventType: "acknowledged",
-          payloadJson: JSON.stringify({ incidentId }),
-          availableAt: new Date().toISOString(),
-        });
+        if (before?.acknowledgmentStatus !== "acknowledged") {
+          deps.alerting.enqueueOutbox(tenantId, {
+            id: createId(),
+            incidentId,
+            eventType: "acknowledged",
+            payloadJson: JSON.stringify({ incidentId }),
+            availableAt: new Date().toISOString(),
+          });
+        }
         return reply.send({ incident });
       } catch (error) {
         if (error instanceof InvalidIncidentTransitionError) {

@@ -258,9 +258,6 @@ describe("GET /api/v1/incidents", () => {
       summary: "warning open",
       observedAt: "2026-07-26T11:00:00.000Z",
     });
-    alerting.acknowledgeIncident(tenant.id, warned.id, {
-      at: "2026-07-26T11:30:00.000Z",
-    });
     const resolved = alerting.openOrObserveIncident(tenant.id, {
       id: createId(),
       contractKind: "workflow",
@@ -278,7 +275,7 @@ describe("GET /api/v1/incidents", () => {
 
     const byStatus = await app.inject({
       method: "GET",
-      url: "/api/v1/incidents?status=open,acknowledged",
+      url: "/api/v1/incidents?status=open",
     });
     expect(byStatus.statusCode).toBe(200);
     const statusIds = (
@@ -461,7 +458,7 @@ describe("GET /api/v1/incidents", () => {
     await app.close();
   });
 
-  it("keeps acknowledge and resolve working", async () => {
+  it("acknowledges recovered incidents idempotently with review metadata", async () => {
     const sqlite = openDb();
     const core = new SqliteCoreRepositories(sqlite);
     const alerting = new SqliteAlertingRepositories(sqlite);
@@ -478,16 +475,6 @@ describe("GET /api/v1/incidents", () => {
     });
 
     const app = await buildTestApp(sqlite);
-    const ack = await app.inject({
-      method: "POST",
-      url: `/api/v1/incidents/${incident.id}/acknowledge`,
-      payload: { actor: "ops" },
-    });
-    expect(ack.statusCode).toBe(200);
-    expect(ack.json()).toMatchObject({
-      incident: { id: incident.id, status: "acknowledged" },
-    });
-
     const resolved = await app.inject({
       method: "POST",
       url: `/api/v1/incidents/${incident.id}/resolve`,
@@ -495,8 +482,50 @@ describe("GET /api/v1/incidents", () => {
     });
     expect(resolved.statusCode).toBe(200);
     expect(resolved.json()).toMatchObject({
-      incident: { id: incident.id, status: "resolved" },
+      incident: {
+        id: incident.id,
+        lifecycleStatus: "recovered",
+        acknowledgmentStatus: "unacknowledged",
+      },
     });
+    const ack = await app.inject({
+      method: "POST",
+      url: `/api/v1/incidents/${incident.id}/acknowledge`,
+      payload: { actor: "forged-user", note: "Reviewed" },
+    });
+    expect(ack.statusCode).toBe(200);
+    expect(ack.json()).toMatchObject({
+      incident: {
+        id: incident.id,
+        status: "resolved",
+        lifecycleStatus: "recovered",
+        acknowledgmentStatus: "acknowledged",
+        acknowledgedBy: "api:authenticated",
+        acknowledgmentNote: "Reviewed",
+      },
+    });
+    const repeated = await app.inject({
+      method: "POST",
+      url: `/api/v1/incidents/${incident.id}/acknowledge`,
+      payload: { actor: "other", note: "Overwrite" },
+    });
+    expect(repeated.statusCode).toBe(200);
+    expect(repeated.json()).toMatchObject({
+      incident: {
+        acknowledgedBy: "api:authenticated",
+        acknowledgmentNote: "Reviewed",
+      },
+    });
+    expect(
+      (
+        sqlite
+          .prepare(
+            `SELECT COUNT(*) AS count FROM notification_outbox
+             WHERE incident_id = ? AND event_type = 'acknowledged'`,
+          )
+          .get(incident.id) as { count: number }
+      ).count,
+    ).toBe(1);
     await app.close();
   });
 });

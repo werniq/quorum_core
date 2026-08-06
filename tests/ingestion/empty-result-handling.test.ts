@@ -612,6 +612,13 @@ describe("incidents page open-before-history", () => {
       summary: "silence",
       openedAt: "2026-07-30T10:00:00.000Z",
       resolvedAt: null,
+      lifecycleStatus: "active",
+      acknowledgmentStatus: "unacknowledged",
+      recoveredAt: null,
+      recoveryEvidence: null,
+      acknowledgedAt: null,
+      acknowledgedBy: null,
+      acknowledgmentNote: null,
       detailsJson: null,
       incidentType: "silent_absence",
       workflowId: "wf-1",
@@ -630,6 +637,13 @@ describe("incidents page open-before-history", () => {
       summary: "recovered",
       openedAt: "2026-07-30T09:00:00.000Z",
       resolvedAt: "2026-07-30T09:30:00.000Z",
+      lifecycleStatus: "recovered",
+      acknowledgmentStatus: "acknowledged",
+      recoveredAt: "2026-07-30T09:30:00.000Z",
+      recoveryEvidence: "Healthy heartbeat",
+      acknowledgedAt: "2026-07-30T09:31:00.000Z",
+      acknowledgedBy: "admin",
+      acknowledgmentNote: null,
       detailsJson: null,
       incidentType: "hard_failure",
       workflowId: "wf-2",
@@ -649,9 +663,9 @@ describe("incidents page open-before-history", () => {
       warningCount: 0,
       overdueCount: 0,
     });
-    expect(html).toContain("Resolved hard failures");
+    expect(html).toContain("Incident history");
     expect(html.indexOf("silent_absence")).toBeLessThan(
-      html.indexOf("Resolved hard failures"),
+      html.indexOf("Incident history"),
     );
   });
 });

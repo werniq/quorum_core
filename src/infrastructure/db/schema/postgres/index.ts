@@ -434,6 +434,23 @@ export const incidents = pgTable("incidents", {
     mode: "date",
   }),
   resolvedAt: timestamp("resolved_at", { withTimezone: true, mode: "date" }),
+  lifecycleStatus: text("lifecycle_status", {
+    enum: ["active", "recovered"],
+  })
+    .notNull()
+    .default("active"),
+  acknowledgmentStatus: text("acknowledgment_status", {
+    enum: ["unacknowledged", "acknowledged"],
+  })
+    .notNull()
+    .default("unacknowledged"),
+  recoveredAt: timestamp("recovered_at", {
+    withTimezone: true,
+    mode: "date",
+  }),
+  recoveryEvidence: text("recovery_evidence"),
+  acknowledgedBy: text("acknowledged_by"),
+  acknowledgmentNote: text("acknowledgment_note"),
   lastObservedAt: timestamp("last_observed_at", {
     withTimezone: true,
     mode: "date",
