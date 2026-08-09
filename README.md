@@ -32,7 +32,7 @@ Design-partner kit: [lifecycle screenshot](docs/screenshots/lifecycle.png) · [p
 
 ## Quick start (Docker)
 
-Published image: [`qniw984/quorum:0.1.0-beta.12`](https://hub.docker.com/r/qniw984/quorum/tags) (Compose default).
+Published image: [`qniw984/quorum:0.1.0-beta.13`](https://hub.docker.com/r/qniw984/quorum/tags) (Compose default).
 
 ```bash
 git clone https://github.com/werniq/quorum_core.git

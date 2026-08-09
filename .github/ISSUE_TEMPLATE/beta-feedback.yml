@@ -54,8 +54,8 @@ body:
     id: version
     attributes:
       label: Quorum version or image tag
-      description: Optional. Example — 0.1.0-beta.12 or qniw984/quorum:0.1.0-beta.12
-      placeholder: 0.1.0-beta.12
+      description: Optional. Example — 0.1.0-beta.13 or qniw984/quorum:0.1.0-beta.13
+      placeholder: 0.1.0-beta.13
 
   - type: textarea
     id: repro

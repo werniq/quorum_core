@@ -2,10 +2,10 @@
 
 **Date:** 2026-07-31  
 **Host:** Windows 11, Node v24.17.0, Docker 28.4.0 (CI on `ubuntu-latest`)  
-**Package:** `quorum@0.1.0-beta.12`
-**Image:** `qniw984/quorum:0.1.0-beta.12`
+**Package:** `quorum@0.1.0-beta.13`
+**Image:** `qniw984/quorum:0.1.0-beta.13`
 
-Canonical packet for the latest self-hosted Community gate on **0.1.0-beta.12**, including hard-failure / silent-absence / empty-result / recovery / Catalog UI work landed after the 2026-07-21 packet.
+Canonical packet for the latest self-hosted Community gate on **0.1.0-beta.13**, including hard-failure / silent-absence / empty-result / recovery / Catalog UI work landed after the 2026-07-21 packet.
 
 **Decisions:** Self-hosted Community **CONDITIONAL GO** — automated gates green; owner 24–48 h soak still required. Hosted SaaS **NO-GO**.
 

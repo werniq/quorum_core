@@ -13,7 +13,7 @@ After [Quick start](../README.md#quick-start-docker), use this page for first-ru
    # Edit QUORUM_CREDENTIAL_KEK (min 16 chars) and QUORUM_SETUP_TOKEN (min 24 chars when auth is on)
    ```
 
-2. Start the published image (Compose defaults to `qniw984/quorum:0.1.0-beta.12`):
+2. Start the published image (Compose defaults to `qniw984/quorum:0.1.0-beta.13`):
 
    ```bash
    docker compose up -d
