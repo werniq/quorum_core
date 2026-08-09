@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Version only (e.g. 0.1.0-beta.5 or latest) — not a full image name"
+        description: "Version only (e.g. 0.1.0-beta.12 or latest) — not a full image name"
         required: true
-        default: "0.1.0-beta.5"
+        default: "0.1.0-beta.12"
 
 permissions:
   contents: read
@@ -37,13 +37,13 @@ jobs:
         run: |
           set -euo pipefail
           TAG="$RAW_TAG"
-          # Accept accidental full refs like qniw984/quorum:0.1.0-beta.5
+          # Accept accidental full refs like qniw984/quorum:0.1.0-beta.12
           if [[ "$TAG" == *:* ]]; then
             TAG="${TAG##*:}"
           fi
           TAG="${TAG#v}"
           if [[ ! "$TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
-            echo "::error::Invalid image tag '$TAG'. Use a version only, e.g. 0.1.0-beta.5"
+            echo "::error::Invalid image tag '$TAG'. Use a version only, e.g. 0.1.0-beta.12"
             exit 1
           fi
           IMAGE="${DOCKERHUB_USERNAME}/quorum"
