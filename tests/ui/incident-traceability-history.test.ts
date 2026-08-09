@@ -1,6 +1,8 @@
 import fs from "node:fs";
+import vm from "node:vm";
 import { describe, expect, it } from "vitest";
 import { buildN8nExecutionUrl } from "../../src/domain/n8n/workflow-editor-url.js";
+import { INCIDENTS_CLIENT_SCRIPT } from "../../src/presentation/html/incidents-client.js";
 import {
   renderIncidentsBody,
   type IncidentListRow,
@@ -36,6 +38,51 @@ function incident(overrides: Partial<IncidentListRow> = {}): IncidentListRow {
     overdueSince: null,
     ...overrides,
   };
+}
+
+function incidentInteractionHarness(
+  ids: string[],
+  stored: Record<string, string> = {},
+) {
+  const panels = new Map(
+    ids.map((id) => [`incident-panel-${id}`, { hidden: true }]),
+  );
+  const storage = new Map(Object.entries(stored));
+  const buttons = ids.map((id) => {
+    const attributes = new Map([
+      ["aria-expanded", "false"],
+      ["aria-controls", `incident-panel-${id}`],
+    ]);
+    const label = { textContent: "View details" };
+    let click: (() => void) | undefined;
+    return {
+      dataset: { incidentToggle: id },
+      label,
+      getAttribute: (name: string) => attributes.get(name) ?? null,
+      setAttribute: (name: string, value: string) =>
+        attributes.set(name, value),
+      querySelector: (selector: string) =>
+        selector === "[data-incident-toggle-label]" ? label : null,
+      addEventListener: (event: string, handler: () => void) => {
+        if (event === "click") click = handler;
+      },
+      click: () => click?.(),
+    };
+  });
+  const document = {
+    querySelector: () => null,
+    querySelectorAll: (selector: string) =>
+      selector === "[data-incident-toggle]" ? buttons : [],
+    getElementById: (id: string) => panels.get(id) ?? null,
+  };
+  vm.runInNewContext(INCIDENTS_CLIENT_SCRIPT, {
+    document,
+    sessionStorage: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+    },
+  });
+  return { buttons, panels, storage };
 }
 
 describe("incident traceability and history", () => {
@@ -196,10 +243,72 @@ describe("incident traceability and history", () => {
     expect(html).toContain('type="button"');
     expect(html).toContain('aria-controls="incident-panel-inc-1"');
     expect(html).toContain('aria-expanded="false"');
-    expect(html).toContain("sessionStorage.getItem");
-    expect(html).toContain("sessionStorage.setItem");
-    expect(html).toContain("button.addEventListener('click'");
+    expect(html).toContain(
+      '<script src="/assets/incidents.js" defer></script>',
+    );
+    expect(html).not.toContain("<script>(()=>");
+    expect(INCIDENTS_CLIENT_SCRIPT).toContain("sessionStorage.getItem");
+    expect(INCIDENTS_CLIENT_SCRIPT).toContain("sessionStorage.setItem");
     expect(html).not.toContain("localStorage");
+  });
+
+  it("expands and collapses the selected incident with visible detail groups", () => {
+    const html = renderIncidentsBody({
+      rows: [incident()],
+      nowMs: Date.now(),
+      csrf: "csrf",
+      attentionCount: 0,
+      warningCount: 0,
+      overdueCount: 0,
+    });
+    expect(html).toContain("Incident timeline");
+    expect(html).toContain("Evidence");
+    expect(html).toContain("Source");
+    expect(html).toContain("Review");
+
+    const { buttons, panels } = incidentInteractionHarness(["inc-1"]);
+    const button = buttons[0]!;
+    const panel = panels.get("incident-panel-inc-1")!;
+    expect(panel.hidden).toBe(true);
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+
+    button.click();
+    expect(panel.hidden).toBe(false);
+    expect(button.getAttribute("aria-expanded")).toBe("true");
+    expect(button.label.textContent).toBe("Hide details");
+
+    button.click();
+    expect(panel.hidden).toBe(true);
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    expect(button.label.textContent).toBe("View details");
+  });
+
+  it("keeps incident expansion independent and restores session state", () => {
+    const first = incidentInteractionHarness([
+      "active",
+      "acknowledged",
+      "review",
+    ]);
+    first.buttons[1]!.click();
+    expect(first.panels.get("incident-panel-active")!.hidden).toBe(true);
+    expect(first.panels.get("incident-panel-acknowledged")!.hidden).toBe(false);
+    expect(first.panels.get("incident-panel-review")!.hidden).toBe(true);
+    expect(first.storage.get("quorum:incident-expanded:acknowledged")).toBe(
+      "1",
+    );
+
+    const restored = incidentInteractionHarness(
+      ["active", "acknowledged", "review"],
+      {
+        "quorum:incident-expanded:acknowledged": "1",
+      },
+    );
+    expect(restored.panels.get("incident-panel-active")!.hidden).toBe(true);
+    expect(restored.panels.get("incident-panel-acknowledged")!.hidden).toBe(
+      false,
+    );
+    expect(restored.buttons[1]!.getAttribute("aria-expanded")).toBe("true");
+    expect(restored.buttons[1]!.label.textContent).toBe("Hide details");
   });
 
   it("shows Acknowledge for active unacknowledged and Mark reviewed for recovered", () => {

@@ -26,6 +26,7 @@ import { applySecurityHeaders } from "../observability/security-headers.js";
 import { localMetrics } from "../observability/metrics.js";
 import { PINO_REDACT_PATHS } from "../observability/logging.js";
 import { resolveTrustedTenantId } from "./resolve-tenant.js";
+import { INCIDENTS_CLIENT_SCRIPT } from "../../presentation/html/incidents-client.js";
 
 function isLoopbackAddress(ip: string | undefined): boolean {
   if (!ip) return false;
@@ -141,6 +142,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       ...localMetrics.snapshot(),
     };
   });
+
+  app.get("/assets/incidents.js", async (_request, reply) =>
+    reply
+      .type("application/javascript; charset=utf-8")
+      .header("Cache-Control", "no-store")
+      .send(INCIDENTS_CLIENT_SCRIPT),
+  );
 
   app.addContentTypeParser(
     "application/x-www-form-urlencoded",

@@ -59,4 +59,28 @@ describe("Fastify bootstrap", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ status: "ready" });
   });
+
+  it("serves incident interactions as a same-origin CSP-compatible asset", async () => {
+    app = await buildApp({
+      env: loadEnv({ NODE_ENV: "test" }),
+      getSchemaReadiness: () => ({
+        status: "ready",
+        appliedMigrations: ["0001_tenants_clients"],
+      }),
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/assets/incidents.js",
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain(
+      "application/javascript",
+    );
+    expect(response.headers["content-security-policy"]).toContain(
+      "script-src 'self'",
+    );
+    expect(response.body).toContain("data-incident-toggle");
+    expect(response.body).toContain("aria-expanded");
+  });
 });
